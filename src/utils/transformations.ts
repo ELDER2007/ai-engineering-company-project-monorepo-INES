@@ -1,21 +1,22 @@
 // ============================================================
-// Nexova — Scoring, Matching, Agregaciones y Reportes
+// Nexova — Transformaciones, Agregaciones y Reportes
 // ============================================================
 
 import {
   type Candidate,
-  type Vacancy,
-  type SelectionProcess,
-  type SeniorityLevel,
+  type CandidateRankingItem,
   type CandidateStatus,
   type EnglishLevel,
+  type NexovaOperationalReport,
+  type NumericSummary,
+  type ProcessStage,
+  type SelectionProcess,
+  type SeniorityLevel,
+  type Vacancy,
+  type VacancyStatus,
 } from "../types/models";
 
-// -----------------------------------------------------------
-// Scoring y Matching
-// -----------------------------------------------------------
-
-const SENIORITY_ORDER: SeniorityLevel[] = [
+const SENIORITY_ORDER: ReadonlyArray<SeniorityLevel> = [
   "Junior",
   "Semi-Senior",
   "Senior",
@@ -23,166 +24,41 @@ const SENIORITY_ORDER: SeniorityLevel[] = [
   "Executive",
 ];
 
-const ENGLISH_ORDER: EnglishLevel[] = [
-  "A1",
-  "A2",
-  "B1",
-  "B2",
-  "C1",
-  "C2",
-  "Native",
-];
+const ENGLISH_ORDER: ReadonlyArray<EnglishLevel> = ["A1", "A2", "B1", "B2", "C1", "C2", "Native"];
 
-/**
- * Calcula un puntaje de match (0-100) entre un candidato y una vacante.
- */
-export function calculateCandidateScore(
-  candidate: Candidate,
-  vacancy: Vacancy
-): number {
-  let score = 0;
+function roundTo2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
-  // --- Match de habilidades (40 puntos máx) ---
-  const candidateSkillsLower = candidate.skills.map((s) => s.toLowerCase());
-  const requiredSkillsLower = vacancy.requiredSkills.map((s) => s.toLowerCase());
-  const preferredSkillsLower = vacancy.preferredSkills.map((s) => s.toLowerCase());
-
-  const hasRequiredSkills = requiredSkillsLower.every((reqSkill) =>
-    candidateSkillsLower.includes(reqSkill)
-  );
-
-  const requiredCount = requiredSkillsLower.filter((reqSkill) =>
-    candidateSkillsLower.includes(reqSkill)
-  ).length;
-
-  const requiredPercentage = requiredSkillsLower.length > 0
-    ? requiredCount / requiredSkillsLower.length
-    : 0;
-
-  if (hasRequiredSkills) {
-    score += 40;
-  } else if (requiredPercentage >= 0.5) {
-    score += 20;
+function buildNumericSummary(values: ReadonlyArray<number>): NumericSummary {
+  if (values.length === 0) {
+    return { total: 0, max: 0, min: 0, average: 0 };
   }
 
-  // +10 por cada habilidad preferida (máx +20)
-  const preferredMatchCount = preferredSkillsLower.filter((prefSkill) =>
-    candidateSkillsLower.includes(prefSkill)
-  ).length;
+  let total = 0;
+  let max = values[0];
+  let min = values[0];
 
-  score += Math.min(preferredMatchCount * 10, 20);
-
-  // --- Match de experiencia (20 puntos máx) ---
-  const exp = candidate.yearsOfExperience;
-
-  if (exp >= vacancy.minYearsExperience && exp <= vacancy.maxYearsExperience) {
-    score += 20;
-  } else if (
-    (exp >= vacancy.minYearsExperience - 2 &&
-      exp < vacancy.minYearsExperience) ||
-    (exp > vacancy.maxYearsExperience &&
-      exp <= vacancy.maxYearsExperience + 2)
-  ) {
-    score += 10;
-  }
-  // 0 puntos si está más de 2 años fuera del rango
-
-  // --- Match de seniority (15 puntos máx) ---
-  const candidateSeniorityIndex = SENIORITY_ORDER.indexOf(candidate.seniority);
-  const requiredSeniorityIndex = SENIORITY_ORDER.indexOf(
-    vacancy.requiredSeniority
-  );
-  const seniorityDiff = Math.abs(
-    candidateSeniorityIndex - requiredSeniorityIndex
-  );
-
-  if (seniorityDiff === 0) {
-    score += 15;
-  } else if (seniorityDiff === 1) {
-    score += 7;
-  }
-  // 0 puntos en otro caso
-
-  // --- Match de nivel de inglés (15 puntos máx) ---
-  const candidateEnglishIndex = ENGLISH_ORDER.indexOf(candidate.englishLevel);
-  const requiredEnglishIndex = ENGLISH_ORDER.indexOf(
-    vacancy.requiredEnglishLevel
-  );
-
-  if (candidateEnglishIndex >= requiredEnglishIndex) {
-    score += 15;
-  }
-  // 0 puntos en otro caso
-
-  // --- Match de salario (10 puntos máx) ---
-  const expected = candidate.expectedSalary;
-
-  if (expected >= vacancy.salaryRangeMin && expected <= vacancy.salaryRangeMax) {
-    score += 10;
-  } else if (expected > vacancy.salaryRangeMax) {
-    const maxSalary = vacancy.salaryRangeMax;
-    const twentyPercentAbove = maxSalary * 1.2;
-
-    if (expected <= twentyPercentAbove) {
-      score += 5;
+  for (const value of values) {
+    total += value;
+    if (value > max) {
+      max = value;
     }
-    // 0 puntos si está más del 20% por encima
+    if (value < min) {
+      min = value;
+    }
   }
-  // Si expected < salaryRangeMin, 0 puntos (el candidato pide menos de lo que ofrecen — no se penaliza ni bonifica)
 
-  return score;
-}
-
-/**
- * Puntúa todos los candidatos contra la vacante y los retorna
- * ordenados por puntaje (más alto primero).
- */
-export function rankCandidatesForVacancy(
-  candidates: Candidate[],
-  vacancy: Vacancy
-): Array<{ candidate: Candidate; score: number }> {
-  const scored = candidates.map((candidate) => ({
-    candidate,
-    score: calculateCandidateScore(candidate, vacancy),
-  }));
-
-  return scored.sort((a, b) => b.score - a.score);
-}
-
-/**
- * Agrupa candidatos por nivel de seniority.
- * Retorna un objeto donde las claves son niveles de seniority
- * y los valores son arrays de candidatos.
- */
-export function groupCandidatesBySeniority(
-  candidates: Candidate[]
-): Record<SeniorityLevel, Candidate[]> {
-  const groups: Record<SeniorityLevel, Candidate[]> = {
-    Junior: [],
-    "Semi-Senior": [],
-    Senior: [],
-    Lead: [],
-    Executive: [],
+  return {
+    total: roundTo2(total),
+    max: roundTo2(max),
+    min: roundTo2(min),
+    average: roundTo2(total / values.length),
   };
-
-  for (const candidate of candidates) {
-    if (candidate.seniority in groups) {
-      groups[candidate.seniority].push(candidate);
-    }
-  }
-
-  return groups;
 }
 
-// -----------------------------------------------------------
-// Agregaciones y Reportes
-// -----------------------------------------------------------
-
-/**
- * Retorna un conteo de candidatos para cada estado.
- */
 export function countCandidatesByStatus(
-  candidates: Candidate[]
+  candidates: ReadonlyArray<Candidate> | null | undefined
 ): Record<CandidateStatus, number> {
   const counts: Record<CandidateStatus, number> = {
     Active: 0,
@@ -191,70 +67,187 @@ export function countCandidatesByStatus(
     Inactive: 0,
   };
 
+  if (!candidates || candidates.length === 0) {
+    return counts;
+  }
+
   for (const candidate of candidates) {
-    if (candidate.status in counts) {
-      counts[candidate.status]++;
-    }
+    counts[candidate.status] += 1;
   }
 
   return counts;
 }
 
-/**
- * Retorna el salario esperado promedio de todos los candidatos.
- * Redondeado a 2 decimales.
- */
-export function calculateAverageSalary(candidates: Candidate[]): number {
-  if (candidates.length === 0) {
+export function countVacanciesByStatus(
+  vacancies: ReadonlyArray<Vacancy> | null | undefined
+): Record<VacancyStatus, number> {
+  const counts: Record<VacancyStatus, number> = {
+    Open: 0,
+    "In progress": 0,
+    Closed: 0,
+    "On hold": 0,
+  };
+
+  if (!vacancies || vacancies.length === 0) {
+    return counts;
+  }
+
+  for (const vacancy of vacancies) {
+    counts[vacancy.status] += 1;
+  }
+
+  return counts;
+}
+
+export function countProcessesByStage(
+  processes: ReadonlyArray<SelectionProcess> | null | undefined
+): Record<ProcessStage, number> {
+  const counts: Record<ProcessStage, number> = {
+    Screening: 0,
+    Interview: 0,
+    "Technical test": 0,
+    "Final interview": 0,
+    Offer: 0,
+    Rejected: 0,
+    Hired: 0,
+  };
+
+  if (!processes || processes.length === 0) {
+    return counts;
+  }
+
+  for (const process of processes) {
+    counts[process.stage] += 1;
+  }
+
+  return counts;
+}
+
+export function sumExpectedSalaries(candidates: ReadonlyArray<Candidate> | null | undefined): number {
+  if (!candidates || candidates.length === 0) {
     return 0;
   }
-
-  const totalSalary = candidates.reduce(
-    (sum, candidate) => sum + candidate.expectedSalary,
-    0
-  );
-
-  return Math.round((totalSalary / candidates.length) * 100) / 100;
+  return roundTo2(candidates.reduce((sum, candidate) => sum + candidate.expectedSalary, 0));
 }
 
-/**
- * Encuentra las N habilidades más comunes entre todos los candidatos.
- * Retorna ordenadas por frecuencia (más alta primero).
- */
-export function findTopSkills(
-  candidates: Candidate[],
-  topN: number
-): Array<{ skill: string; count: number }> {
-  const skillCounts = new Map<string, number>();
+export function maxExpectedSalary(candidates: ReadonlyArray<Candidate> | null | undefined): number {
+  if (!candidates || candidates.length === 0) {
+    return 0;
+  }
+  return Math.max(...candidates.map((candidate) => candidate.expectedSalary));
+}
 
-  for (const candidate of candidates) {
-    for (const skill of candidate.skills) {
-      const normalized = skill.toLowerCase();
-      skillCounts.set(normalized, (skillCounts.get(normalized) ?? 0) + 1);
-    }
+export function minExpectedSalary(candidates: ReadonlyArray<Candidate> | null | undefined): number {
+  if (!candidates || candidates.length === 0) {
+    return 0;
+  }
+  return Math.min(...candidates.map((candidate) => candidate.expectedSalary));
+}
+
+export function averageExpectedSalary(candidates: ReadonlyArray<Candidate> | null | undefined): number {
+  if (!candidates || candidates.length === 0) {
+    return 0;
+  }
+  return roundTo2(sumExpectedSalaries(candidates) / candidates.length);
+}
+
+export function calculateCandidateScore(candidate: Candidate, vacancy: Vacancy): number {
+  let score = 0;
+
+  const candidateSkillsLower = candidate.skills.map((skill) => skill.toLowerCase());
+  const requiredSkillsLower = vacancy.requiredSkills.map((skill) => skill.toLowerCase());
+  const preferredSkillsLower = vacancy.preferredSkills.map((skill) => skill.toLowerCase());
+
+  const requiredMatches = requiredSkillsLower.filter((skill) => candidateSkillsLower.includes(skill)).length;
+  if (requiredSkillsLower.length > 0) {
+    score += (requiredMatches / requiredSkillsLower.length) * 40;
   }
 
-  const sorted = Array.from(skillCounts.entries())
-    .map(([skill, count]) => ({ skill, count }))
-    .sort((a, b) => b.count - a.count);
+  const preferredMatches = preferredSkillsLower.filter((skill) => candidateSkillsLower.includes(skill)).length;
+  score += Math.min(preferredMatches * 10, 20);
 
-  return sorted.slice(0, topN);
+  if (
+    candidate.yearsOfExperience >= vacancy.minYearsExperience &&
+    candidate.yearsOfExperience <= vacancy.maxYearsExperience
+  ) {
+    score += 20;
+  } else if (
+    candidate.yearsOfExperience >= vacancy.minYearsExperience - 2 &&
+    candidate.yearsOfExperience <= vacancy.maxYearsExperience + 2
+  ) {
+    score += 10;
+  }
+
+  const candidateSeniorityIndex = SENIORITY_ORDER.indexOf(candidate.seniority);
+  const vacancySeniorityIndex = SENIORITY_ORDER.indexOf(vacancy.requiredSeniority);
+  const seniorityDifference = Math.abs(candidateSeniorityIndex - vacancySeniorityIndex);
+  if (seniorityDifference === 0) {
+    score += 15;
+  } else if (seniorityDifference === 1) {
+    score += 7;
+  }
+
+  const candidateEnglishIndex = ENGLISH_ORDER.indexOf(candidate.englishLevel);
+  const vacancyEnglishIndex = ENGLISH_ORDER.indexOf(vacancy.requiredEnglishLevel);
+  if (candidateEnglishIndex >= vacancyEnglishIndex) {
+    score += 15;
+  }
+
+  if (candidate.expectedSalary >= vacancy.salaryRangeMin && candidate.expectedSalary <= vacancy.salaryRangeMax) {
+    score += 10;
+  } else if (candidate.expectedSalary <= vacancy.salaryRangeMax * 1.2) {
+    score += 5;
+  }
+
+  return roundTo2(Math.min(score, 100));
 }
 
-/**
- * Calcula qué porcentaje de procesos terminaron en "Hired".
- * Retorna un número entre 0 y 100, redondeado a 2 decimales.
- */
+export function rankCandidatesForVacancy(
+  candidates: ReadonlyArray<Candidate> | null | undefined,
+  vacancy: Vacancy
+): CandidateRankingItem[] {
+  if (!candidates || candidates.length === 0) {
+    return [];
+  }
+
+  return candidates
+    .map((candidate) => ({
+      candidate,
+      score: calculateCandidateScore(candidate, vacancy),
+    }))
+    .sort((a, b) => b.score - a.score);
+}
+
 export function calculateVacancyFillRate(
-  processes: SelectionProcess[]
+  processes: ReadonlyArray<SelectionProcess> | null | undefined
 ): number {
-  if (processes.length === 0) {
+  if (!processes || processes.length === 0) {
     return 0;
   }
 
-  const hiredCount = processes.filter(
-    (process) => process.stage === "Hired"
-  ).length;
+  const hiredCount = processes.filter((process) => process.stage === "Hired").length;
+  return roundTo2((hiredCount / processes.length) * 100);
+}
 
-  return Math.round((hiredCount / processes.length) * 10000) / 100;
+export function buildNexovaOperationalReport(
+  candidates: ReadonlyArray<Candidate> | null | undefined,
+  vacancies: ReadonlyArray<Vacancy> | null | undefined,
+  processes: ReadonlyArray<SelectionProcess> | null | undefined
+): NexovaOperationalReport {
+  const safeCandidates = candidates ?? [];
+  const safeVacancies = vacancies ?? [];
+  const safeProcesses = processes ?? [];
+
+  return {
+    totalCandidates: safeCandidates.length,
+    totalVacancies: safeVacancies.length,
+    totalProcesses: safeProcesses.length,
+    candidatesByStatus: countCandidatesByStatus(safeCandidates),
+    vacanciesByStatus: countVacanciesByStatus(safeVacancies),
+    processesByStage: countProcessesByStage(safeProcesses),
+    expectedSalarySummary: buildNumericSummary(
+      safeCandidates.map((candidate) => candidate.expectedSalary)
+    ),
+    candidateScoreSummary: buildNumericSummary(safeProcesses.map((process) => process.score)),
+  };
 }
