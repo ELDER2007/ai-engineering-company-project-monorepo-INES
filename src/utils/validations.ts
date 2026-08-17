@@ -1,136 +1,197 @@
 // ============================================================
 // Nexova — Validaciones
-// Reglas de negocio para candidatos y vacantes
+// Reglas de campos obligatorios, rangos y coherencia de fechas
 // ============================================================
 
-import { type Candidate, type Vacancy } from "../types/models";
+import { type Candidate, type SelectionProcess, type Vacancy } from "../types/models";
 
-// -----------------------------------------------------------
-// Validación de email (básica)
-// -----------------------------------------------------------
-
-/**
- * Retorna true si el email contiene @ y . en posiciones correctas.
- * Validación muy básica (no es de nivel producción).
- */
-export function isValidEmail(email: string): boolean {
-  const atIndex = email.indexOf("@");
-  if (atIndex <= 0) {
-    return false;
-  }
-
-  const afterAt = email.slice(atIndex + 1);
-  const dotIndex = afterAt.indexOf(".");
-
-  // Debe haber un '.' después del '@' y no debe ser el último carácter
-  if (dotIndex <= 0 || dotIndex >= afterAt.length - 1) {
-    return false;
-  }
-
-  return true;
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
 }
 
-// -----------------------------------------------------------
-// Validación de Candidato
-// -----------------------------------------------------------
+function buildValidationResult(errors: string[]): ValidationResult {
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
 
-/**
- * Valida todas las reglas de negocio para un candidato.
- * Retorna un objeto con:
- * - valid: true si todas las validaciones pasan, false en caso contrario
- * - errors: array de mensajes de error (vacío si es válido)
- */
-export function validateCandidate(
-  candidate: Candidate
-): { valid: boolean; errors: string[] } {
+function isNonEmptyString(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasValidDate(date: Date | null | undefined): boolean {
+  if (!date) {
+    return false;
+  }
+  return Number.isFinite(date.getTime());
+}
+
+export function isValidEmail(email: string | null | undefined): boolean {
+  if (!isNonEmptyString(email)) {
+    return false;
+  }
+  const normalizedEmail = email.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+}
+
+export function validateCandidate(candidate: Candidate | null | undefined): ValidationResult {
   const errors: string[] = [];
 
-  // yearsOfExperience >= 0 y <= 50
-  if (candidate.yearsOfExperience < 0 || candidate.yearsOfExperience > 50) {
-    errors.push(
-      "yearsOfExperience debe ser un valor entre 0 y 50"
-    );
+  if (!candidate) {
+    return buildValidationResult(["Candidate is required"]);
   }
 
-  // currentSalary > 0
-  if (candidate.currentSalary <= 0) {
-    errors.push("currentSalary debe ser un valor mayor a 0");
+  if (!isNonEmptyString(candidate.id)) {
+    errors.push("id is required");
   }
 
-  // expectedSalary > 0
-  if (candidate.expectedSalary <= 0) {
-    errors.push("expectedSalary debe ser un valor mayor a 0");
+  if (!isNonEmptyString(candidate.fullName)) {
+    errors.push("fullName is required");
   }
 
-  // skills debe contener al menos 1 habilidad
-  if (!candidate.skills || candidate.skills.length === 0) {
-    errors.push("skills debe contener al menos 1 habilidad");
-  }
-
-  // email debe tener formato válido
   if (!isValidEmail(candidate.email)) {
-    errors.push("email no tiene un formato válido");
+    errors.push("email format is invalid");
   }
 
-  // phone no debe estar vacío
-  if (!candidate.phone || candidate.phone.trim().length === 0) {
-    errors.push("phone no debe estar vacío");
+  if (!isNonEmptyString(candidate.phone)) {
+    errors.push("phone is required");
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+  if (!Array.isArray(candidate.skills) || candidate.skills.length === 0) {
+    errors.push("skills must contain at least one value");
+  }
+
+  if (
+    !Number.isFinite(candidate.yearsOfExperience) ||
+    candidate.yearsOfExperience < 0 ||
+    candidate.yearsOfExperience > 50
+  ) {
+    errors.push("yearsOfExperience must be between 0 and 50");
+  }
+
+  if (!Number.isFinite(candidate.currentSalary) || candidate.currentSalary <= 0) {
+    errors.push("currentSalary must be greater than 0");
+  }
+
+  if (!Number.isFinite(candidate.expectedSalary) || candidate.expectedSalary <= 0) {
+    errors.push("expectedSalary must be greater than 0");
+  }
+
+  if (!isNonEmptyString(candidate.location)) {
+    errors.push("location is required");
+  }
+
+  return buildValidationResult(errors);
 }
 
-// -----------------------------------------------------------
-// Validación de Vacante
-// -----------------------------------------------------------
-
-/**
- * Valida todas las reglas de negocio para una vacante.
- * Retorna un objeto con:
- * - valid: true si todas las validaciones pasan, false en caso contrario
- * - errors: array de mensajes de error (vacío si es válido)
- */
-export function validateVacancy(
-  vacancy: Vacancy
-): { valid: boolean; errors: string[] } {
+export function validateVacancy(vacancy: Vacancy | null | undefined): ValidationResult {
   const errors: string[] = [];
 
-  // requiredSkills debe contener al menos 1 habilidad
-  if (!vacancy.requiredSkills || vacancy.requiredSkills.length === 0) {
-    errors.push("requiredSkills debe contener al menos 1 habilidad");
+  if (!vacancy) {
+    return buildValidationResult(["Vacancy is required"]);
   }
 
-  // minYearsExperience >= 0
-  if (vacancy.minYearsExperience < 0) {
-    errors.push("minYearsExperience debe ser mayor o igual a 0");
+  if (!isNonEmptyString(vacancy.id)) {
+    errors.push("id is required");
   }
 
-  // maxYearsExperience >= minYearsExperience
-  if (vacancy.maxYearsExperience < vacancy.minYearsExperience) {
-    errors.push(
-      "maxYearsExperience debe ser mayor o igual a minYearsExperience"
-    );
+  if (!isNonEmptyString(vacancy.title)) {
+    errors.push("title is required");
   }
 
-  // salaryRangeMax >= salaryRangeMin
-  if (vacancy.salaryRangeMax < vacancy.salaryRangeMin) {
-    errors.push("salaryRangeMax debe ser mayor o igual a salaryRangeMin");
+  if (!isNonEmptyString(vacancy.companyName)) {
+    errors.push("companyName is required");
   }
 
-  // Ambos salarios > 0
-  if (vacancy.salaryRangeMin <= 0) {
-    errors.push("salaryRangeMin debe ser un valor mayor a 0");
+  if (!Array.isArray(vacancy.requiredSkills) || vacancy.requiredSkills.length === 0) {
+    errors.push("requiredSkills must contain at least one value");
   }
 
-  if (vacancy.salaryRangeMax <= 0) {
-    errors.push("salaryRangeMax debe ser un valor mayor a 0");
+  if (!Number.isFinite(vacancy.minYearsExperience) || vacancy.minYearsExperience < 0) {
+    errors.push("minYearsExperience must be greater than or equal to 0");
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+  if (!Number.isFinite(vacancy.maxYearsExperience) || vacancy.maxYearsExperience < 0) {
+    errors.push("maxYearsExperience must be greater than or equal to 0");
+  }
+
+  if (
+    Number.isFinite(vacancy.minYearsExperience) &&
+    Number.isFinite(vacancy.maxYearsExperience) &&
+    vacancy.maxYearsExperience < vacancy.minYearsExperience
+  ) {
+    errors.push("maxYearsExperience must be greater than or equal to minYearsExperience");
+  }
+
+  if (!Number.isFinite(vacancy.salaryRangeMin) || vacancy.salaryRangeMin <= 0) {
+    errors.push("salaryRangeMin must be greater than 0");
+  }
+
+  if (!Number.isFinite(vacancy.salaryRangeMax) || vacancy.salaryRangeMax <= 0) {
+    errors.push("salaryRangeMax must be greater than 0");
+  }
+
+  if (
+    Number.isFinite(vacancy.salaryRangeMin) &&
+    Number.isFinite(vacancy.salaryRangeMax) &&
+    vacancy.salaryRangeMax < vacancy.salaryRangeMin
+  ) {
+    errors.push("salaryRangeMax must be greater than or equal to salaryRangeMin");
+  }
+
+  if (!isNonEmptyString(vacancy.location)) {
+    errors.push("location is required");
+  }
+
+  return buildValidationResult(errors);
+}
+
+export function validateSelectionProcess(
+  process: SelectionProcess | null | undefined
+): ValidationResult {
+  const errors: string[] = [];
+
+  if (!process) {
+    return buildValidationResult(["SelectionProcess is required"]);
+  }
+
+  if (!isNonEmptyString(process.id)) {
+    errors.push("id is required");
+  }
+
+  if (!isNonEmptyString(process.candidateId)) {
+    errors.push("candidateId is required");
+  }
+
+  if (!isNonEmptyString(process.vacancyId)) {
+    errors.push("vacancyId is required");
+  }
+
+  if (!isNonEmptyString(process.notes)) {
+    errors.push("notes is required");
+  }
+
+  if (!Number.isFinite(process.score) || process.score < 0 || process.score > 100) {
+    errors.push("score must be between 0 and 100");
+  }
+
+  if (!hasValidDate(process.createdAt)) {
+    errors.push("createdAt must be a valid date");
+  }
+
+  if (!hasValidDate(process.updatedAt)) {
+    errors.push("updatedAt must be a valid date");
+  }
+
+  if (
+    hasValidDate(process.createdAt) &&
+    hasValidDate(process.updatedAt) &&
+    process.updatedAt.getTime() < process.createdAt.getTime()
+  ) {
+    errors.push("updatedAt must be greater than or equal to createdAt");
+  }
+
+  return buildValidationResult(errors);
 }
