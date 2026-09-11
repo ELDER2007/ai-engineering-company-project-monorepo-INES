@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Nexova brand tokens — indigo (trust, corporate HR) as the primary scale,
+   amber as the single accent reserved for calls to action. Swap these
+   values if/when Carmen Ruiz's team provides real brand guidelines. */
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+}

@@ -51,10 +51,9 @@ You are building **one company** across many milestones and projects. Each top-l
 
 ## Current status of the template
 
-> 💡 This repository currently provides a **base folder structure and documentation skeleton** only. It does not include runnable apps or global scripts yet.
+> 💡 `CONTEXT.md` has been replaced with the assigned company's briefing (Nexova). Milestone 1 has runnable apps: `uis/website` (public landing page) and `uis/backoffice` (internal dashboard shell), plus a `services/api` skeleton — see [`memory-bank/progress.md`](./memory-bank/progress.md) for exactly what's built vs. pending.
 >
-> - `CONTEXT.md` is a placeholder and must be replaced with your assigned company context.
-> - There is no root `AGENTS.md` yet.
+> - Each app under `uis/` and `services/` is self-contained (own `package.json`/`requirements.txt`) — there is still no workspace runner or `docker-compose.yml` wiring them together at the root.
 > - Shared package metadata exists in `packages/shared/package.json` (`@repo/shared-types`), but no workspace runner is configured at root.
 
 ---
@@ -68,6 +67,7 @@ Read the linked `README.md` inside each folder before you start coding there.
 | Path                         | Purpose                                                                   | What you do here                                                                                              |
 | ---------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | [`CONTEXT.md`](./CONTEXT.md) | Single source of truth for your company (Brasaland, TrackFlow, or Nexova) | **First step:** copy your assigned company briefing here so every app, agent, and prompt uses the same domain |
+| [`AGENTS.md`](./AGENTS.md)   | Repo-wide instructions for AI coding agents                               | Full-repository context (folder map, conventions) for Claude Code, Cursor, etc. — read before assigning agent work |
 | `docker-compose.yml`         | Local dev orchestration for the whole stack                               | Keep at repo root — wires `services/`, databases, and other containers from one place                         |
 | `README.md` / `README.es.md` | This guide                                                                | Orientation — you are here                                                                                    |
 

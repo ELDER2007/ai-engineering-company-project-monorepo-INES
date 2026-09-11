@@ -51,10 +51,9 @@ Estás construyendo **una sola empresa** a lo largo de muchos hitos y proyectos.
 
 ## Estado actual de la plantilla
 
-> 💡 Actualmente el repositorio ofrece solo una **estructura base de carpetas y documentación**. Todavía no incluye aplicaciones ejecutables ni scripts globales en la raíz.
+> 💡 `CONTEXT.md` ya fue reemplazado por el briefing de la empresa asignada (Nexova). El Hito 1 tiene apps ejecutables: `uis/website` (landing pública) y `uis/backoffice` (shell del dashboard interno), más un esqueleto de `services/api` — ver [`memory-bank/progress.md`](./memory-bank/progress.md) para el detalle exacto de qué está construido y qué falta.
 >
-> - `CONTEXT.md` es un placeholder y debe sustituirse por el contexto de la empresa asignada.
-> - No existe todavía un `AGENTS.md` en la raíz.
+> - Cada app bajo `uis/` y `services/` es autocontenida (su propio `package.json`/`requirements.txt`) — todavía no hay un runner de workspace ni un `docker-compose.yml` que las conecte desde la raíz.
 > - Existe metadata del paquete compartido en `packages/shared/package.json` (`@repo/shared-types`), pero aún no hay runner de workspace en raíz.
 
 ---
@@ -68,6 +67,7 @@ Lee el `README.md` enlazado dentro de cada carpeta antes de empezar a programar 
 | Ruta                         | Propósito                                                            | Qué haces aquí                                                                                               |
 | ---------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | [`CONTEXT.md`](./CONTEXT.md) | Fuente única de verdad de tu empresa (Brasaland, TrackFlow o Nexova) | **Primer paso:** copia aquí el briefing de tu empresa para que apps, agentes y prompts usen el mismo dominio |
+| [`AGENTS.md`](./AGENTS.md)   | Instrucciones para agentes de programación con IA, válidas para todo el repo | Contexto completo del repositorio (mapa de carpetas, convenciones) para Claude Code, Cursor, etc. — léelo antes de asignarle trabajo a un agente |
 | `docker-compose.yml`         | Orquestación local de todo el stack                                  | Mantener en la raíz del repo — conecta `services/`, bases de datos y otros contenedores desde un solo lugar  |
 | `README.md` / `README.es.md` | Esta guía                                                            | Orientación — estás aquí                                                                                     |
 

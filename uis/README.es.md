@@ -4,8 +4,8 @@ Esta carpeta contiene **todos los proyectos con interfaz de usuario** para el pr
 
 Los dos proyectos principales que se almacenan aquí son:
 
-- **`website`** — la presencia web pública de la compañía.
-- **`backoffice`** — la aplicación interna de administración. Es el lugar ideal para desarrollar múltiples soluciones dentro de un mismo proyecto: autenticación, gestión de personas, gestión de operaciones, comunicación interna y otras capacidades de back-office.
+- **`website`** — la presencia web pública de la compañía. Estructurada (Vite + React + React Router + Tailwind CSS, a partir de la estructura de la plantilla `react-hello-webapp` de 4Geeks) con la landing page del Hito 1 ya construida — ver [`uis/website/README.es.md`](./website/README.es.md).
+- **`backoffice`** — la aplicación interna de administración. Es el lugar ideal para desarrollar múltiples soluciones dentro de un mismo proyecto: autenticación, gestión de personas, gestión de operaciones, comunicación interna y otras capacidades de back-office. Shell del dashboard ya estructurado (layout propio de sidebar/topbar, separado del de `website`) con un widget de resumen de la empresa — ver [`uis/backoffice/README.es.md`](./backoffice/README.es.md).
 
 Organiza `uis/` por **distintas áreas de la compañía** — cada subcarpeta agrupa un ámbito diferente (por ejemplo, web pública frente a operaciones internas) e incluye su propia documentación técnica y funcional.
 

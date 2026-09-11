@@ -4,8 +4,8 @@ This folder contains **all projects with a user interface** for the cross-functi
 
 The two main projects stored here are:
 
-- **`website`** — the company's public-facing web presence.
-- **`backoffice`** — the internal admin application. This is the ideal place to develop multiple solutions within a single project: authentication, people management, operations management, internal communication, and other back-office capabilities.
+- **`website`** — the company's public-facing web presence. Scaffolded (Vite + React + React Router + Tailwind CSS, from the 4Geeks `react-hello-webapp` template structure) with the Hito 1 landing page built — see [`uis/website/README.md`](./website/README.md).
+- **`backoffice`** — the internal admin application. This is the ideal place to develop multiple solutions within a single project: authentication, people management, operations management, internal communication, and other back-office capabilities. Dashboard shell scaffolded (own sidebar/topbar layout, separate from `website`'s) with a company-overview widget — see [`uis/backoffice/README.md`](./backoffice/README.md).
 
 Organize `uis/` by **different concerns** — each subfolder covers a distinct area of the company (for example, public web vs internal operations) and includes its own technical and functional documentation.
 

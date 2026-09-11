@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* Backoffice theme — deliberately distinct from uis/website's brand/accent
+   tokens (indigo + amber) so the internal tool reads as its own app: a dark
+   slate sidebar + a single emerald accent for active/primary actions. */
+@theme {
+  --color-ink-800: #1e293b;
+  --color-ink-900: #0f172a;
+  --color-ink-950: #0b1120;
+
+  --color-accent-500: #10b981;
+  --color-accent-600: #059669;
+}
