@@ -48,7 +48,7 @@ Tres hechos del contexto de Nexova empujan directamente hacia el monolito modula
 2. **El proyecto se construye por hitos, no de una vez** (Backend, Telemetría, RAG, Agentes, Workflows, Real-time llegan en momentos distintos). Una arquitectura que exige decidir límites de servicio y contratos de red desde el hito 1 —cuando solo existe el alta de candidato del sitio web— fuerza a adivinar fronteras antes de tener uso real. El monolito modular permite construir `candidates/` ahora y añadir `selection/`, `support/`, `agent/`, `realtime/` en hitos sucesivos sin reescribir lo anterior.
 3. **El equipo es pequeño.** Microservicios exigen despliegue independiente, observabilidad distribuida y gestión de contratos entre servicios; ese costo operativo compite directamente con el tiempo de construir producto, y hoy no hay señal de qué componente necesitaría escalar por separado.
 
-El monolito modular no es una renuncia a escalar después: al aislar cada dominio detrás de una capa de servicio (sección 3.1), el día que el scoring de CVs con IA resulte ser el cuello de botella real, se extrae *ese* módulo como worker independiente sin tocar el resto.
+El monolito modular no es una renuncia a escalar después: al aislar cada dominio detrás de una capa de servicio (sección 3.2), el día que el scoring de CVs con IA resulte ser el cuello de botella real, se extrae *ese* módulo como worker independiente sin tocar el resto.
 
 Se descarta también el monolito **sin** estructura interna (rutas de FastAPI con lógica y queries SQL directamente en el handler) porque impide testear reglas de negocio (scoring, validaciones del formulario, cálculo de SLA) sin levantar la app entera, y porque acopla el contrato HTTP al modelo de datos, así que un cambio de esquema rompe la API pública.
 
@@ -56,7 +56,22 @@ Se descarta también el monolito **sin** estructura interna (rutas de FastAPI co
 
 ## 3. Organización de módulos, dominios y rutas
 
-### 3.1 Criterio de separación: dos ejes, no uno
+### 3.1 Cómo influyen las convenciones estándar de FastAPI en esta propuesta
+
+Antes de fijar el criterio de separación, comparé dos convenciones ampliamente usadas en proyectos FastAPI reales, para no partir de preferencia genérica sino de prácticas ya probadas:
+
+**1. La convención oficial ("Bigger Applications - Multiple Files", en la documentación de FastAPI).** Propone dividir la app en módulos con `APIRouter`, cada uno con su propio `prefix`, `tags` y `dependencies`, registrados en `main.py` vía `include_router()`; incluye además un paquete `internal/` separado para rutas administrativas con sus propias dependencias de autorización. **Qué tomo de aquí:** el mecanismo concreto de router — prefijo por dominio, tag por dominio para que la documentación autogenerada quede agrupada, y dependencias de autenticación aplicadas al router completo en vez de a cada handler — es exactamente el patrón que uso en la sección 3.3. La separación público/interno de la sección 3.4 también es una instancia directa de la idea de `internal/` con dependencias propias.
+
+**2. Dos convenciones de organización de carpetas en conflicto entre sí**, ambas comunes en la práctica:
+
+  - **Por tipo técnico** (usada por el generador oficial de proyectos de FastAPI, *Full Stack FastAPI Template*): `app/api/api_v1/endpoints/`, `app/crud/`, `app/models/`, `app/schemas/`, `app/core/` — todas las rutas juntas, todos los modelos juntos, todo el CRUD junto, agrupados por lo que *son* técnicamente.
+  - **Por dominio** (documentada como práctica de referencia en repositorios ampliamente adoptados como `fastapi-best-practices`, inspirada en la estructura interna de Netflix Dispatch): un paquete por dominio (`auth/`, `posts/`, etc.), cada uno con su propio `router.py`, `schemas.py`, `models.py`, `service.py`, `dependencies.py` — agrupados por *de qué capacidad de negocio son dueños*.
+
+  Esa misma fuente señala explícitamente el motivo del cambio: dividir por tipo técnico funciona para proyectos pequeños o microservicios de un solo propósito, pero deja de funcionar en monolitos con muchos dominios, porque un cambio de negocio termina tocando carpetas dispersas por todo el proyecto. Es el mismo argumento, con el mismo ejemplo de fondo, que ya usé en la sección 3.2 para justificar el criterio de dominio — la investigación confirma que no es una intuición aislada, sino el motivo documentado por el que equipos con monolitos de varios dominios abandonan la convención "por tipo" del template oficial en favor de la organización por dominio.
+
+**Conclusión para esta propuesta:** adopto la convención de *mecánica de routers* de la documentación oficial (prefix, tags, dependencies por router), pero **no** la convención de *carpetas por tipo técnico* de su generador de proyectos — en su lugar, adopto la organización por dominio, porque Nexova es exactamente el caso (monolito con varios dominios de negocio) que esa comunidad identifica como el punto donde la convención por tipo deja de escalar.
+
+### 3.2 Criterio de separación: dos ejes, no uno
 
 La estructura combina **dos criterios de separación distintos**, cada uno resolviendo un problema diferente:
 
@@ -94,7 +109,7 @@ services/api/
 
 **Regla de frontera entre dominios:** un módulo solo llama a la capa de servicio de otro módulo, nunca a sus modelos ni a su acceso a datos. Es la regla que hace posible extraer `selection/scoring/` como worker independiente sin tocar `agent/` ni `support/` el día que haga falta, y la consecuencia directa de haber separado por dominio en el eje horizontal.
 
-### 3.2 Endpoints y routers de FastAPI por dominio
+### 3.3 Endpoints y routers de FastAPI por dominio
 
 **Criterio de agrupación:** cada módulo de dominio expone **un `APIRouter` propio**, registrado en `main.py` con un prefijo `/api/v1/<dominio>` y un tag de OpenAPI igual al nombre del dominio — así la documentación autogenerada queda agrupada exactamente como el código. Dentro de un dominio, cuando hay más de un recurso con **consumidores distintos** (por ejemplo, el candidato que sube su CV frente al consultor que lo busca), ese dominio se divide en **sub-routers por recurso**, no se mezclan en uno solo — el criterio es "¿quién llama a esto y con qué permisos?", el mismo eje público/interno que ya se usa para el resto de la organización.
 
@@ -137,7 +152,7 @@ services/api/
 | `WS /ws/dashboard/selection` | Eventos en vivo para consultores: nuevo candidato, cambio de score, cambio de estado |
 | `WS /ws/dashboard/support` | Eventos en vivo para supervisores: nuevo ticket, cambio de SLA, alerta de sentimiento negativo |
 
-### 3.3 Criterios generales que atraviesan todos los routers
+### 3.4 Criterios generales que atraviesan todos los routers
 
 - **Versión desde el día uno** (`/api/v1`): la API la van a consumir a la vez el sitio público, el portal de candidatos, el dashboard interno y el agente; sin versión, un cambio de contrato rompe a todos los consumidores simultáneamente.
 - **Público vs. interno como eje explícito**, no solo el dominio: las rutas públicas (formulario, carga de CV, chatbot) llevan rate limiting y validación estricta de input porque cualquiera en internet puede llamarlas; las internas (dashboards, búsqueda, gestión de tickets) llevan autenticación y autorización por rol, aplicada como dependencia sobre el grupo de router entero, no repetida en cada handler. Es el mismo criterio que separa los sub-routers dentro de `selection` y `support`.
@@ -169,7 +184,7 @@ Estas son decisiones que se toman ya, con su justificación — no se difieren a
 - **Datos personales y cumplimiento.** Nexova opera en España (GDPR) y Miami (transferencia entre jurisdicciones); se van a almacenar CVs, teléfonos y, si el scoring usa IA, inferencias sobre idoneidad de la persona. Falta definir retención/borrado y qué consentimiento cubre qué uso — el checkbox actual del formulario cubre el registro, no necesariamente el uso del CV para scoring automatizado.
 - **Scoring automatizado como decisión de alto riesgo.** Rankear candidatos sin humano en el circuito es un riesgo legal y reputacional (sesgo, falta de explicabilidad; en la UE el scoring de empleo es "alto riesgo" bajo el AI Act). Ya mitigado a nivel de diseño en la sección 4 (score explicable, sin descarte automático), pero requiere que el flujo de producto respete esa restricción.
 - **IA conversacional sin control de alcance.** El chatbot y el agente combinado pueden alucinar o gestionar mal un cliente insatisfecho detectado por sentimiento. Se necesita una ruta de escalado obligatoria a un ticket humano cuando el sentimiento cruza un umbral, y respuestas ancladas a una base de conocimiento acotada (RAG), no generación libre.
-- **Acoplamiento entre scoring pesado y disponibilidad de la API**, si no se respeta la frontera de la sección 3.1/4 desde el primer endpoint de carga de CV.
+- **Acoplamiento entre scoring pesado y disponibilidad de la API**, si no se respeta la frontera de la sección 3.2/4 desde el primer endpoint de carga de CV.
 - **Ambición del alcance vs. capacidad del equipo.** Lo declarado (scoring con IA, portal en tiempo real, chatbot, tickets con SLA, agente combinado) es mucho mayor que el Hito 1 actual (sitio + captura de leads). Mitigado por construir `candidates/` primero y el resto por hitos, pero es un riesgo de calendario, no solo técnico.
 
 ### 5.2 Puntos de confusión que hay que resolver con el negocio antes de construir (no son decisiones técnicas)
