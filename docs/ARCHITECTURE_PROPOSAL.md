@@ -73,6 +73,12 @@ Antes de fijar el criterio de separación, comparé dos convenciones ampliamente
 
 Esta conclusión no compite con la guía del propio template del curso, la refuerza: `README.md` describe `services/` explícitamente como "**one main FastAPI app** (e.g. `api/`) with **routers/modules per domain**" y recomienda "avoid splitting into many microservices early [...] extract a worker only when necessary" (`services/README.md`). Ambas decisiones de esta propuesta —monolito modular (sección 2) y routers organizados por dominio, no por tipo (esta sección)— son la misma indicación del curso, solo que argumentada aquí contra las características concretas de Nexova en vez de citada sin más.
 
+**Fuentes consultadas para esta sección:**
+
+- [Bigger Applications - Multiple Files (FastAPI, documentación oficial)](https://fastapi.tiangolo.com/tutorial/bigger-applications/) — mecánica de `APIRouter`, `prefix`, `tags`, `include_router()` y el paquete `internal/`.
+- [Full Stack FastAPI Template (FastAPI, generador oficial de proyectos)](https://fastapi.tiangolo.com/project-generation/) — convención de carpetas por tipo técnico (`api/endpoints`, `crud`, `models`, `schemas`), descartada para esta propuesta.
+- [fastapi-best-practices (zhanymkanov, GitHub)](https://github.com/zhanymkanov/fastapi-best-practices) — convención de carpetas por dominio (`router.py`, `schemas.py`, `models.py`, `service.py` por paquete), inspirada en la estructura interna de Netflix Dispatch, y el argumento documentado de por qué la organización por tipo deja de escalar en monolitos con varios dominios.
+
 ### 3.2 Criterio de separación: dos ejes, no uno
 
 La estructura combina **dos criterios de separación distintos**, cada uno resolviendo un problema diferente:
