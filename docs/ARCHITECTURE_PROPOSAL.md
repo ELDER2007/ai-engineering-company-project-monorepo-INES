@@ -6,21 +6,33 @@
 
 ## Resumen ejecutivo
 
-Propongo construir el backend de Nexova como un **monolito modular en capas**: un único servicio FastAPI, organizado internamente por dominio de negocio (selección de talento, atención al cliente, agente de IA), con fronteras claras entre módulos que permiten extraer cualquiera de ellos como servicio independiente el día que el uso real lo justifique. No propongo microservicios en esta fase ni un monolito sin estructura interna — ambos extremos tienen un costo que hoy no se justifica con lo que sabemos del sistema.
+Propongo **arquitectura en capas** (rutas → servicio/caso de uso → acceso a datos) como patrón, frente a MVC y serverless, porque Nexova es una API pura consumida por varios frontends desacoplados y con cargas de trabajo largas y con estado (IA, websockets) — ninguno de los otros dos patrones encaja con esas características. Sobre ese patrón, propongo desplegarlo como **monolito modular**: un único servicio FastAPI, organizado internamente por dominio de negocio (selección de talento, atención al cliente, agente de IA), con fronteras claras entre módulos que permiten extraer cualquiera de ellos como servicio independiente el día que el uso real lo justifique. No propongo microservicios en esta fase ni un monolito sin estructura interna — ambos extremos tienen un costo que hoy no se justifica con lo que sabemos del sistema.
 
 El resto del documento desarrolla por qué esta arquitectura encaja con lo que Nexova está construyendo, cómo organizo módulos, dominios y rutas, qué decisiones técnicas tomo ya, y qué riesgos o ambigüedades hay que resolver antes de escribir el primer endpoint.
 
 ---
 
-## 1. Qué arquitectura propongo
+## 1. Patrón arquitectónico propuesto y por qué
 
-**Monolito modular en capas**: un único servicio FastAPI (`services/api/`), dividido internamente por dominio de negocio (bounded context) y, dentro de cada dominio, en capas — ruta → servicio/caso de uso → acceso a datos. El trabajo pesado o de larga duración (parsing de CV, llamadas a IA, envío de correo) se ejecuta como tareas en background dentro de la misma plataforma, no como servicios aparte.
+### 1.1 Patrones evaluados frente a las características reales de Nexova
 
-No se proponen microservicios en esta fase, ni un monolito sin estructura interna. Es una posición intermedia deliberada, no un punto de partida "por defecto": las razones concretas están en la sección 2.
+No elijo el patrón por preferencia; lo comparo contra tres características concretas del sistema que hay que construir: **(a)** el backend es una API pura consumida por varios frontends desacoplados (sitio público, portal de candidatos, backoffice, chatbot), no una app que renderiza sus propias vistas; **(b)** hay cargas de trabajo largas y con estado (parsing/scoring de CV con IA, conexiones persistentes de websocket para dashboards en vivo), no solo peticiones cortas y sin estado; **(c)** el equipo es pequeño y construye por hitos sucesivos, no de una vez.
+
+| Patrón | Qué asume sobre el sistema | Por qué encaja o no con Nexova |
+|---|---|---|
+| **MVC** | El propio backend renderiza vistas para un usuario final (ciclo request → controller → view) | No encaja: Nexova no tiene una sola vista que el backend renderice — tiene varios frontends independientes (`uis/website`, portal, backoffice) que consumen la misma API. Forzar MVC aquí no tiene "View" real que ocupar, y termina mezclando el controlador con lógica de negocio por falta de una capa donde ponerla |
+| **Serverless (funciones)** | Invocaciones cortas, sin estado, con tráfico irregular donde pagar solo por ejecución compensa el costo operativo por función | No encaja hoy: el scoring de CV con IA y el chatbot son operaciones potencialmente lentas, y los dashboards en vivo necesitan conexiones de websocket persistentes — ambos casos chocan con el modelo de ejecución corta y el cold start de funciones. Además, gestionar decenas de funciones con sus propios permisos y triggers es más carga operativa para un equipo pequeño que un único servicio, no menos |
+| **Arquitectura en capas (elegida)** | Un servicio separa responsabilidades en niveles — presentación (rutas), lógica de negocio (servicios/casos de uso), acceso a datos (repositorios/modelos) — dentro de un mismo deployable | Encaja: permite testear reglas de negocio (scoring, validación del formulario, cálculo de SLA) sin depender del transporte HTTP ni de la base de datos; permite que el agente de IA llame directamente a la capa de servicio de selección y soporte sin pasar por red; y un único deployable es lo que un equipo pequeño puede operar de forma sostenida mientras construye por hitos |
+
+**Patrón elegido: arquitectura en capas**, implementada como un único servicio FastAPI (`services/api/`) con rutas → servicio/caso de uso → acceso a datos, y organizado internamente por dominio de negocio (bounded context). El trabajo pesado o de larga duración (parsing de CV, llamadas a IA, envío de correo) se ejecuta como tareas en background dentro de la misma plataforma, no como servicios aparte.
+
+### 1.2 Una decisión relacionada pero distinta: topología de despliegue
+
+La arquitectura en capas no decide por sí sola si cada dominio se despliega como servicio propio (microservicios) o todos juntos (monolito). Esa es la segunda decisión de este documento — **monolito modular**, no microservicios ni un monolito sin estructura interna — y está justificada en la sección 2 con las mismas características reales de Nexova, no con preferencia genérica.
 
 ---
 
-## 2. Por qué esta arquitectura encaja con lo que Nexova está construyendo
+## 2. Por qué esta topología (monolito modular) encaja con lo que Nexova está construyendo
 
 El backend tiene que soportar, según `CONTEXT.md` y la propuesta de departamentos en `company-choice.md`, dos dominios con necesidades distintas que **comparten datos y un mismo agente de IA**:
 
@@ -36,7 +48,7 @@ Tres hechos del contexto de Nexova empujan directamente hacia el monolito modula
 2. **El proyecto se construye por hitos, no de una vez** (Backend, Telemetría, RAG, Agentes, Workflows, Real-time llegan en momentos distintos). Una arquitectura que exige decidir límites de servicio y contratos de red desde el hito 1 —cuando solo existe el alta de candidato del sitio web— fuerza a adivinar fronteras antes de tener uso real. El monolito modular permite construir `candidates/` ahora y añadir `selection/`, `support/`, `agent/`, `realtime/` en hitos sucesivos sin reescribir lo anterior.
 3. **El equipo es pequeño.** Microservicios exigen despliegue independiente, observabilidad distribuida y gestión de contratos entre servicios; ese costo operativo compite directamente con el tiempo de construir producto, y hoy no hay señal de qué componente necesitaría escalar por separado.
 
-El monolito modular no es una renuncia a escalar después: al aislar cada dominio detrás de una capa de servicio (sección 3.2), el día que el scoring de CVs con IA resulte ser el cuello de botella real, se extrae *ese* módulo como worker independiente sin tocar el resto.
+El monolito modular no es una renuncia a escalar después: al aislar cada dominio detrás de una capa de servicio (sección 3.1), el día que el scoring de CVs con IA resulte ser el cuello de botella real, se extrae *ese* módulo como worker independiente sin tocar el resto.
 
 Se descarta también el monolito **sin** estructura interna (rutas de FastAPI con lógica y queries SQL directamente en el handler) porque impide testear reglas de negocio (scoring, validaciones del formulario, cálculo de SLA) sin levantar la app entera, y porque acopla el contrato HTTP al modelo de datos, así que un cambio de esquema rompe la API pública.
 
