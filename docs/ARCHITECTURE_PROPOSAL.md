@@ -92,11 +92,17 @@ services/api/
 │   └── scoring/                # subcomponente aislado, candidato a extraerse a worker
 ├── support/                     # tickets, sentimiento
 │   ├── router.py / schemas.py / service.py / models.py
-├── agent/                       # orquesta el agente combinado; llama a selection.service y support.service, nunca a sus modelos
+├── agent/                       # orquesta el agente combinado
+│   └── router.py / service.py  # sin models.py: no posee datos propios, solo llama a selection.service y support.service
 ├── realtime/                    # websockets para dashboards — cruza dominios, por eso vive aparte y no dentro de selection/ o support/
-├── notifications/                # correos de seguimiento — utilidad compartida, no dueña de ninguna regla de negocio
-└── workers/                      # tareas en background (parsing CV, envíos async) — mismo criterio que notifications/: infraestructura compartida
+│   └── router.py                # sin service.py/models.py propios: solo retransmite eventos que ya calculan selection y support
+├── notifications/                # correos de seguimiento
+│   └── service.py                # sin router.py: no se llama por HTTP, solo lo invocan otros dominios
+└── workers/                      # tareas en background (parsing CV, envíos async)
+    └── <tarea>.py                # una función por tarea; mismo criterio que notifications/: infraestructura compartida, sin router propio
 ```
+
+Esta es la traducción directa a carpetas de las dos decisiones ya tomadas: cada módulo de negocio (`candidates`, `selection`, `support`) repite el mismo patrón en capas de la sección 1 (`router.py` → `service.py` → `models.py`), y los módulos que no son dueños de un dominio de negocio (`agent`, `realtime`, `notifications`, `workers`) se reconocen precisamente porque a alguno de esos archivos le falta sentido — sin datos propios no hay `models.py`, sin exposición HTTP directa no hay `router.py`. La ausencia de un archivo es tan informativa como su presencia.
 
 | Carpeta | Responsabilidad | Por qué es su propio módulo y no parte de otro |
 |---|---|---|
