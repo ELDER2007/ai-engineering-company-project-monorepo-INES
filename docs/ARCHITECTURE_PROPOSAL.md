@@ -56,15 +56,20 @@ Se descarta también el monolito **sin** estructura interna (rutas de FastAPI co
 
 ## 3. Organización de módulos, dominios y rutas
 
-### 3.1 Módulos por dominio de negocio
+### 3.1 Criterio de separación: dos ejes, no uno
 
-Los módulos se agrupan por capacidad de negocio, no por tipo técnico (no "todas las rutas juntas, todos los modelos juntos"): así, cambiar cómo se calcula el score de un candidato toca una sola carpeta, no cuatro carpetas técnicas paralelas.
+La estructura combina **dos criterios de separación distintos**, cada uno resolviendo un problema diferente:
+
+- **Eje horizontal — por dominio de negocio (bounded context):** cada carpeta de primer nivel dentro de `services/api/` representa una capacidad de negocio de Nexova (candidatos, selección, soporte, agente), no una categoría técnica. El criterio para trazar esta línea es "¿quién en el negocio es dueño de esta regla?" — quien decide cómo se calcula un score no es quien decide un SLA de ticket, así que van en carpetas distintas aunque ambas sean "lógica de negocio".
+- **Eje vertical — por responsabilidad técnica (capas), dentro de cada dominio:** dentro de cada carpeta de dominio, los archivos se separan por el tipo de responsabilidad que cumplen frente al patrón en capas de la sección 1 — `router.py` es la capa de presentación (HTTP), `schemas.py` es el contrato de entrada/salida, `service.py` es la lógica de negocio, `models.py` es la persistencia. El criterio aquí es "¿qué cambia junto y qué cambia por separado?" — el contrato HTTP de un endpoint puede cambiar sin tocar cómo se persiste el dato, y viceversa.
+
+Se descarta agrupar por tipo técnico a nivel de proyecto (una carpeta `routers/` con todas las rutas, otra `models/` con todos los modelos) porque, para un cambio de negocio real —"cambiar cómo se calcula el score de un candidato"— esa organización obliga a tocar cuatro carpetas dispersas en vez de una sola. El criterio de dominio prioriza que el código que cambia junto viva junto.
 
 ```
 services/api/
 ├── main.py                    # instancia FastAPI, registro de routers, middlewares
-├── core/                      # transversal: config, seguridad, logging, excepciones
-├── db/                        # sesión de base de datos, migraciones
+├── core/                      # transversal: config, seguridad, logging, excepciones — no pertenece a ningún dominio
+├── db/                        # sesión de base de datos, migraciones — infraestructura, no negocio
 ├── candidates/                 # alta de candidatos (lo que exige el Hito 1 hoy)
 │   ├── router.py / schemas.py / service.py / models.py
 ├── selection/                  # CV, scoring, ranking, búsqueda de candidatos
@@ -73,12 +78,21 @@ services/api/
 ├── support/                     # tickets, sentimiento
 │   ├── router.py / schemas.py / service.py / models.py
 ├── agent/                       # orquesta el agente combinado; llama a selection.service y support.service, nunca a sus modelos
-├── realtime/                    # websockets para dashboards
-├── notifications/                # correos de seguimiento
-└── workers/                      # tareas en background (parsing CV, envíos async)
+├── realtime/                    # websockets para dashboards — cruza dominios, por eso vive aparte y no dentro de selection/ o support/
+├── notifications/                # correos de seguimiento — utilidad compartida, no dueña de ninguna regla de negocio
+└── workers/                      # tareas en background (parsing CV, envíos async) — mismo criterio que notifications/: infraestructura compartida
 ```
 
-**Regla de frontera:** un módulo solo llama a la capa de servicio de otro módulo, nunca a sus modelos ni a su acceso a datos. Es la regla que hace posible extraer `selection/scoring/` como worker independiente sin tocar `agent/` ni `support/` el día que haga falta.
+| Carpeta | Responsabilidad | Por qué es su propio módulo y no parte de otro |
+|---|---|---|
+| `candidates/` | Alta y datos base del candidato | Es el dueño de las reglas de validación del formulario (Hito 1); otros dominios lo consumen pero no lo modifican |
+| `selection/` | CV, scoring, ranking, búsqueda | Concentra la lógica de negocio más sensible (scoring explicable, sección 4) — aislarla facilita auditarla y, si hace falta, extraerla |
+| `support/` | Tickets, sentimiento, SLA | Reglas de negocio propias (cálculo de SLA) que no tienen relación con cómo se califica a un candidato |
+| `agent/` | Orquestación del agente de IA combinado | No tiene datos propios — su única responsabilidad es coordinar `selection` y `support`; separarlo evita que su lógica de orquestación se mezcle con las reglas de negocio de los dominios que consume |
+| `realtime/` | Canales de websocket para dashboards | Sirve tanto a `selection` como a `support`; ponerlo dentro de cualquiera de los dos crearía una dependencia cruzada innecesaria |
+| `core/`, `db/` | Configuración, seguridad, sesión de base de datos | Infraestructura transversal sin reglas de negocio — separada explícitamente de los dominios para que no se filtre lógica de negocio dentro de código de arranque |
+
+**Regla de frontera entre dominios:** un módulo solo llama a la capa de servicio de otro módulo, nunca a sus modelos ni a su acceso a datos. Es la regla que hace posible extraer `selection/scoring/` como worker independiente sin tocar `agent/` ni `support/` el día que haga falta, y la consecuencia directa de haber separado por dominio en el eje horizontal.
 
 ### 3.2 Rutas: versionadas, por dominio, y separadas por superficie de exposición
 
