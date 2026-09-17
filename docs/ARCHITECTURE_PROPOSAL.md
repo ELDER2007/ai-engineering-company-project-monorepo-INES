@@ -1,0 +1,129 @@
+# Propuesta de Arquitectura de Backend — Nexova
+
+**Para:** CTO / liderazgo técnico
+**De:** Equipo de ingeniería, proyecto transversal Nexova
+**Objetivo:** proponer, con criterio técnico y sin código, la arquitectura del backend antes de empezar a construirlo.
+
+## Resumen ejecutivo
+
+Propongo construir el backend de Nexova como un **monolito modular en capas**: un único servicio FastAPI, organizado internamente por dominio de negocio (selección de talento, atención al cliente, agente de IA), con fronteras claras entre módulos que permiten extraer cualquiera de ellos como servicio independiente el día que el uso real lo justifique. No propongo microservicios en esta fase ni un monolito sin estructura interna — ambos extremos tienen un costo que hoy no se justifica con lo que sabemos del sistema.
+
+El resto del documento desarrolla por qué esta arquitectura encaja con lo que Nexova está construyendo, cómo organizo módulos, dominios y rutas, qué decisiones técnicas tomo ya, y qué riesgos o ambigüedades hay que resolver antes de escribir el primer endpoint.
+
+---
+
+## 1. Qué arquitectura propongo
+
+**Monolito modular en capas**: un único servicio FastAPI (`services/api/`), dividido internamente por dominio de negocio (bounded context) y, dentro de cada dominio, en capas — ruta → servicio/caso de uso → acceso a datos. El trabajo pesado o de larga duración (parsing de CV, llamadas a IA, envío de correo) se ejecuta como tareas en background dentro de la misma plataforma, no como servicios aparte.
+
+No se proponen microservicios en esta fase, ni un monolito sin estructura interna. Es una posición intermedia deliberada, no un punto de partida "por defecto": las razones concretas están en la sección 2.
+
+---
+
+## 2. Por qué esta arquitectura encaja con lo que Nexova está construyendo
+
+El backend tiene que soportar, según `CONTEXT.md` y la propuesta de departamentos en `company-choice.md`, dos dominios con necesidades distintas que **comparten datos y un mismo agente de IA**:
+
+| Dominio | Qué necesita | Por qué importa para la arquitectura |
+|---|---|---|
+| Selección de talento | Alta de candidato, carga y scoring de CV, búsqueda con filtros, portal de estado, dashboard de consultores | Procesamiento asíncrono (parsing/IA) + datos personales sensibles |
+| Atención al cliente | Chatbot, tickets, dashboard de supervisores en vivo, detección de sentimiento | Conversación con IA + actualizaciones en tiempo real |
+| Agente de IA único | Combina selección y soporte | Necesita leer/escribir sobre candidatos **y** tickets en la misma operación lógica |
+
+Tres hechos del contexto de Nexova empujan directamente hacia el monolito modular y no hacia microservicios:
+
+1. **El agente cruza los dos dominios.** Si `selection` y `support` fueran servicios separados, el agente tendría que resolver consistencia entre servicios (llamadas de red, fallos parciales, reintentos) para algo que en un monolito es una llamada de función. Se pagaría el costo de la distribución sin ganar nada a cambio, porque no hay necesidad de escalar selección y soporte de forma independiente todavía.
+2. **El proyecto se construye por hitos, no de una vez** (Backend, Telemetría, RAG, Agentes, Workflows, Real-time llegan en momentos distintos). Una arquitectura que exige decidir límites de servicio y contratos de red desde el hito 1 —cuando solo existe el alta de candidato del sitio web— fuerza a adivinar fronteras antes de tener uso real. El monolito modular permite construir `candidates/` ahora y añadir `selection/`, `support/`, `agent/`, `realtime/` en hitos sucesivos sin reescribir lo anterior.
+3. **El equipo es pequeño.** Microservicios exigen despliegue independiente, observabilidad distribuida y gestión de contratos entre servicios; ese costo operativo compite directamente con el tiempo de construir producto, y hoy no hay señal de qué componente necesitaría escalar por separado.
+
+El monolito modular no es una renuncia a escalar después: al aislar cada dominio detrás de una capa de servicio (sección 3.2), el día que el scoring de CVs con IA resulte ser el cuello de botella real, se extrae *ese* módulo como worker independiente sin tocar el resto.
+
+Se descarta también el monolito **sin** estructura interna (rutas de FastAPI con lógica y queries SQL directamente en el handler) porque impide testear reglas de negocio (scoring, validaciones del formulario, cálculo de SLA) sin levantar la app entera, y porque acopla el contrato HTTP al modelo de datos, así que un cambio de esquema rompe la API pública.
+
+---
+
+## 3. Organización de módulos, dominios y rutas
+
+### 3.1 Módulos por dominio de negocio
+
+Los módulos se agrupan por capacidad de negocio, no por tipo técnico (no "todas las rutas juntas, todos los modelos juntos"): así, cambiar cómo se calcula el score de un candidato toca una sola carpeta, no cuatro carpetas técnicas paralelas.
+
+```
+services/api/
+├── main.py                    # instancia FastAPI, registro de routers, middlewares
+├── core/                      # transversal: config, seguridad, logging, excepciones
+├── db/                        # sesión de base de datos, migraciones
+├── candidates/                 # alta de candidatos (lo que exige el Hito 1 hoy)
+│   ├── router.py / schemas.py / service.py / models.py
+├── selection/                  # CV, scoring, ranking, búsqueda de candidatos
+│   ├── router.py / schemas.py / service.py / models.py
+│   └── scoring/                # subcomponente aislado, candidato a extraerse a worker
+├── support/                     # tickets, sentimiento
+│   ├── router.py / schemas.py / service.py / models.py
+├── agent/                       # orquesta el agente combinado; llama a selection.service y support.service, nunca a sus modelos
+├── realtime/                    # websockets para dashboards
+├── notifications/                # correos de seguimiento
+└── workers/                      # tareas en background (parsing CV, envíos async)
+```
+
+**Regla de frontera:** un módulo solo llama a la capa de servicio de otro módulo, nunca a sus modelos ni a su acceso a datos. Es la regla que hace posible extraer `selection/scoring/` como worker independiente sin tocar `agent/` ni `support/` el día que haga falta.
+
+### 3.2 Rutas: versionadas, por dominio, y separadas por superficie de exposición
+
+```
+/api/v1/candidates/...            # alta de candidato — público, sin auth, rate-limited
+/api/v1/selection/cvs/...         # carga de CV, estado de scoring — público (candidato)
+/api/v1/selection/candidates/...  # búsqueda/filtro/ranking — interno, requiere auth de rol
+/api/v1/support/tickets/...       # CRUD de tickets — interno
+/api/v1/support/chat/...          # entrada del chatbot — público, rate-limited
+/api/v1/agent/...                 # orquestación del agente
+/ws/dashboard/selection           # canal en vivo para consultores
+/ws/dashboard/support             # canal en vivo para supervisores (SLA)
+```
+
+- **Versión desde el día uno** (`/api/v1`): la API la van a consumir a la vez el sitio público, el portal de candidatos, el dashboard interno y el agente; sin versión, un cambio de contrato rompe a todos los consumidores simultáneamente.
+- **Público vs. interno como eje explícito**, no solo el dominio: las rutas públicas (formulario, chatbot) llevan rate limiting y validación estricta de input porque cualquiera en internet puede llamarlas; las internas (dashboards, búsqueda, gestión de tickets) llevan autenticación y autorización por rol, aplicada por grupo de router, no repetida en cada handler.
+- **Tiempo real fuera del árbol REST** (`/ws/...`): el ciclo de vida de una conexión persistente (auth al conectar, no por mensaje) es distinto al de una request HTTP y mezclarlos genera ambigüedad sobre qué contrato aplica.
+
+---
+
+## 4. Decisiones técnicas iniciales
+
+Estas son decisiones que se toman ya, con su justificación — no se difieren a "ya se verá":
+
+| Decisión | Elección | Por qué |
+|---|---|---|
+| **Framework** | FastAPI | Ya es la convención del repo; además su tipado + Pydantic encaja directamente con la validación estricta que exige el formulario de candidatos (`CONTEXT.md`), y su soporte async es necesario para IA y websockets sin bloquear el proceso |
+| **Base de datos** | PostgreSQL único, para todos los dominios | Candidatos, CVs, scores y tickets tienen relaciones entre sí (integridad referencial real); mantener un solo motor reduce la carga operativa de un equipo pequeño frente a usar una base distinta por dominio |
+| **Búsqueda semántica (RAG del chatbot, matching de CV)** | `pgvector` sobre el mismo Postgres, no un vector store aparte | Evita introducir una segunda pieza de infraestructura antes de tener volumen que la justifique; se puede migrar a un vector store dedicado después si hace falta, sin tocar el resto del esquema |
+| **Almacenamiento de CVs** | Object storage (compatible S3), no como blob en la base de datos | Mantiene la base de datos liviana y permite escaneo/validación de archivos como paso independiente antes de servirlos |
+| **Tareas en background** | Cola ligera (ej. Redis + worker simple) desde el primer endpoint que suba un CV, no `BackgroundTasks` en el mismo proceso | El parsing/scoring puede tardar; si corre en el mismo worker que atiende HTTP, un pico de cargas degrada la latencia de *toda* la API. Empezar ya con cola evita reescribir ese endpoint cuando llegue el primer pico real |
+| **Tiempo real** | WebSockets con Redis pub/sub como canal de broadcast desde el inicio, aunque hoy corra una sola instancia | El estado de conexiones en memoria de un solo proceso deja de funcionar en cuanto haya más de una instancia (necesario para cualquier despliegue con redundancia); resolverlo desde el primer dashboard evita una reescritura posterior |
+| **Autenticación interna** | JWT con un campo de rol (consultor / supervisor / admin) sobre un único modelo de usuario interno | No hay hoy necesidad de SSO/OAuth externo; un modelo de roles simple cubre la diferencia de permisos entre dashboards de selección y de soporte sin añadir un proveedor de identidad externo |
+| **Scoring de candidatos** | El endpoint de scoring devuelve puntaje **y razones explicables**; ninguna ruta ejecuta descarte automático de un candidato | Restricción de arquitectura, no de producto: dejar el descarte fuera del alcance técnico del módulo evita que se implemente por accidente una decisión de alto riesgo legal (ver 5.1) |
+
+---
+
+## 5. Riesgos y puntos de confusión anticipados
+
+### 5.1 Riesgos técnicos y legales
+
+- **Datos personales y cumplimiento.** Nexova opera en España (GDPR) y Miami (transferencia entre jurisdicciones); se van a almacenar CVs, teléfonos y, si el scoring usa IA, inferencias sobre idoneidad de la persona. Falta definir retención/borrado y qué consentimiento cubre qué uso — el checkbox actual del formulario cubre el registro, no necesariamente el uso del CV para scoring automatizado.
+- **Scoring automatizado como decisión de alto riesgo.** Rankear candidatos sin humano en el circuito es un riesgo legal y reputacional (sesgo, falta de explicabilidad; en la UE el scoring de empleo es "alto riesgo" bajo el AI Act). Ya mitigado a nivel de diseño en la sección 4 (score explicable, sin descarte automático), pero requiere que el flujo de producto respete esa restricción.
+- **IA conversacional sin control de alcance.** El chatbot y el agente combinado pueden alucinar o gestionar mal un cliente insatisfecho detectado por sentimiento. Se necesita una ruta de escalado obligatoria a un ticket humano cuando el sentimiento cruza un umbral, y respuestas ancladas a una base de conocimiento acotada (RAG), no generación libre.
+- **Acoplamiento entre scoring pesado y disponibilidad de la API**, si no se respeta la frontera de la sección 3.1/4 desde el primer endpoint de carga de CV.
+- **Ambición del alcance vs. capacidad del equipo.** Lo declarado (scoring con IA, portal en tiempo real, chatbot, tickets con SLA, agente combinado) es mucho mayor que el Hito 1 actual (sitio + captura de leads). Mitigado por construir `candidates/` primero y el resto por hitos, pero es un riesgo de calendario, no solo técnico.
+
+### 5.2 Puntos de confusión que hay que resolver con el negocio antes de construir (no son decisiones técnicas)
+
+- **¿Quién usa el agente de IA?** `company-choice.md` no deja claro si el candidato/cliente habla directamente con el agente, o si es un copiloto interno para consultores/supervisores. La respuesta cambia por completo si `agent/` expone rutas públicas o solo internas — es una decisión de producto que bloquea el diseño de esa superficie de rutas.
+- **¿"Consultor" y "supervisor" son el mismo portal con permisos distintos, o dos aplicaciones separadas?** Afecta si `selection` y `support` comparten un único dashboard interno o dos, y por tanto cuántos canales de websocket y esquemas de rol hacen falta.
+- **Definición operativa de "estado en tiempo real" del candidato.** Sin una lista cerrada de estados y qué evento dispara cada transición, el módulo `selection` no puede definir su modelo de datos ni el contrato de `realtime/`.
+- **Definición de SLA de tickets**, incluida la diferencia horaria entre la oficina de Valencia y la de Miami — sin esto, `support.service` no puede calcular cuándo un ticket está en riesgo de incumplimiento.
+- **Alcance de idioma del agente/chatbot.** `CONTEXT.md` deja el multiidioma como opcional para el sitio, pero no dice si la base de conocimiento del chatbot y el scoring de CVs deben operar en español, inglés, o ambos — afecta directamente el diseño del RAG en `pgvector`.
+
+---
+
+## 6. Próximo paso
+
+Antes de escribir el primer endpoint, resolver los puntos de la sección 5.2 con el stakeholder correspondiente (Carmen Ruiz u otro según el dominio): son ambigüedades de producto, no de arquitectura, pero determinan detalles del modelo de datos de `candidates/` y `support/` que sí son costosos de cambiar una vez construidos.
