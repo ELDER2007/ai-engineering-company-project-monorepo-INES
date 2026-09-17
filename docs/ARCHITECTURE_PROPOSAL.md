@@ -94,21 +94,53 @@ services/api/
 
 **Regla de frontera entre dominios:** un módulo solo llama a la capa de servicio de otro módulo, nunca a sus modelos ni a su acceso a datos. Es la regla que hace posible extraer `selection/scoring/` como worker independiente sin tocar `agent/` ni `support/` el día que haga falta, y la consecuencia directa de haber separado por dominio en el eje horizontal.
 
-### 3.2 Rutas: versionadas, por dominio, y separadas por superficie de exposición
+### 3.2 Endpoints y routers de FastAPI por dominio
 
-```
-/api/v1/candidates/...            # alta de candidato — público, sin auth, rate-limited
-/api/v1/selection/cvs/...         # carga de CV, estado de scoring — público (candidato)
-/api/v1/selection/candidates/...  # búsqueda/filtro/ranking — interno, requiere auth de rol
-/api/v1/support/tickets/...       # CRUD de tickets — interno
-/api/v1/support/chat/...          # entrada del chatbot — público, rate-limited
-/api/v1/agent/...                 # orquestación del agente
-/ws/dashboard/selection           # canal en vivo para consultores
-/ws/dashboard/support             # canal en vivo para supervisores (SLA)
-```
+**Criterio de agrupación:** cada módulo de dominio expone **un `APIRouter` propio**, registrado en `main.py` con un prefijo `/api/v1/<dominio>` y un tag de OpenAPI igual al nombre del dominio — así la documentación autogenerada queda agrupada exactamente como el código. Dentro de un dominio, cuando hay más de un recurso con **consumidores distintos** (por ejemplo, el candidato que sube su CV frente al consultor que lo busca), ese dominio se divide en **sub-routers por recurso**, no se mezclan en uno solo — el criterio es "¿quién llama a esto y con qué permisos?", el mismo eje público/interno que ya se usa para el resto de la organización.
+
+**`candidates`** (router único; hoy es el único dominio con código real, Hito 1):
+
+| Método | Ruta | Propósito |
+|---|---|---|
+| `POST` | `/api/v1/candidates` | Alta de candidato desde el formulario público del sitio |
+| `GET` | `/api/v1/candidates/{id}` | Consulta de sus propios datos (portal del candidato, con token de acceso propio, no rol interno) |
+
+**`selection`** (dos sub-routers, porque el candidato y el consultor no deben compartir el mismo grupo de endpoints):
+
+| Sub-router | Método | Ruta | Propósito |
+|---|---|---|---|
+| `cvs` (público, del candidato) | `POST` | `/api/v1/selection/cvs` | Subir CV asociado a un candidato ya registrado |
+| `cvs` | `GET` | `/api/v1/selection/cvs/{id}/status` | Consultar el estado del scoring (para el portal del candidato) |
+| `candidates` (interno, del consultor) | `GET` | `/api/v1/selection/candidates` | Buscar/filtrar candidatos (sector, idioma, disponibilidad) |
+| `candidates` | `GET` | `/api/v1/selection/candidates/{id}` | Detalle de un candidato con su score explicado |
+| `candidates` | `GET` | `/api/v1/selection/candidates/ranking` | Ranking ordenado por score para una búsqueda dada |
+
+**`support`** (dos sub-routers, por el mismo criterio: cliente/candidato hablando con el chatbot frente al supervisor gestionando tickets):
+
+| Sub-router | Método | Ruta | Propósito |
+|---|---|---|---|
+| `chat` (público) | `POST` | `/api/v1/support/chat/messages` | Enviar un mensaje al chatbot y recibir respuesta |
+| `tickets` (interno) | `POST` | `/api/v1/support/tickets` | Crear un ticket (manual, o generado desde `chat`/`agent` al escalar) |
+| `tickets` | `GET` | `/api/v1/support/tickets` | Listar tickets para el dashboard de supervisor, con filtros de estado/SLA |
+| `tickets` | `PATCH` | `/api/v1/support/tickets/{id}` | Actualizar estado o asignación de un ticket |
+
+**`agent`** (un único router; su forma final depende de resolver la ambigüedad de la sección 5.2 sobre quién habla con el agente):
+
+| Método | Ruta | Propósito |
+|---|---|---|
+| `POST` | `/api/v1/agent/query` | Punto de entrada de la conversación del agente combinado; internamente decide si el caso pertenece a `selection` o `support` y llama a su capa de servicio |
+
+**`realtime`** (fuera del árbol REST, no es un `APIRouter` de HTTP sino de websocket):
+
+| Canal | Propósito |
+|---|---|
+| `WS /ws/dashboard/selection` | Eventos en vivo para consultores: nuevo candidato, cambio de score, cambio de estado |
+| `WS /ws/dashboard/support` | Eventos en vivo para supervisores: nuevo ticket, cambio de SLA, alerta de sentimiento negativo |
+
+### 3.3 Criterios generales que atraviesan todos los routers
 
 - **Versión desde el día uno** (`/api/v1`): la API la van a consumir a la vez el sitio público, el portal de candidatos, el dashboard interno y el agente; sin versión, un cambio de contrato rompe a todos los consumidores simultáneamente.
-- **Público vs. interno como eje explícito**, no solo el dominio: las rutas públicas (formulario, chatbot) llevan rate limiting y validación estricta de input porque cualquiera en internet puede llamarlas; las internas (dashboards, búsqueda, gestión de tickets) llevan autenticación y autorización por rol, aplicada por grupo de router, no repetida en cada handler.
+- **Público vs. interno como eje explícito**, no solo el dominio: las rutas públicas (formulario, carga de CV, chatbot) llevan rate limiting y validación estricta de input porque cualquiera en internet puede llamarlas; las internas (dashboards, búsqueda, gestión de tickets) llevan autenticación y autorización por rol, aplicada como dependencia sobre el grupo de router entero, no repetida en cada handler. Es el mismo criterio que separa los sub-routers dentro de `selection` y `support`.
 - **Tiempo real fuera del árbol REST** (`/ws/...`): el ciclo de vida de una conexión persistente (auth al conectar, no por mensaje) es distinto al de una request HTTP y mezclarlos genera ambigüedad sobre qué contrato aplica.
 
 ---
