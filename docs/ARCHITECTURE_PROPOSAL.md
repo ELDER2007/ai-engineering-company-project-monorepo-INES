@@ -101,7 +101,7 @@ services/api/
 | Carpeta | Responsabilidad | Por qué es su propio módulo y no parte de otro |
 |---|---|---|
 | `candidates/` | Alta y datos base del candidato | Es el dueño de las reglas de validación del formulario (Hito 1); otros dominios lo consumen pero no lo modifican |
-| `selection/` | CV, scoring, ranking, búsqueda | Concentra la lógica de negocio más sensible (scoring explicable, sección 4) — aislarla facilita auditarla y, si hace falta, extraerla |
+| `selection/` | CV, scoring, ranking, búsqueda | Concentra la lógica de negocio más sensible (scoring explicable, sección 5) — aislarla facilita auditarla y, si hace falta, extraerla |
 | `support/` | Tickets, sentimiento, SLA | Reglas de negocio propias (cálculo de SLA) que no tienen relación con cómo se califica a un candidato |
 | `agent/` | Orquestación del agente de IA combinado | No tiene datos propios — su única responsabilidad es coordinar `selection` y `support`; separarlo evita que su lógica de orquestación se mezcle con las reglas de negocio de los dominios que consume |
 | `realtime/` | Canales de websocket para dashboards | Sirve tanto a `selection` como a `support`; ponerlo dentro de cualquiera de los dos crearía una dependencia cruzada innecesaria |
@@ -139,7 +139,7 @@ services/api/
 | `tickets` | `GET` | `/api/v1/support/tickets` | Listar tickets para el dashboard de supervisor, con filtros de estado/SLA |
 | `tickets` | `PATCH` | `/api/v1/support/tickets/{id}` | Actualizar estado o asignación de un ticket |
 
-**`agent`** (un único router; su forma final depende de resolver la ambigüedad de la sección 5.2 sobre quién habla con el agente):
+**`agent`** (un único router; su forma final depende de resolver la ambigüedad de la sección 6.2 sobre quién habla con el agente):
 
 | Método | Ruta | Propósito |
 |---|---|---|
@@ -160,7 +160,47 @@ services/api/
 
 ---
 
-## 4. Decisiones técnicas iniciales
+## 4. Cómo se organiza la separación entre frontend y backend
+
+Nexova ya tiene frontend (`uis/`) y backend (`services/`) como sistemas separados dentro del mismo monorepo. Esta sección documenta las convenciones estándar para ese tipo de separación —repositorios, comunicación por API, variables de entorno, CORS— y cómo se aplican aquí.
+
+### 4.1 Monorepo vs. repositorios separados
+
+En 2026 la tendencia dominante ya no es elegir un extremo, sino un modelo híbrido: monorepo para superficies de producto que cambian juntas (frontend, tipos compartidos, backend que las sirve), y repositorios separados solo cuando un equipo necesita aislamiento fuerte, versionado independiente o stacks muy distintos. El criterio que reportan los equipos que ya pasaron por esta decisión es simple: si los cambios cruzan la frontera frontend/backend con frecuencia, el monorepo se amortiza rápido; si no, coordinarlo cuesta más de lo que aporta.
+
+Aplicado a Nexova, mantener `uis/` y `services/` en el mismo monorepo (la estructura ya existente) encaja porque:
+
+- El equipo es el mismo grupo pequeño trabajando en ambos lados — no hay equipos separados que necesiten desacoplarse.
+- `packages/shared` (`@repo/shared-types`) ya existe para tipos compartidos entre frontend y backend; separarlos en repos distintos rompería esa reutilización o exigiría publicarlo como paquete versionado externo, complejidad que no se justifica todavía.
+- Los cambios de contrato (nuevo campo en el formulario, nuevo estado de candidato) cruzan la frontera frontend/backend constantemente en la fase actual del proyecto — exactamente el caso en el que un monorepo compensa.
+
+Importante: monorepo es una decisión de **organización de código**, no de despliegue — `uis/website`, `uis/backoffice` y `services/api` siguen desplegándose como artefactos independientes aunque vivan en el mismo repositorio.
+
+### 4.2 Comunicación por API
+
+Frontend y backend se comunican exclusivamente por la API REST versionada de la sección 3 (`/api/v1/...`); el frontend nunca accede directamente a la base de datos ni comparte proceso con el backend. FastAPI genera automáticamente un esquema OpenAPI a partir de los routers y `schemas.py` de cada dominio — ese esquema es el contrato formal entre ambos lados y la fuente para mantener sincronizados los tipos de `packages/shared`, en vez de mantenerlos a mano en dos sitios.
+
+Para el dashboard interno, que combina datos de varios dominios (`selection` + `support`) en una sola vista, se deja anotado el patrón *Backend-for-Frontend* como opción: en vez de que el backoffice haga varias llamadas y las combine en el cliente, un endpoint de agregación puede componer la respuesta del lado del servidor. No se adopta como servicio aparte —sería optimización prematura, sección 2— pero queda como extensión posible dentro del propio monolito si el número de llamadas por vista crece.
+
+### 4.3 Variables de entorno
+
+Backend y frontend gestionan variables de entorno por separado, cada uno con su propio `.env`, por una razón de seguridad y no solo de organización: el código del frontend se entrega al navegador del usuario, así que cualquier variable "horneada" en su build es pública, la haya marcado así o no quien la definió.
+
+- **Backend (`services/api/.env`):** credenciales de base de datos, API keys de IA y secretos de JWT se leen en tiempo de ejecución desde un servidor que controlamos, nunca se compilan en un artefacto que salga de ese servidor. Rotar una credencial no debería exigir un rebuild.
+- **Frontend (`uis/website/.env`, `uis/backoffice/.env`):** solo variables explícitamente marcadas como públicas (ej. la URL base de la API) llegan al bundle del navegador; cualquier variable sin esa marca se trata como secreta y no se referencia desde código de cliente. Si el frontend se construye con un framework que "hornea" variables en build time (convención común: prefijo `NEXT_PUBLIC_` o equivalente), la regla es la misma — todo lo que lleve ese prefijo se asume público de forma permanente.
+- Ningún `.env` se commitea; cada app documenta sus variables requeridas en un `.env.example`.
+
+### 4.4 CORS
+
+Solo el backend configura CORS, porque es quien recibe peticiones cross-origin desde los frontends. Dos reglas evitan los errores más comunes en configuraciones de FastAPI:
+
+- **Nunca `allow_origins=["*"]` junto con `allow_credentials=True`.** Esa combinación no es válida y el propio middleware la rechaza en tiempo de request; como los dashboards internos necesitan credenciales (JWT/sesión), la API nunca puede usar wildcard.
+- **Lista explícita de orígenes, gestionada por entorno** (`ALLOWED_ORIGINS` en el `.env` del backend, no hardcodeada): en desarrollo incluye los `localhost` de `uis/website` y `uis/backoffice`; en producción, solo los dominios reales de Nexova. Una validación en el arranque debe impedir que `localhost` quede en la lista de un despliegue de producción por descuido.
+- El middleware de CORS se registra antes que cualquier otro middleware que valide la request — si se registra después, las respuestas de error de otros middlewares pueden salir sin cabeceras CORS y el navegador las descarta igual, ocultando el error real.
+
+---
+
+## 5. Decisiones técnicas iniciales
 
 Estas son decisiones que se toman ya, con su justificación — no se difieren a "ya se verá":
 
@@ -173,21 +213,21 @@ Estas son decisiones que se toman ya, con su justificación — no se difieren a
 | **Tareas en background** | Cola ligera (ej. Redis + worker simple) desde el primer endpoint que suba un CV, no `BackgroundTasks` en el mismo proceso | El parsing/scoring puede tardar; si corre en el mismo worker que atiende HTTP, un pico de cargas degrada la latencia de *toda* la API. Empezar ya con cola evita reescribir ese endpoint cuando llegue el primer pico real |
 | **Tiempo real** | WebSockets con Redis pub/sub como canal de broadcast desde el inicio, aunque hoy corra una sola instancia | El estado de conexiones en memoria de un solo proceso deja de funcionar en cuanto haya más de una instancia (necesario para cualquier despliegue con redundancia); resolverlo desde el primer dashboard evita una reescritura posterior |
 | **Autenticación interna** | JWT con un campo de rol (consultor / supervisor / admin) sobre un único modelo de usuario interno | No hay hoy necesidad de SSO/OAuth externo; un modelo de roles simple cubre la diferencia de permisos entre dashboards de selección y de soporte sin añadir un proveedor de identidad externo |
-| **Scoring de candidatos** | El endpoint de scoring devuelve puntaje **y razones explicables**; ninguna ruta ejecuta descarte automático de un candidato | Restricción de arquitectura, no de producto: dejar el descarte fuera del alcance técnico del módulo evita que se implemente por accidente una decisión de alto riesgo legal (ver 5.1) |
+| **Scoring de candidatos** | El endpoint de scoring devuelve puntaje **y razones explicables**; ninguna ruta ejecuta descarte automático de un candidato | Restricción de arquitectura, no de producto: dejar el descarte fuera del alcance técnico del módulo evita que se implemente por accidente una decisión de alto riesgo legal (ver 6.1) |
 
 ---
 
-## 5. Riesgos y puntos de confusión anticipados
+## 6. Riesgos y puntos de confusión anticipados
 
-### 5.1 Riesgos técnicos y legales
+### 6.1 Riesgos técnicos y legales
 
 - **Datos personales y cumplimiento.** Nexova opera en España (GDPR) y Miami (transferencia entre jurisdicciones); se van a almacenar CVs, teléfonos y, si el scoring usa IA, inferencias sobre idoneidad de la persona. Falta definir retención/borrado y qué consentimiento cubre qué uso — el checkbox actual del formulario cubre el registro, no necesariamente el uso del CV para scoring automatizado.
-- **Scoring automatizado como decisión de alto riesgo.** Rankear candidatos sin humano en el circuito es un riesgo legal y reputacional (sesgo, falta de explicabilidad; en la UE el scoring de empleo es "alto riesgo" bajo el AI Act). Ya mitigado a nivel de diseño en la sección 4 (score explicable, sin descarte automático), pero requiere que el flujo de producto respete esa restricción.
+- **Scoring automatizado como decisión de alto riesgo.** Rankear candidatos sin humano en el circuito es un riesgo legal y reputacional (sesgo, falta de explicabilidad; en la UE el scoring de empleo es "alto riesgo" bajo el AI Act). Ya mitigado a nivel de diseño en la sección 5 (score explicable, sin descarte automático), pero requiere que el flujo de producto respete esa restricción.
 - **IA conversacional sin control de alcance.** El chatbot y el agente combinado pueden alucinar o gestionar mal un cliente insatisfecho detectado por sentimiento. Se necesita una ruta de escalado obligatoria a un ticket humano cuando el sentimiento cruza un umbral, y respuestas ancladas a una base de conocimiento acotada (RAG), no generación libre.
-- **Acoplamiento entre scoring pesado y disponibilidad de la API**, si no se respeta la frontera de la sección 3.2/4 desde el primer endpoint de carga de CV.
+- **Acoplamiento entre scoring pesado y disponibilidad de la API**, si no se respeta la frontera de la sección 3.2/5 desde el primer endpoint de carga de CV.
 - **Ambición del alcance vs. capacidad del equipo.** Lo declarado (scoring con IA, portal en tiempo real, chatbot, tickets con SLA, agente combinado) es mucho mayor que el Hito 1 actual (sitio + captura de leads). Mitigado por construir `candidates/` primero y el resto por hitos, pero es un riesgo de calendario, no solo técnico.
 
-### 5.2 Puntos de confusión que hay que resolver con el negocio antes de construir (no son decisiones técnicas)
+### 6.2 Puntos de confusión que hay que resolver con el negocio antes de construir (no son decisiones técnicas)
 
 - **¿Quién usa el agente de IA?** `company-choice.md` no deja claro si el candidato/cliente habla directamente con el agente, o si es un copiloto interno para consultores/supervisores. La respuesta cambia por completo si `agent/` expone rutas públicas o solo internas — es una decisión de producto que bloquea el diseño de esa superficie de rutas.
 - **¿"Consultor" y "supervisor" son el mismo portal con permisos distintos, o dos aplicaciones separadas?** Afecta si `selection` y `support` comparten un único dashboard interno o dos, y por tanto cuántos canales de websocket y esquemas de rol hacen falta.
@@ -197,6 +237,6 @@ Estas son decisiones que se toman ya, con su justificación — no se difieren a
 
 ---
 
-## 6. Próximo paso
+## 7. Próximo paso
 
-Antes de escribir el primer endpoint, resolver los puntos de la sección 5.2 con el stakeholder correspondiente (Carmen Ruiz u otro según el dominio): son ambigüedades de producto, no de arquitectura, pero determinan detalles del modelo de datos de `candidates/` y `support/` que sí son costosos de cambiar una vez construidos.
+Antes de escribir el primer endpoint, resolver los puntos de la sección 6.2 con el stakeholder correspondiente (Carmen Ruiz u otro según el dominio): son ambigüedades de producto, no de arquitectura, pero determinan detalles del modelo de datos de `candidates/` y `support/` que sí son costosos de cambiar una vez construidos.
