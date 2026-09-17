@@ -220,6 +220,12 @@ Solo el backend configura CORS, porque es quien recibe peticiones cross-origin d
 - **Lista explícita de orígenes, gestionada por entorno** (`ALLOWED_ORIGINS` en el `.env` del backend, no hardcodeada): en desarrollo incluye los `localhost` de `uis/website` y `uis/backoffice`; en producción, solo los dominios reales de Nexova. Una validación en el arranque debe impedir que `localhost` quede en la lista de un despliegue de producción por descuido.
 - El middleware de CORS se registra antes que cualquier otro middleware que valide la request — si se registra después, las respuestas de error de otros middlewares pueden salir sin cabeceras CORS y el navegador las descarta igual, ocultando el error real.
 
+**Fuentes consultadas para esta sección:**
+
+- [Monorepo vs Polyrepo in 2026 (projectsupply.in)](https://projectsupply.in/blog/monorepo-vs-polyrepo-2026) y [JavaScript Monorepos for Frontend Teams (Growin)](https://www.growin.com/blog/javascript-monorepos-frontend/) — tendencia hacia modelos híbridos y el criterio de frecuencia de cambios cruzando la frontera frontend/backend, usado en 4.1.
+- [CORS (Cross-Origin Resource Sharing) - FastAPI, documentación oficial](https://fastapi.tiangolo.com/tutorial/cors/) y [Configure FastAPI CORS for Production APIs](https://adhdecode.com/articles/fastapi/fastapi-cors-configuration-production/) — las reglas de 4.4 (incompatibilidad de wildcard con credenciales, orígenes explícitos por entorno, orden del middleware).
+- [Next.js Environment Variables: The Complete Guide](https://dev.to/stacknotice/nextjs-environment-variables-the-complete-guide-2026-1f05) — el mecanismo general de variables "horneadas" en build time frente a leídas en runtime, usado en 4.3 sin atarlo a un framework concreto.
+
 ---
 
 ## 5. Decisiones técnicas iniciales
