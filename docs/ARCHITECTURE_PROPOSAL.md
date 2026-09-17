@@ -88,10 +88,16 @@ services/api/
 ├── candidates/                 # alta de candidatos (lo que exige el Hito 1 hoy)
 │   ├── router.py / schemas.py / service.py / models.py
 ├── selection/                  # CV, scoring, ranking, búsqueda de candidatos
-│   ├── router.py / schemas.py / service.py / models.py
+│   ├── routers/
+│   │   ├── cvs.py               # sub-router público: carga de CV, estado de scoring
+│   │   └── candidates.py        # sub-router interno: búsqueda, detalle, ranking
+│   ├── schemas.py / service.py / models.py
 │   └── scoring/                # subcomponente aislado, candidato a extraerse a worker
 ├── support/                     # tickets, sentimiento
-│   ├── router.py / schemas.py / service.py / models.py
+│   ├── routers/
+│   │   ├── chat.py               # sub-router público: mensajes del chatbot
+│   │   └── tickets.py            # sub-router interno: CRUD de tickets
+│   ├── schemas.py / service.py / models.py
 ├── agent/                       # orquesta el agente combinado
 │   └── router.py / service.py  # sin models.py: no posee datos propios, solo llama a selection.service y support.service
 ├── realtime/                    # websockets para dashboards — cruza dominios, por eso vive aparte y no dentro de selection/ o support/
@@ -118,6 +124,8 @@ Esta es la traducción directa a carpetas de las dos decisiones ya tomadas: cada
 ### 3.3 Endpoints y routers de FastAPI por dominio
 
 **Criterio de agrupación:** cada módulo de dominio expone **un `APIRouter` propio**, registrado en `main.py` con un prefijo `/api/v1/<dominio>` y un tag de OpenAPI igual al nombre del dominio — así la documentación autogenerada queda agrupada exactamente como el código. Dentro de un dominio, cuando hay más de un recurso con **consumidores distintos** (por ejemplo, el candidato que sube su CV frente al consultor que lo busca), ese dominio se divide en **sub-routers por recurso**, no se mezclan en uno solo — el criterio es "¿quién llama a esto y con qué permisos?", el mismo eje público/interno que ya se usa para el resto de la organización.
+
+**Cómo se componen sin ensuciar `main.py`:** un dominio con varios sub-routers (`selection`, `support`) los combina primero en su propio `router.py` — que hace su propio `include_router()` de `routers/cvs.py` y `routers/candidates.py`, por ejemplo — antes de exponer un único router hacia afuera. `main.py` solo ve un `include_router()` por dominio, con su prefijo y su tag; nunca ve sub-routers ni endpoints individuales. Es la misma idea que la documentación oficial usa para su paquete `internal/` (routers anidados que se combinan antes de llegar a la app), aplicada aquí para separar consumidores dentro de un dominio en vez de separar solo administración del resto. El resultado es que `main.py` tiene tantas líneas de registro como dominios existen —hoy una, eventualmente cinco—, nunca una por endpoint.
 
 **`candidates`** (router único; hoy es el único dominio con código real, Hito 1):
 
