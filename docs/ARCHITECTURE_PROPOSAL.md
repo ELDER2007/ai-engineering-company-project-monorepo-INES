@@ -235,6 +235,15 @@ Estas son decisiones que se toman ya, con su justificación — no se difieren a
 - **Definición de SLA de tickets**, incluida la diferencia horaria entre la oficina de Valencia y la de Miami — sin esto, `support.service` no puede calcular cuándo un ticket está en riesgo de incumplimiento.
 - **Alcance de idioma del agente/chatbot.** `CONTEXT.md` deja el multiidioma como opcional para el sitio, pero no dice si la base de conocimiento del chatbot y el scoring de CVs deben operar en español, inglés, o ambos — afecta directamente el diseño del RAG en `pgvector`.
 
+### 6.3 Qué puede salir mal si el equipo no sigue esta estructura
+
+Esta estructura no es una preferencia estética; cada desviación tiene un costo concreto y rastreable hasta un riesgo ya identificado arriba:
+
+- **Saltarse la regla de frontera entre dominios (sección 3.2)**, por ejemplo si `agent/` importa directamente `selection.models` en vez de `selection.service` "porque es más rápido". El acoplamiento queda oculto: un cambio en el esquema de datos de `selection` rompe `agent` sin que nada en el código de `agent` lo anuncie. El día que haga falta extraer `selection/scoring` como worker (sección 2, el motivo por el que se eligió monolito modular y no monolito plano), esa extracción deja de ser limpia — hay que auditar todo el proyecto buscando accesos directos, exactamente el costo operativo que esta estructura estaba diseñada para evitar.
+- **Mezclar capas dentro de un dominio (sección 3.2)**, por ejemplo escribiendo el cálculo de score o la validación de SLA directamente en `router.py` en lugar de `service.py`. Se pierde la razón de fondo por la que se eligió arquitectura en capas frente a MVC o serverless en la sección 1: poder testear la lógica de negocio sin levantar un cliente HTTP ni una base de datos. En la práctica, esas pruebas dejan de escribirse, y un cambio de scoring se descubre roto en producción — lo que vuelve más probable, no menos, el riesgo legal de scoring sin explicabilidad verificada de 6.1.
+- **Omitir la separación público/interno en un router (sección 3.4)**, por ejemplo copiando el router de `candidates` (público) como base para un endpoint de `selection/candidates` (búsqueda interna) y olvidando añadir la dependencia de autenticación por rol. El resultado no es un bug cosmético: expone datos personales de candidatos a cualquiera en internet, materializando directamente el riesgo de cumplimiento de datos de 6.1.
+- **No respetar la separación de variables de entorno (sección 4.3)**, por ejemplo marcando como pública una API key de IA para que el frontend la lea directamente en vez de pasar por el backend. Una vez compilada en el bundle del navegador, esa clave queda expuesta de forma permanente — rotarla es la única mitigación posible, no hay forma de "retirarla" del código ya distribuido.
+
 ---
 
 ## 7. Próximo paso
