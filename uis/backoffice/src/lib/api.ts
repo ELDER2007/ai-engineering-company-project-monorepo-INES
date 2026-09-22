@@ -1,0 +1,55 @@
+import type { AnalyzeResponse } from "../types/incidents";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    return typeof body.detail === "string" ? body.detail : response.statusText;
+  } catch {
+    return response.statusText;
+  }
+}
+
+export async function analyzeIncidentsFile(file: File): Promise<AnalyzeResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE_URL}/api/incidents/analyze`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(await readErrorDetail(response), response.status);
+  }
+
+  return response.json();
+}
+
+export async function downloadResultsCsv(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/incidents/results/export`);
+
+  if (!response.ok) {
+    throw new ApiError(await readErrorDetail(response), response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "results.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
