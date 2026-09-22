@@ -29,7 +29,25 @@ VALID_CATEGORIES: tuple[str, ...] = (
 
 VALID_STATUSES: tuple[str, ...] = ("OPEN", "CLOSED", "DISCARDED")
 
+REQUIRED_COLUMNS: tuple[str, ...] = (
+    "ticket_id",
+    "date",
+    "client_company",
+    "category",
+    "description",
+    "agent_id",
+    "status",
+    "customer_email",
+    "satisfaction_score",
+)
+
 _AGENT_ID_PATTERN = re.compile(r"^AGT-\d{2}$")
+
+
+def missing_required_columns(fieldnames: Iterable[str] | None) -> list[str]:
+    """Required columns absent from a CSV header row (empty list if OK)."""
+    present = set(fieldnames or [])
+    return [column for column in REQUIRED_COLUMNS if column not in present]
 
 # Rule keys, in the order defined by CONTEXT-nexova.md, and their human-readable
 # labels for reports. Keys are stable identifiers used in JSON/CSV output;

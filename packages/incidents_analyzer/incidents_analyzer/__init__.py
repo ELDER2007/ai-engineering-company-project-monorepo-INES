@@ -1,4 +1,5 @@
 from .core import (
+    REQUIRED_COLUMNS,
     VALID_CATEGORIES,
     VALID_STATUSES,
     AnalysisResult,
@@ -6,11 +7,13 @@ from .core import (
     SatisfactionBreakdown,
     analyze,
     format_report,
+    missing_required_columns,
     read_rows,
     to_export_rows,
 )
 
 __all__ = [
+    "REQUIRED_COLUMNS",
     "VALID_CATEGORIES",
     "VALID_STATUSES",
     "AnalysisResult",
@@ -18,6 +21,7 @@ __all__ = [
     "SatisfactionBreakdown",
     "analyze",
     "format_report",
+    "missing_required_columns",
     "read_rows",
     "to_export_rows",
 ]
