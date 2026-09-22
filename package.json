@@ -6,7 +6,10 @@
     "dev": "npm --workspace uis/website run dev",
     "build": "npm --workspace uis/website run build",
     "preview": "npm --workspace uis/website run preview",
-    "typecheck": "npm --workspace uis/website run typecheck"
+    "typecheck": "npm --workspace uis/website run typecheck",
+    "dev:backoffice": "npm --workspace uis/backoffice run dev",
+    "build:backoffice": "npm --workspace uis/backoffice run build",
+    "typecheck:backoffice": "npm --workspace uis/backoffice run typecheck"
   },
-  "workspaces": ["uis/website"]
+  "workspaces": ["uis/website", "uis/backoffice"]
 }
