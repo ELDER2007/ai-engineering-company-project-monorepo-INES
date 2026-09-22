@@ -43,17 +43,17 @@ def main(argv: list[str]) -> int:
     result = analyze(rows, source_name=csv_path.name)
     print(format_report(result))
 
-    answer = input("Export results to CSV? [y / n]: ").strip().lower()
-    if answer == "y":
+    answer = input("¿Deseas exportar los resultados a CSV? [s / n]: ").strip().lower()
+    if answer == "s":
         export_path = csv_path.parent / "results.csv"
         export_rows = to_export_rows(result)
         with open(export_path, "w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=["metric", "value"])
             writer.writeheader()
             writer.writerows(export_rows)
-        print(f"Exported {len(export_rows)} metrics to {export_path}")
+        print(f"Se exportaron {len(export_rows)} métricas a {export_path}")
     else:
-        print("Export skipped.")
+        print("Exportación omitida.")
 
     return 0
 
