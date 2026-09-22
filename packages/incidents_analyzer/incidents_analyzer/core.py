@@ -1,8 +1,8 @@
 """Core validation and metrics logic for Nexova support-incident CSV files.
 
-Single source of truth shared by the CLI script (``incidents-analysis/analyze.py``)
+Single source of truth shared by the CLI script (``scripts/analyze.py``)
 and the backend API (``services/api``), per the rules fixed in
-``incidents-analysis/CONTEXT-nexova.md``. Field names, categories, statuses and
+``scripts/CONTEXT-nexova.md``. Field names, categories, statuses and
 invalid-record rules come from that document and must not be extended or
 guessed here.
 

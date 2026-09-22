@@ -1,7 +1,7 @@
 """Business logic for the incidents domain.
 
 Wraps the shared ``incidents_analyzer`` package — the same code the CLI
-script in ``incidents-analysis/analyze.py`` runs — so the script and the
+script in ``scripts/analyze.py`` runs — so the script and the
 API can never drift apart (see project rule: "La lógica del script y la
 API deben ser idénticas").
 

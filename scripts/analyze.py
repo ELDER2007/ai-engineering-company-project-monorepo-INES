@@ -3,6 +3,7 @@
 
 Usage:
     python analyze.py <path-to-csv>
+    python scripts/analyze.py data/raw/incidents-nexova.csv
 
 Validates every record against the rules in ``CONTEXT-nexova.md``, prints a
 summary, and offers to export the results to ``results.csv`` (one metric per

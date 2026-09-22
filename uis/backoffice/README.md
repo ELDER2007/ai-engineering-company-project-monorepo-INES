@@ -29,7 +29,7 @@ Requires `services/api` running (see its README) — the page calls
 
 Manually driven end-to-end with a headless browser against a live
 `services/api` instance: home page renders, upload of
-`incidents-analysis/incidents-nexova.csv` renders metrics that match the
+`data/raw/incidents-nexova.csv` renders metrics that match the
 CONTEXT's expected values exactly (100/96/4 records, category/status
 percentages, 3.84 average satisfaction), and the download button produces a
 valid `results.csv`. No console errors.
