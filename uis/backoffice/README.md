@@ -17,7 +17,7 @@ From the repo root (npm workspaces):
 
 ```bash
 npm install
-cp uis/backoffice/.env.example uis/backoffice/.env   # set VITE_API_BASE_URL if not localhost:8000
+cp uis/backoffice/.env.example uis/backoffice/.env   # optional: only needed if the API is not on localhost:8000 (Vite proxies /api by default)
 npm run dev:backoffice
 ```
 

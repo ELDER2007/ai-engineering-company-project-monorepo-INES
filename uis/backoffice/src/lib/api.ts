@@ -1,6 +1,7 @@
 import type { AnalyzeResponse } from "../types/incidents";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+// Vacío = mismo origen: en desarrollo el proxy de Vite reenvía /api a la API local.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
   constructor(
