@@ -1,4 +1,5 @@
 import type { AnalyzeResponse } from "../types/incidents";
+import type { Supplier, SupplierCreate, SupplierStatus } from "../types/suppliers";
 
 // Vacío = mismo origen: en desarrollo el proxy de Vite reenvía /api a la API local.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -15,7 +16,13 @@ export class ApiError extends Error {
 async function readErrorDetail(response: Response): Promise<string> {
   try {
     const body = await response.json();
-    return typeof body.detail === "string" ? body.detail : response.statusText;
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail)) {
+      return body.detail
+        .map((e: { loc?: unknown[]; msg?: string }) => `${e.loc?.slice(1).join(".") ?? ""}: ${e.msg ?? ""}`)
+        .join("; ");
+    }
+    return response.statusText;
   } catch {
     return response.statusText;
   }
@@ -54,3 +61,25 @@ export async function downloadResultsCsv(): Promise<void> {
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+async function suppliersRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api/suppliers${path}`, {
+    ...init,
+    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+  });
+  if (!response.ok) {
+    throw new ApiError(await readErrorDetail(response), response.status);
+  }
+  return response.json();
+}
+
+export const listSuppliers = () => suppliersRequest<Supplier[]>("");
+
+export const createSupplier = (payload: SupplierCreate) =>
+  suppliersRequest<Supplier>("", { method: "POST", body: JSON.stringify(payload) });
+
+export const updateSupplierRate = (id: number, monthly_rate: number) =>
+  suppliersRequest<Supplier>(`/${id}`, { method: "PATCH", body: JSON.stringify({ monthly_rate }) });
+
+export const setSupplierStatus = (id: number, status: SupplierStatus) =>
+  suppliersRequest<Supplier>(`/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
