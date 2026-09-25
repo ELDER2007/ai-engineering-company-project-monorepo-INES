@@ -37,8 +37,13 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (categories.length === 0) {
-      setError("Selecciona al menos una categoría.");
+    const problems: string[] = [];
+    if (!name.trim()) problems.push("El nombre es obligatorio.");
+    if (!(Number(rate) > 0)) problems.push("La tarifa mensual debe ser un número mayor que 0.");
+    if (categories.length === 0) problems.push("Selecciona al menos una categoría.");
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) problems.push("El email no es válido.");
+    if (problems.length > 0) {
+      setError(problems.join(" "));
       return;
     }
     setSaving(true);
@@ -63,12 +68,12 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <form onSubmit={handleSubmit} noValidate className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
       <h2 className="text-lg font-semibold text-white">Nuevo proveedor</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-slate-300">
           Nombre
-          <input required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          <input required aria-required="true" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
         </label>
         <label className="text-sm text-slate-300">
           País
