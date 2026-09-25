@@ -1,11 +1,11 @@
 // End-to-end check of the suppliers page (needs a browser: npx playwright install chromium; set E2E_BROWSER=firefox|webkit to change it).
 // Prerequisites: API on :8000 seeded with a fresh directory (cd services/api && uv run seed --reset)
-// and the backoffice on :5174 (npm run dev). Run from uis/backoffice: npm run e2e
+// and the app on :5175 (npm run dev). Run from uis/application: npm run e2e
 // It creates one supplier and edits/suspends Gusto, so re-seed with --reset before re-running.
 import * as playwright from "playwright";
 const browserName = process.env.E2E_BROWSER ?? "chromium"; // chromium | firefox | webkit
 const SHOTS = process.env.E2E_SCREENSHOTS_DIR; // optional
-const APP = process.env.E2E_APP_URL ?? "http://localhost:5174";
+const APP = process.env.E2E_APP_URL ?? "http://localhost:5175";
 const API = process.env.E2E_API_URL ?? "http://localhost:8000";
 const URL = `${APP}/suppliers`;
 const shot = (name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }) : Promise.resolve());

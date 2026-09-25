@@ -1,10 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { FileBarChart, LayoutDashboard, Truck } from "lucide-react";
+import { FileBarChart, LayoutDashboard } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "Inicio", icon: LayoutDashboard, end: true },
   { to: "/incidents", label: "Análisis de incidentes", icon: FileBarChart, end: false },
-  { to: "/suppliers", label: "Proveedores", icon: Truck, end: false },
 ];
 
 export default function Layout() {

@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Check, Pencil, Power, X } from "lucide-react";
-import { CATEGORY_LABELS, type Supplier } from "../../types/suppliers";
+import { CATEGORY_LABELS, type Supplier } from "./types";
 
 interface Props {
   supplier: Supplier;

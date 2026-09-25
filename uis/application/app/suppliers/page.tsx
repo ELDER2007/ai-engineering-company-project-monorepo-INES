@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import SupplierForm from "../components/suppliers/SupplierForm";
-import SupplierRow from "../components/suppliers/SupplierRow";
-import { ApiError, listSuppliers, setSupplierStatus, updateSupplierRate } from "../lib/api";
-import { CATEGORIES, CATEGORY_LABELS, type Category, type Country, type Supplier } from "../types/suppliers";
+import SupplierForm from "./SupplierForm";
+import SupplierRow from "./SupplierRow";
+import { ApiError, listSuppliers, setSupplierStatus, updateSupplierRate } from "./api";
+import { CATEGORIES, CATEGORY_LABELS, type Category, type Country, type Supplier } from "./types";
 
 const selectClass =
   "rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none";

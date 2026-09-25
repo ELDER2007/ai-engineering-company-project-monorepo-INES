@@ -19,6 +19,7 @@ def get_allowed_origins() -> list[str]:
     return [
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://localhost:5175",
     ]
 
 

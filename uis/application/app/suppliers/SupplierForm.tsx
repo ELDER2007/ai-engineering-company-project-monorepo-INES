@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { ApiError, createSupplier } from "../../lib/api";
+import { ApiError, createSupplier } from "./api";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -8,7 +8,7 @@ import {
   type Category,
   type Country,
   type Supplier,
-} from "../../types/suppliers";
+} from "./types";
 
 interface Props {
   onCreated: (supplier: Supplier) => void;

@@ -5,11 +5,17 @@ Centralized FastAPI backend for Nexova, per [docs/ARCHITECTURE_PROPOSAL.md](../.
 ## Domains implemented
 
 - **`incidents/`** — Support ticket CSV analysis ("Analizador de Incidencias"). Validates and computes metrics on Nexova support-incident exports, per the rules in [scripts/CONTEXT-nexova.md](../../scripts/CONTEXT-nexova.md). Reuses the same [`incidents_analyzer`](../../packages/incidents_analyzer) package as the CLI script in `scripts/analyze.py`, so both run identical validation/metrics logic.
-- **`suppliers/`** — Supplier directory ("Directorio de Proveedores", Patricia Solís / Nexova). Replaces the HR spreadsheet with a [TinyDB](https://tinydb.readthedocs.io/)-backed store, seeded on startup with the 15 suppliers from [`suppliers/seed_data.py`](./suppliers/seed_data.py) (spec: [CONTEXT-suppliers.md](./suppliers/CONTEXT-suppliers.md)). Pydantic (`suppliers/schemas.py`) rejects with `422` any missing `country`, a `status` outside `active`/`suspended`, empty `categories`, or a `currency` that doesn't match the country (Spain→EUR, USA→USD). Suspending (not deleting) is the preferred way to retire a supplier.
+- **Supplier directory** ("Directorio de Proveedores", Patricia Solís / Nexova). Replaces the HR spreadsheet with a [TinyDB](https://tinydb.readthedocs.io/)-backed store, seeded on startup with the 15 suppliers of the CONTEXT ([`CONTEXT-suppliers.md`](./CONTEXT-suppliers.md)). It lives in five files:
+  - [`models.py`](./models.py) — Pydantic models: `SupplierCreate` (input), `Supplier` (with `updated_at`), `SupplierOut` (with `id`). Rejects with `422` a missing `country`, a `status` outside `active`/`suspended`, empty `categories`, a rate `<= 0`, an invalid email or a `currency` that doesn't match the country (Spain→EUR, USA→USD).
+  - [`database.py`](./database.py) — TinyDB initialisation (`get_db`) and data access; seeds an empty database on startup.
+  - [`routes/suppliers.py`](./routes/suppliers.py) — the endpoints below.
+  - [`seed.py`](./seed.py) — loader with the initial data (`uv run seed`).
+  - [`main.py`](./main.py) — FastAPI app that mounts the router.
+  Suspended suppliers are never deleted: suspend them instead.
 
 ## Endpoints
 
-Supplier routes are served at `/suppliers` (shown in `/docs`) and also at `/api/suppliers`, the path the backoffice uses through the Vite proxy (which only forwards `/api`).
+Supplier routes are served at `/suppliers` (shown in `/docs`) and also at `/api/suppliers`, the path `uis/application` uses through the Vite proxy (which only forwards `/api`).
 
 | Method | Path | Description |
 |---|---|---|
@@ -45,9 +51,9 @@ uv run seed --reset      # wipe and reload the 15 initial suppliers
 
 `uv run seed` uses the `seed` script declared in `pyproject.toml` (uv installs the dependencies on first run). Run it from `services/api`; from the repo root use `uv run --project services/api seed`, since the root has no Python project. `python seed.py` works too if the dependencies are already installed.
 
-`ALLOWED_ORIGINS` (comma-separated) controls CORS; defaults to the local Vite dev ports (`5173`, `5174`) used by `uis/website` and `uis/backoffice` when unset. Set it explicitly in production — see `docs/ARCHITECTURE_PROPOSAL.md` section 4.4.
+`ALLOWED_ORIGINS` (comma-separated) controls CORS; defaults to the local Vite dev ports (`5173`, `5174`, `5175`) used by `uis/website`, `uis/backoffice` and `uis/application` when unset. Set it explicitly in production — see `docs/ARCHITECTURE_PROPOSAL.md` section 4.4.
 
 ## Known limitations
 
 - The "last analysis" used by the export endpoint is kept in an in-memory, module-level variable — it is lost on restart and is not shared across multiple worker processes. Acceptable for this feature's current scope; documented rather than hidden.
-- The suppliers directory is stored at `suppliers/db.json`, a TinyDB flat file that's regenerated (and reseeded) whenever it's missing — it's gitignored, not source. A second worker process would not see writes made by another one; fine for the current single-process scope, and the reason the project brief already earmarks a move to Postgres once the ORM is ready.
+- The suppliers directory is stored at `services/api/db.json`, a TinyDB flat file that's regenerated (and reseeded) whenever it's missing — it's gitignored, not source. A second worker process would not see writes made by another one; fine for the current single-process scope, and the reason the project brief already earmarks a move to Postgres once the ORM is ready.
