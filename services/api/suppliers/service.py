@@ -55,7 +55,8 @@ def get_db() -> TinyDB:
     global _db
     if _db is None:
         _db = TinyDB(get_suppliers_db_path())
-        seed_database(_db)
+        if len(_db) == 0:
+            seed_database(_db)
     return _db
 
 
