@@ -28,7 +28,7 @@ Cada test usa una **base de datos temporal**, así nunca toca los datos reales.
 
 ### Test del frontend (28 comprobaciones)
 
-Está en `uis/backoffice/e2e/suppliers.e2e.mjs`. "e2e" significa *end to end*: **de punta a punta**. Abre un navegador real y usa la página como una persona:
+Está en `uis/application/e2e/suppliers.e2e.mjs`. "e2e" significa *end to end*: **de punta a punta**. Abre un navegador real y usa la página como una persona:
 
 1. Comprueba que la lista carga 15 filas.
 2. Prueba los filtros y que la página **no se recarga**.
@@ -42,8 +42,8 @@ Para ejecutarlo:
 
 ```bash
 cd services/api && uv run seed --reset      # base limpia
-# (con la API y el backoffice arrancados)
-cd uis/backoffice && npm run e2e
+# (con la API y la app arrancadas)
+cd uis/application && npm run e2e
 ```
 
 Importante: este test crea proveedores y modifica otro, así que hay que volver a sembrar (`--reset`) antes de repetirlo.
@@ -75,7 +75,7 @@ Todo el trabajo se había hecho directamente sobre `main`. Para que sea fácil d
 ```
 base/pre-suppliers                       ← el punto de partida
  └─ 01-api                     (PR #3)   la API de proveedores
-     └─ 02-backoffice-page     (PR #4)   la página web
+     └─ 02-backoffice-page     (PR #4)   la página web (entonces en backoffice)
          └─ 03-seeder          (PR #5)   uv run seed
              └─ 04-rate-filters-delete (PR #6)   tarifa, filtros, borrado
                  └─ 05-tests-and-routes (PR #7)  tests y rutas /suppliers
@@ -96,6 +96,10 @@ Detalles honestos:
 ### Ramas posteriores
 
 Después de las 6 ramas de la serie se hizo una revisión completa contra el encargo. Sus correcciones fueron en su propia rama, `fix/audit-followups` (PR #9): no borrar suspendidos, validar el email y resaltar mejor las renovaciones. Esta guía va en otra rama, `docs/aprendiendo-con-la-ia`, que parte de la anterior.
+
+### La rama de entrega
+
+La entrega pide el código en una estructura concreta y un Pull Request al repositorio original. Por eso se hizo una rama final, `delivery/suppliers-directory`, que parte de la de la guía y añade: el backend reorganizado (`models.py`, `database.py`, `routes/suppliers.py`, `seed.py`), la app `uis/application/app/suppliers/` y las tres capturas que pide el PR (`docs/screenshots/suppliers-*.png`).
 
 ### La regla de aquí en adelante
 Cada cambio nuevo se hace en **su propia rama** y se propone con un Pull Request, sin tocar `main` directamente. Esta carpeta misma se creó en la rama `docs/aprendiendo-con-la-ia`.

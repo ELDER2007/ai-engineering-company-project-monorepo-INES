@@ -40,12 +40,12 @@ Navegador (la página)
 Servidor de desarrollo (Vite)
    │  2. Reenvía la petición a la API (a esto se le llama "proxy")
    ▼
-API (FastAPI)  ── services/api/suppliers/router.py
+API (FastAPI)  ── services/api/routes/suppliers.py
    │  3. Pydantic revisa: ¿"suspended" es un estado permitido?
    │        no  → responde 422 y ahí termina, la base ni se entera
    │        sí  → sigue
    ▼
-TinyDB ── services/api/suppliers/db.json
+TinyDB ── services/api/db.json
    │  4. Guarda el cambio en el archivo
    ▼
 La API responde 200 con el proveedor ya actualizado
@@ -55,31 +55,34 @@ La página cambia el botón a rojo, sin recargar
 
 ## El mapa de carpetas
 
-Solo se trabajó en dos carpetas del repositorio (el resto es de otros hitos del curso):
+Solo se trabajó en dos carpetas del repositorio (el resto es de otros hitos del curso). La estructura es la que pide la entrega:
 
 ```
 services/api/                    ← el BACKEND
 ├── main.py                      arranca la API y conecta las piezas
-├── seed.py                      carga los 15 proveedores iniciales
+├── models.py                    los modelos Pydantic: las REGLAS de qué datos son válidos
+├── database.py                  arranca TinyDB y guarda, busca y cambia datos
+├── routes/
+│   └── suppliers.py             las "puertas de entrada" (URLs) del directorio
+├── seed.py                      carga los 15 proveedores iniciales (uv run seed)
 ├── pyproject.toml               permite ejecutar "uv run seed"
+├── CONTEXT-suppliers.md         el encargo original (la "receta")
 ├── core/config.py               ajustes generales (dónde está la base de datos)
-├── suppliers/
-│   ├── schemas.py               las REGLAS de qué datos son válidos
-│   ├── service.py               la lógica: guardar, buscar, cambiar
-│   ├── router.py                las "puertas de entrada" (URLs)
-│   ├── seed_data.py             los 15 proveedores iniciales
-│   └── CONTEXT-suppliers.md     el encargo original (la "receta")
 └── tests/                       pruebas automáticas
 
-uis/backoffice/                  ← el FRONTEND
-├── src/pages/SuppliersPage.tsx          la página completa
-├── src/components/suppliers/
-│   ├── SupplierRow.tsx                  una fila de la tabla
-│   └── SupplierForm.tsx                 el formulario de alta
-├── src/lib/api.ts                       funciones que hablan con la API
-├── src/types/suppliers.ts               los tipos de datos (los campos)
-└── e2e/suppliers.e2e.mjs                prueba automática en un navegador real
+uis/application/                 ← el FRONTEND
+├── app/
+│   ├── main.tsx, App.tsx        arranque de la app y la cabecera
+│   └── suppliers/               la página del directorio de proveedores
+│       ├── page.tsx             la página completa
+│       ├── SupplierRow.tsx      una fila de la tabla
+│       ├── SupplierForm.tsx     el formulario de alta
+│       ├── api.ts               funciones que hablan con la API
+│       └── types.ts             los tipos de datos (los campos)
+└── e2e/suppliers.e2e.mjs        prueba automática en un navegador real
 ```
+
+`uis/backoffice/` sigue existiendo con otra herramienta (el análisis de incidentes); la página de proveedores se movió de allí a `uis/application/` para cumplir la estructura de entrega.
 
 ## Los números del resultado
 

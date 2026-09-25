@@ -260,26 +260,24 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
   <div class="card tree">
     <details open><summary><span class="tag t-back">BACKEND</span> services/api/</summary>
       <span class="file">main.py <em>arranca la API y conecta las piezas</em></span>
+      <span class="file">models.py <em>los modelos Pydantic: las REGLAS de qué datos son válidos</em></span>
+      <span class="file">database.py <em>arranca TinyDB y guarda, busca y cambia datos</em></span>
+      <details open><summary>routes/</summary><span class="file">suppliers.py <em>las puertas de entrada (URLs) del directorio</em></span></details>
       <span class="file">seed.py <em>carga los 15 proveedores iniciales (uv run seed)</em></span>
       <span class="file">pyproject.toml <em>permite ejecutar "uv run seed"</em></span>
+      <span class="file">CONTEXT-suppliers.md <em>el encargo original (la "receta")</em></span>
       <details><summary>core/</summary><span class="file">config.py <em>ajustes generales: dónde está la base de datos</em></span></details>
-      <details open><summary>suppliers/</summary>
-        <span class="file">schemas.py <em>las REGLAS: qué datos son válidos</em></span>
-        <span class="file">service.py <em>la lógica: guardar, buscar, cambiar</em></span>
-        <span class="file">router.py <em>las puertas de entrada (URLs)</em></span>
-        <span class="file">seed_data.py <em>los 15 proveedores iniciales</em></span>
-        <span class="file">CONTEXT-suppliers.md <em>el encargo original (la "receta")</em></span>
-      </details>
       <details><summary>tests/</summary><span class="file">test_suppliers_validation.py <em>pruebas de las reglas</em></span><span class="file">test_suppliers_endpoints.py <em>pruebas de cada endpoint</em></span></details>
     </details>
-    <details open style="margin-top:8px"><summary><span class="tag t-front">FRONTEND</span> uis/backoffice/</summary>
-      <details open><summary>src/</summary>
-        <span class="file">pages/SuppliersPage.tsx <em>la página completa</em></span>
-        <span class="file">components/suppliers/SupplierRow.tsx <em>una fila de la tabla</em></span>
-        <span class="file">components/suppliers/SupplierForm.tsx <em>el formulario de alta</em></span>
-        <span class="file">lib/api.ts <em>funciones que hablan con la API</em></span>
-        <span class="file">types/suppliers.ts <em>los tipos de datos (los campos)</em></span>
+    <details open style="margin-top:8px"><summary><span class="tag t-front">FRONTEND</span> uis/application/</summary>
+      <details open><summary>app/suppliers/</summary>
+        <span class="file">page.tsx <em>la página completa</em></span>
+        <span class="file">SupplierRow.tsx <em>una fila de la tabla</em></span>
+        <span class="file">SupplierForm.tsx <em>el formulario de alta</em></span>
+        <span class="file">api.ts <em>funciones que hablan con la API</em></span>
+        <span class="file">types.ts <em>los tipos de datos (los campos)</em></span>
       </details>
+      <span class="file">app/main.tsx, App.tsx <em>arranque de la app y la cabecera</em></span>
       <details><summary>e2e/</summary><span class="file">suppliers.e2e.mjs <em>prueba automática en un navegador real</em></span></details>
     </details>
   </div>
@@ -322,9 +320,9 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
 
   <h3 style="margin-top:28px">Tres archivos, cada uno con un solo trabajo</h3>
   <div class="grid g3">
-    <div class="card"><span class="tag t-back">schemas.py</span><h3 style="margin-top:8px">El reglamento</h3><p style="margin:0;color:var(--muted)">Define qué datos son válidos. Si quieres cambiar una regla, solo tocas aquí.</p></div>
-    <div class="card"><span class="tag t-back">router.py</span><h3 style="margin-top:8px">La recepción</h3><p style="margin:0;color:var(--muted)">Recibe las peticiones, las deriva y traduce los errores a códigos HTTP.</p></div>
-    <div class="card"><span class="tag t-back">service.py</span><h3 style="margin-top:8px">El almacén</h3><p style="margin:0;color:var(--muted)">Guarda y busca en la base de datos TinyDB, un archivo <code>db.json</code>.</p></div>
+    <div class="card"><span class="tag t-back">models.py</span><h3 style="margin-top:8px">El reglamento</h3><p style="margin:0;color:var(--muted)">Define qué datos son válidos. Si quieres cambiar una regla, solo tocas aquí.</p></div>
+    <div class="card"><span class="tag t-back">routes/suppliers.py</span><h3 style="margin-top:8px">La recepción</h3><p style="margin:0;color:var(--muted)">Recibe las peticiones, las deriva y traduce los errores a códigos HTTP.</p></div>
+    <div class="card"><span class="tag t-back">database.py</span><h3 style="margin-top:8px">El almacén</h3><p style="margin:0;color:var(--muted)">Arranca TinyDB, guarda y busca en la base de datos, un archivo <code>db.json</code>. <code>seed.py</code> la llena al empezar.</p></div>
   </div>
 
   <h3 style="margin-top:28px">Los códigos de respuesta</h3>
@@ -387,7 +385,7 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
     <div class="card">
       <h3>Piezas (componentes)</h3>
       <div class="ctree">
-        <b>SuppliersPage</b> <span style="color:var(--muted)">← la página: carga datos y coordina</span><br>
+        <b>page.tsx</b> <span style="color:var(--muted)">← la página: carga datos y coordina</span><br>
         &nbsp;&nbsp;├─ <b>SupplierForm</b> <span style="color:var(--muted)">← formulario "Nuevo proveedor"</span><br>
         &nbsp;&nbsp;└─ <b>SupplierRow</b> <span style="color:var(--muted)">← una fila (se repite 15 veces)</span>
       </div>
@@ -413,7 +411,7 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
     <div class="card"><span class="tag t-front">Tarifa y estado</span><p style="margin:8px 0 0;color:var(--muted)">La pantalla cambia <b>después</b> de que la API responde, para no mostrar algo que en realidad no se guardó.</p></div>
   </div>
   <div class="callout info"><b>¿Por qué validar en dos sitios?</b> La página da respuesta inmediata a la persona. La API es la <b>última defensa</b> y nunca se puede saltar.</div>
-  <div class="callout"><b>El proxy.</b> La página vive en el puerto 5174 y la API en el 8000. Un navegador no deja que una página hable libremente con otro "domicilio". Vite hace de intermediario: recibe <code>/api/suppliers</code> y se lo pasa a la API.</div>
+  <div class="callout"><b>El proxy.</b> La página vive en el puerto 5175 y la API en el 8000. Un navegador no deja que una página hable libremente con otro "domicilio". Vite hace de intermediario: recibe <code>/api/suppliers</code> y se lo pasa a la API.</div>
 </section>
 
 <!-- DECISIONES -->
@@ -427,6 +425,7 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
     <div class="card"><span class="num">4</span> <b>Preguntar cuando la duda es real</b><p style="margin:8px 0 0;color:var(--muted)">"Parte desde cero" podía significar borrar código de otros hitos. Se preguntó antes de tocar nada. Una pregunta de 10 segundos es más barata que borrar algo por error.</p></div>
     <div class="card"><span class="num">5</span> <b>Base de datos ligera: TinyDB</b><p style="margin:8px 0 0;color:var(--muted)">Lo pidió el tech lead: un archivo, sin servidor. Perfecto para empezar, pero no aguanta muchos usuarios escribiendo a la vez; por eso el README avisa y dice que luego se pasará a Postgres.</p></div>
     <div class="card"><span class="num">6</span> <b>Estados en inglés</b><p style="margin:8px 0 0;color:var(--muted)">El encargo define <code>active</code> y <code>suspended</code>. Aunque la empresa sea española, se respetó el encargo: <code>"activo"</code> se rechaza.</p></div>
+    <div class="card"><span class="num">7</span> <b>Reorganizar para la entrega</b><p style="margin:8px 0 0;color:var(--muted)">La entrega pidió una estructura concreta. Como el código ya funcionaba, solo se <b>movió</b> con <code>git mv</code> (conservando el historial) y se adaptaron los imports. Las mismas 42 pruebas y las 28 comprobaciones de navegador pasan igual antes y después: reorganizar no es reescribir.</p></div>
   </div>
 </section>
 
@@ -434,7 +433,7 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
 <section id="problemas">
   <span class="eyebrow">6 · Problemas</span>
   <h2>Lo que salió mal y cómo se arregló</h2>
-  <p class="lead">Programar no es escribir código perfecto a la primera: es tomar decisiones y arreglar errores. Aquí están los 18, incluidos los errores propios; los últimos cuatro salieron de la revisión final contra el encargo. Filtra por tema y abre cada uno.</p>
+  <p class="lead">Programar no es escribir código perfecto a la primera: es tomar decisiones y arreglar errores. Aquí están los 19, incluidos los errores propios; cuatro salieron de la revisión final contra el encargo y el último de la reorganización para la entrega. Filtra por tema y abre cada uno.</p>
   <div class="chips" id="chips" role="group" aria-label="Filtrar problemas por tema"></div>
   <div id="probs"></div>
 </section>
@@ -452,13 +451,14 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
   <div class="tl">
     <div class="it base"><b>base/pre-suppliers</b><p>El punto de partida, justo antes de este trabajo.</p></div>
     <div class="it"><b>feature/suppliers-01-api</b><span class="pr tag t-brand">PR #3</span><p>La API: modelo Pydantic, TinyDB, seeder inicial y endpoints.</p></div>
-    <div class="it"><b>feature/suppliers-02-backoffice-page</b><span class="pr tag t-brand">PR #4</span><p>La página web: tabla, filtros, formulario, tarifa y estado.</p></div>
+    <div class="it"><b>feature/suppliers-02-backoffice-page</b><span class="pr tag t-brand">PR #4</span><p>La página web: tabla, filtros, formulario, tarifa y estado (entonces en el backoffice).</p></div>
     <div class="it"><b>feature/suppliers-03-seeder</b><span class="pr tag t-brand">PR #5</span><p><code>uv run seed</code>, sin duplicados y con conteo en consola.</p></div>
     <div class="it"><b>feature/suppliers-04-rate-filters-delete</b><span class="pr tag t-brand">PR #6</span><p>Endpoint de tarifa, filtros del listado y borrado.</p></div>
     <div class="it"><b>feature/suppliers-05-tests-and-routes</b><span class="pr tag t-brand">PR #7</span><p>35 tests y las rutas en <code>/suppliers</code>.</p></div>
     <div class="it"><b>feature/suppliers-06-ui-validation-e2e</b><span class="pr tag t-brand">PR #8</span><p>Validación del formulario, <code>contact_email</code> y test en navegador.</p></div>
     <div class="it"><b>fix/audit-followups</b><span class="pr tag t-brand">PR #9</span><p>Revisión final contra el encargo: no borrar suspendidos (409), validar el email y resaltar mejor las renovaciones.</p></div>
     <div class="it"><b>docs/aprendiendo-con-la-ia</b><span class="pr tag t-brand">PR #10</span><p>Esta guía.</p></div>
+    <div class="it"><b>delivery/suppliers-directory</b><span class="pr tag t-brand">Entrega</span><p>La estructura final que pide la entrega (<code>models.py</code>, <code>database.py</code>, <code>routes/</code>, <code>seed.py</code> y <code>uis/application/app/suppliers/</code>) más las 3 capturas del PR al repositorio original.</p></div>
   </div>
   <div class="callout info"><b>Honestidad.</b> Las ramas se crearon <i>después</i>, apuntando a commits que ya estaban en <code>main</code>: por eso <code>main</code> no cambió ni se reescribió. Como los commits estaban entremezclados en el tiempo, el PR #7 junta backend con un arreglo de frontend.</div>
   <div class="callout"><b>Regla de aquí en adelante:</b> cada cambio nuevo va en su propia rama y se propone con un Pull Request, sin tocar <code>main</code> directamente. Nunca se usó <code>git push --force</code>.</div>
@@ -482,8 +482,8 @@ footer { margin: 64px 0 40px; color: var(--muted); font-size: .92rem; }
 uv run uvicorn main:app --reload --port 8000</div><button class="btn copy">Copiar</button></div>
   <p style="color:var(--muted)">Carga sola los 15 proveedores. Lista en bruto: <code>localhost:8000/suppliers</code>. Documentación interactiva, donde pruebas cada acción con un botón: <code>localhost:8000/docs</code>.</p>
   <h3>Terminal 2 · la página (desde la raíz)</h3>
-  <div class="cmd"><div class="term">npm run dev:backoffice</div><button class="btn copy">Copiar</button></div>
-  <p style="color:var(--muted)">Abre <code>localhost:5174/suppliers</code>. En Codespaces, abre el puerto <b>5174</b> desde la pestaña <b>Puertos</b>.</p>
+  <div class="cmd"><div class="term">npm run dev:application</div><button class="btn copy">Copiar</button></div>
+  <p style="color:var(--muted)">Abre <code>localhost:5175/suppliers</code>. En Codespaces, abre el puerto <b>5175</b> desde la pestaña <b>Puertos</b>.</p>
   <h3>Volver a los datos iniciales (antes de una demo)</h3>
   <div class="cmd"><div class="term">cd services/api
 uv run seed --reset</div><button class="btn copy">Copiar</button></div>
@@ -504,7 +504,7 @@ uv run --with pytest --with httpx pytest -q</div><button class="btn copy">Copiar
 </section>
 
 <footer>
-  <p><b>Consejos para seguir aprendiendo:</b> (1) Abre <code>schemas.py</code>, cambia <code>gt=0</code> a <code>gt=10</code> y mira qué test falla; luego deshazlo. (2) Abre <code>localhost:8000/docs</code> y pulsa "Try it out" en cada endpoint. (3) Rompe cosas a propósito: los errores enseñan más que los aciertos. (4) Lee un test para entender una función. (5) Pregunta siempre el "porqué".</p>
+  <p><b>Consejos para seguir aprendiendo:</b> (1) Abre <code>models.py</code>, cambia <code>gt=0</code> a <code>gt=10</code> y mira qué test falla; luego deshazlo. (2) Abre <code>localhost:8000/docs</code> y pulsa "Try it out" en cada endpoint. (3) Rompe cosas a propósito: los errores enseñan más que los aciertos. (4) Lee un test para entender una función. (5) Pregunta siempre el "porqué".</p>
   <p>Esta guía también existe en texto en los archivos <code>README.md</code> y <code>01</code> a <code>06</code> de esta misma carpeta.</p>
 </footer>
 </main>
@@ -681,6 +681,8 @@ uv run --with pytest --with httpx pytest -q</div><button class="btn copy">Copiar
     ["front", "El resaltado de renovaciones apenas se veía", "Las renovaciones a 60 días o menos tenían un fondo ámbar casi invisible (5% de opacidad). Cumplía, pero no «destacaba visualmente» como pide el encargo. Además, con los datos iniciales todas las fechas son de 2025, así que nunca se veía en acción.", "Fondo más marcado y una barra ámbar a la izquierda. Y el test crea proveedores con renovación a 30 y a 61 días para comprobar que se resalta uno y el otro no.", "Si algo depende de los datos y los datos no lo activan, pruébalo con datos creados a propósito."],
     ["test", "Otro test con nombre confuso", "El test nuevo daba fallo aunque la página estaba bien: buscaba el texto «Renueva en» en la fila del proveedor de prueba, pero el propio nombre del proveedor era «Renueva en 61 dias».", "Buscar el texto exacto del aviso («Renueva en N días», con tilde), que el nombre no contiene.", "Cuando un test falla, primero pregunta si falla el programa o falla el test."],
     ["test", "Probar en un solo navegador", "Todas las pruebas de la página se habían hecho solo en Chromium.", "La prueba acepta E2E_BROWSER=firefox y se ejecutó también en Firefox: pasa en ambos.", "Cada navegador puede comportarse distinto: prueba en más de uno."]
+    ,
+    ["git", "Un comando antiguo cambió de rama por sorpresa", "Durante la reorganización, una tarea que había quedado colgada en segundo plano terminó de golpe y ejecutó por fin sus últimas órdenes: git branch -f y git switch. Sin avisar, movió el árbol de trabajo a otra rama, con la estructura antigua del backend, y desplazó hacia atrás el puntero local de la rama de la guía.", "No se perdió nada: el commit de la guía seguía en GitHub y el del backend estaba en su rama. Se guardaron los cambios sin commitear con git stash, se volvió a la rama correcta, se recuperaron con git stash pop y se restauró la rama de la guía. Después se repitieron las pruebas.", "Git casi nunca pierde trabajo si lo has commiteado o subido. Antes de «arreglar» algo raro, mira qué pasó (git status, git reflog). Y no dejes tareas largas en segundo plano con comandos de Git al final."]
   ];
   var L = { all: "Todos", back: "Backend", front: "Frontend", test: "Tests", git: "Git", tools: "Herramientas" };
   var TAGC = { back: "t-back", front: "t-front", test: "t-warn", git: "t-brand", tools: "t-db" };

@@ -11,17 +11,19 @@ Una **API** es un programa que espera peticiones y responde. Cada tipo de petici
 
 ## Las tres capas
 
-El backend está dividido en tres archivos, cada uno con **una sola responsabilidad**. Es como una empresa donde cada persona tiene su trabajo.
+El backend está dividido en tres archivos principales, cada uno con **una sola responsabilidad**. Es como una empresa donde cada persona tiene su trabajo.
 
 | Archivo | Rol | Comparación |
 |---|---|---|
-| `schemas.py` | Define qué datos son válidos | El **reglamento** |
-| `router.py` | Recibe las peticiones y devuelve respuestas | La **recepción**: atiende y deriva |
-| `service.py` | Hace el trabajo real con la base de datos | El **almacén**: guarda y busca |
+| `models.py` | Define qué datos son válidos | El **reglamento** |
+| `routes/suppliers.py` | Recibe las peticiones y devuelve respuestas | La **recepción**: atiende y deriva |
+| `database.py` | Arranca TinyDB y hace el trabajo con la base de datos | El **almacén**: guarda y busca |
 
-Separarlo así tiene una ventaja enorme: si quieres cambiar una regla, sabes que solo tocas `schemas.py`.
+Además, `seed.py` carga los datos iniciales y `main.py` arranca la API y conecta las piezas.
 
-## Paso 1: definir el modelo (`schemas.py`)
+Separarlo así tiene una ventaja enorme: si quieres cambiar una regla, sabes que solo tocas `models.py`.
+
+## Paso 1: definir el modelo (`models.py`)
 
 Un **modelo** es la lista de campos que tiene un proveedor. Los campos salen exactamente del encargo original (`CONTEXT-suppliers.md`):
 
@@ -67,7 +69,7 @@ Hay modelos distintos porque entrada y salida no son iguales:
 
 Además, los modelos de entrada tienen `extra="forbid"`: si el cliente intenta enviar un campo que no debe (por ejemplo `updated_at`), la API responde 422 en vez de ignorarlo en silencio. Así nadie puede falsear la fecha de auditoría.
 
-## Paso 2: guardar los datos (`service.py` y TinyDB)
+## Paso 2: guardar los datos (`database.py` y TinyDB)
 
 **TinyDB** es una base de datos muy sencilla: guarda todo en **un archivo de texto** (`db.json`). No hay que instalar ningún servidor. El tech lead lo eligió a propósito: para un directorio pequeño, una herramienta ligera es la correcta. Más adelante se cambiará a Postgres.
 
@@ -81,7 +83,7 @@ TinyDB da a cada registro un **número de identificación (`id`)**: 1, 2, 3... E
 
 ### La regla de la fecha de auditoría
 
-El tech lead pidió que cuando se actualice una tarifa quede registrado **cuándo**. En `service.py`:
+El tech lead pidió que cuando se actualice una tarifa quede registrado **cuándo**. En `database.py`:
 
 ```python
 def update_rate(supplier_id, monthly_rate):
@@ -90,7 +92,7 @@ def update_rate(supplier_id, monthly_rate):
 
 `_now()` devuelve la hora actual del **servidor**. El cliente no puede elegirla. Cambiar el estado o las notas **no** toca `updated_at`, porque esa fecha es solo de tarifas.
 
-## Paso 3: las puertas de entrada (`router.py`)
+## Paso 3: las puertas de entrada (`routes/suppliers.py`)
 
 Cada función con `@router.get(...)`, `@router.post(...)` etc. es una puerta. Además de dejar pasar, también **traduce los errores internos a códigos HTTP**:
 

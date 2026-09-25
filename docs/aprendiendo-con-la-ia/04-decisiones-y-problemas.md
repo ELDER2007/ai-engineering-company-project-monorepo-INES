@@ -34,11 +34,16 @@ Lo pidió el tech lead. TinyDB guarda todo en un archivo, sin servidor. Es perfe
 ### 6. Estados en inglés (`active` / `suspended`)
 El encargo los define así. Aunque la empresa sea española, se respetó el encargo. Si alguien envía `"activo"`, se rechaza.
 
+### 7. Reorganizar todo para la entrega
+Al final, la entrega pidió una estructura concreta: en el backend `main.py`, `models.py`, `database.py`, `routes/suppliers.py` y `seed.py`; y en el frontend `uis/application/app/suppliers/`. El código ya funcionaba, así que solo se **movió** con `git mv` (para conservar el historial) y se adaptaron los imports. Se comprobó que nada cambió: las mismas 42 pruebas pasan y la prueba de navegador da 28 de 28. La página de proveedores salió de `uis/backoffice/` a la nueva app `uis/application/`, y el backoffice se quedó con el análisis de incidentes.
+
+**Lección:** reorganizar no es reescribir. Si las pruebas pasan igual antes y después, sabes que no rompiste nada.
+
 ---
 
 ## Problemas que aparecieron
 
-Hay 18 en total. Los últimos cuatro salieron de la revisión final contra el encargo.
+Hay 19 en total. Los cuatro siguientes al 14 salieron de la revisión final contra el encargo, y el último de la reorganización para la entrega.
 
 ### Problema 1: la ruta no coincidía con lo que se pedía
 **Qué pasó:** se creó `/api/suppliers`, pero los criterios pedían `/suppliers`. Un evaluador que probara `/suppliers` habría recibido un 404.
@@ -79,7 +84,7 @@ Ya estaba prevista (`gt=0`), pero se comprobó **en todos los caminos** que acep
 ### Problema 7: un mensaje de error con ":" sobrante
 **Qué pasó:** cuando la API rechazaba algo que afecta a varios campos (moneda que no cuadra con el país), el mensaje salía como `: currency must be...` con dos puntos al inicio.
 
-**Solución:** se arregló en `lib/api.ts` para que el mensaje salga limpio.
+**Solución:** se arregló en `api.ts` para que el mensaje salga limpio.
 
 ### Problema 8: un error sin capturar
 **Qué pasó:** al editar una tarifa, si la API la rechazaba, el error se "escapaba" sin ser recogido en esa fila (aparecía en la consola del navegador).
@@ -141,3 +146,12 @@ Aparecía modificado antes de empezar (un npm más antiguo quitaba campos `libc`
 **Qué pasó:** todas las pruebas de la página se habían hecho solo en Chromium.
 
 **Solución:** la prueba acepta `E2E_BROWSER=firefox` y se ejecutó también en Firefox: pasa en ambos.
+
+### Problema 19: un comando antiguo cambió de rama por sorpresa
+**Qué pasó:** durante la reorganización, una tarea que había quedado colgada en segundo plano desde antes terminó de golpe y ejecutó por fin sus últimas órdenes: `git branch -f …` y `git switch …`. Sin avisar, movió el árbol de trabajo a otra rama, con la estructura antigua del backend, y desplazó hacia atrás el puntero local de la rama de la guía.
+
+**Cómo se descubrió:** al ver que el estado de git ya no era el esperado (rama distinta y carpetas antiguas de vuelta), se paró todo y se miró `git reflog` y `git branch -vv` antes de tocar nada.
+
+**Solución:** no se perdió nada, porque el commit de la guía seguía en GitHub y el del backend estaba en su rama. Se guardaron los cambios sin commitear con `git stash`, se volvió a la rama correcta, se recuperaron con `git stash pop` y se restauró la rama de la guía a su commit original. Después se repitieron las pruebas.
+
+**Lección:** Git casi nunca pierde trabajo si lo has commiteado o subido; y antes de "arreglar" algo raro, mira primero qué pasó (`git status`, `git reflog`). También: no dejes tareas largas en segundo plano con comandos de Git al final.

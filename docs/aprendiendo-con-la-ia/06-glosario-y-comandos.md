@@ -30,10 +30,10 @@ Al arrancar carga sola los 15 proveedores. Puedes ver la lista en bruto en http:
 Desde la raíz del repositorio:
 
 ```bash
-npm run dev:backoffice
+npm run dev:application
 ```
 
-Abre http://localhost:5174/suppliers. En Codespaces, abre el puerto **5174** desde la pestaña **Puertos**.
+Abre http://localhost:5175/suppliers. En Codespaces, abre el puerto **5175** desde la pestaña **Puertos**.
 
 ### Volver a los datos iniciales
 
@@ -109,7 +109,7 @@ uv run --with pytest --with httpx pytest -q
 
 ## Consejos para seguir aprendiendo
 
-1. **Empieza por lo pequeño.** Abre `services/api/suppliers/schemas.py` y cambia algo pequeño (por ejemplo, prueba a cambiar `gt=0` a `gt=10`). Mira qué se rompe y qué test falla. Luego deshazlo.
+1. **Empieza por lo pequeño.** Abre `services/api/models.py` y cambia algo pequeño (por ejemplo, prueba a cambiar `gt=0` a `gt=10`). Mira qué se rompe y qué test falla. Luego deshazlo.
 2. **Mira la API en vivo.** Abre http://localhost:8000/docs y pulsa "Try it out" en cada endpoint. Es la mejor forma de entender qué pide y qué responde.
 3. **Rompe cosas a propósito.** Envía un país inventado y mira el error 422. Los errores enseñan más que los aciertos.
 4. **Lee un test para entender una función.** Los archivos de `tests/` explican con ejemplos qué debe hacer cada parte.

@@ -1,6 +1,6 @@
 # 3. El frontend (la página web)
 
-El **frontend** es todo lo que la persona ve y toca: botones, tabla, formulario. Está en `uis/backoffice/`. Se llama "backoffice" porque es una herramienta interna para el equipo, no la web pública de la empresa.
+El **frontend** es todo lo que la persona ve y toca: botones, tabla, formulario. Está en `uis/application/app/suppliers/`. La entrega pide esa estructura: una app (`application`) con una carpeta `app/` que contiene la página del directorio de proveedores.
 
 ## Con qué está hecho
 
@@ -16,7 +16,7 @@ El **frontend** es todo lo que la persona ve y toca: botones, tabla, formulario.
 En React, la página se divide en **componentes**, cada uno responsable de una parte:
 
 ```
-SuppliersPage      ← la página entera: carga los datos y coordina todo
+page.tsx           ← la página entera: carga los datos y coordina todo
 ├── SupplierForm   ← el formulario "Nuevo proveedor"
 └── SupplierRow    ← una fila de la tabla (se repite 15 veces)
 ```
@@ -71,7 +71,7 @@ No se usa solo el color: también hay texto, para que se entienda aunque alguien
 ### Renovaciones de contrato
 Si el contrato renueva en los próximos 60 días (hoy incluido), la fila se resalta en ámbar: fondo más cálido, una barra ámbar a la izquierda y el texto "Renueva en N días". A los 61 días ya no se resalta. Si la fecha ya pasó, sale en rojo con "Fecha vencida". (Con los datos iniciales todas están vencidas, porque son de 2025.)
 
-## El archivo que habla con la API (`lib/api.ts`)
+## El archivo que habla con la API (`app/suppliers/api.ts`)
 
 Todas las llamadas a la API están en un único archivo. Así, si la dirección de la API cambia, se cambia en un solo lugar. También traduce los errores de la API a frases legibles, por ejemplo:
 
@@ -81,4 +81,4 @@ currency must be EUR for country Spain
 
 ## Cómo llega la petición a la API
 
-La página vive en el puerto 5174 y la API en el 8000. Un navegador no deja que una página hable libremente con otro "domicilio" (por seguridad). La solución: Vite hace de **proxy** (intermediario). La página le pregunta a Vite `/api/suppliers` y Vite se lo pasa a la API. Ya estaba configurado en `vite.config.ts` antes de este trabajo, y reenvía todo lo que empiece por `/api`.
+La página vive en el puerto 5175 y la API en el 8000. Un navegador no deja que una página hable libremente con otro "domicilio" (por seguridad). La solución: Vite hace de **proxy** (intermediario). La página le pregunta a Vite `/api/suppliers` y Vite se lo pasa a la API. Ya estaba configurado en `vite.config.ts` antes de este trabajo, y reenvía todo lo que empiece por `/api`.
