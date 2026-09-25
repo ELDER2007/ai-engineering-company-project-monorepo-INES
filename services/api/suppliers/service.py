@@ -60,8 +60,24 @@ def get_db() -> TinyDB:
     return _db
 
 
-def list_suppliers() -> list[SupplierOut]:
-    return [_to_out(doc) for doc in get_db().all()]
+def list_suppliers(
+    country: str | None = None, category: SupplierCategory | None = None
+) -> list[SupplierOut]:
+    """All suppliers, optionally filtered by country and/or category (AND)."""
+    conditions = []
+    if country is not None:
+        conditions.append(Query().country == country)
+    if category is not None:
+        conditions.append(Query().categories.any([category.value]))
+
+    if not conditions:
+        docs = get_db().all()
+    else:
+        combined = conditions[0]
+        for condition in conditions[1:]:
+            combined = combined & condition
+        docs = get_db().search(combined)
+    return [_to_out(doc) for doc in docs]
 
 
 def get_supplier(supplier_id: int) -> SupplierOut:
@@ -72,13 +88,11 @@ def get_supplier(supplier_id: int) -> SupplierOut:
 
 
 def search_by_country(country: str) -> list[SupplierOut]:
-    docs = get_db().search(Query().country == country)
-    return [_to_out(doc) for doc in docs]
+    return list_suppliers(country=country)
 
 
 def search_by_category(category: SupplierCategory) -> list[SupplierOut]:
-    docs = get_db().search(Query().categories.any([category.value]))
-    return [_to_out(doc) for doc in docs]
+    return list_suppliers(category=category)
 
 
 def create_supplier(payload: SupplierCreate) -> SupplierOut:
@@ -111,6 +125,15 @@ def update_supplier(supplier_id: int, payload: SupplierUpdate) -> SupplierOut:
         new_doc["updated_at"] = doc["updated_at"]
 
     db.update(new_doc, doc_ids=[supplier_id])
+    return get_supplier(supplier_id)
+
+
+def update_rate(supplier_id: int, monthly_rate: float) -> SupplierOut:
+    """Set a new monthly rate and stamp ``updated_at`` with the time of the change."""
+    db = get_db()
+    if db.get(doc_id=supplier_id) is None:
+        raise SupplierNotFoundError(supplier_id)
+    db.update({"monthly_rate": monthly_rate, "updated_at": _now()}, doc_ids=[supplier_id])
     return get_supplier(supplier_id)
 
 

@@ -79,7 +79,7 @@ export const createSupplier = (payload: SupplierCreate) =>
   suppliersRequest<Supplier>("", { method: "POST", body: JSON.stringify(payload) });
 
 export const updateSupplierRate = (id: number, monthly_rate: number) =>
-  suppliersRequest<Supplier>(`/${id}`, { method: "PATCH", body: JSON.stringify({ monthly_rate }) });
+  suppliersRequest<Supplier>(`/${id}/rate`, { method: "PATCH", body: JSON.stringify({ monthly_rate }) });
 
 export const setSupplierStatus = (id: number, status: SupplierStatus) =>
   suppliersRequest<Supplier>(`/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });

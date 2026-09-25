@@ -13,6 +13,7 @@ from .schemas import (
     SupplierCategory,
     SupplierCreate,
     SupplierOut,
+    SupplierRateUpdate,
     SupplierStatusUpdate,
     SupplierUpdate,
 )
@@ -21,8 +22,11 @@ router = APIRouter(prefix="/api/suppliers", tags=["suppliers"])
 
 
 @router.get("", response_model=list[SupplierOut])
-async def list_suppliers() -> list[SupplierOut]:
-    return service.list_suppliers()
+async def list_suppliers(
+    country: Country | None = Query(default=None),
+    category: SupplierCategory | None = Query(default=None),
+) -> list[SupplierOut]:
+    return service.list_suppliers(country=country.value if country else None, category=category)
 
 
 @router.get("/search/by-country", response_model=list[SupplierOut])
@@ -56,6 +60,14 @@ async def update_supplier(supplier_id: int, payload: SupplierUpdate) -> Supplier
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except service.InvalidSupplierUpdateError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors) from exc
+
+
+@router.patch("/{supplier_id}/rate", response_model=SupplierOut)
+async def update_supplier_rate(supplier_id: int, payload: SupplierRateUpdate) -> SupplierOut:
+    try:
+        return service.update_rate(supplier_id, payload.monthly_rate)
+    except service.SupplierNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.patch("/{supplier_id}/status", response_model=SupplierOut)

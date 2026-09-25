@@ -19,6 +19,7 @@ Centralized FastAPI backend for Nexova, per [docs/ARCHITECTURE_PROPOSAL.md](../.
 | `GET` | `/api/suppliers/{id}` | Get one supplier. `404` if missing. |
 | `POST` | `/api/suppliers` | Create a supplier. `422` on invalid data. |
 | `PATCH` | `/api/suppliers/{id}` | Partial update. Changing `monthly_rate` stamps `updated_at` (audit). The merged record is re-validated, so changing `country` alone (currency mismatch) is a `422`. |
+| `PATCH` | `/api/suppliers/{id}/rate` | Update the monthly rate (`{"monthly_rate": 350}`). Always stamps `updated_at` with the time of the change. `422` if the rate is `<= 0`; `404` if the supplier doesn't exist. |
 | `PATCH` | `/api/suppliers/{id}/status` | Activate/suspend (`{"status": "active" \| "suspended"}`). |
 | `GET` | `/health` | Liveness check. |
 

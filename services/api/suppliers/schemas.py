@@ -81,6 +81,12 @@ class SupplierUpdate(BaseModel):
     notes: str | None = None
 
 
+class SupplierRateUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monthly_rate: float = Field(gt=0)
+
+
 class SupplierStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
