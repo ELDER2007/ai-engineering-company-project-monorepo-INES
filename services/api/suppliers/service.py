@@ -8,8 +8,8 @@ The database is seeded (``seed.py``) the first time it's opened, and
 ``get_db()`` is called once at import time (bottom of file) so the directory is
 populated as soon as the app starts — the demo must never show an empty DB.
 
-Suppliers are never deleted: they are suspended, to keep the history of
-commercial relationships.
+Suspending is the preferred way to retire a supplier (it keeps the history of
+commercial relationships); ``delete_supplier`` exists for entries made by mistake.
 """
 
 from __future__ import annotations
@@ -143,6 +143,13 @@ def set_status(supplier_id: int, status: SupplierStatus) -> SupplierOut:
         raise SupplierNotFoundError(supplier_id)
     db.update({"status": status.value}, doc_ids=[supplier_id])
     return get_supplier(supplier_id)
+
+
+def delete_supplier(supplier_id: int) -> None:
+    db = get_db()
+    if db.get(doc_id=supplier_id) is None:
+        raise SupplierNotFoundError(supplier_id)
+    db.remove(doc_ids=[supplier_id])
 
 
 def _to_out(doc) -> SupplierOut:

@@ -19,7 +19,11 @@ async function readErrorDetail(response: Response): Promise<string> {
     if (typeof body.detail === "string") return body.detail;
     if (Array.isArray(body.detail)) {
       return body.detail
-        .map((e: { loc?: unknown[]; msg?: string }) => `${e.loc?.slice(1).join(".") ?? ""}: ${e.msg ?? ""}`)
+        .map((e: { loc?: unknown[]; msg?: string }) => {
+          const field = e.loc?.slice(1).join(".");
+          const message = (e.msg ?? "").replace(/^Value error, /, "");
+          return field ? `${field}: ${message}` : message;
+        })
         .join("; ");
     }
     return response.statusText;
