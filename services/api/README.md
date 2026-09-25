@@ -32,6 +32,15 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
+To (re)load the initial suppliers into TinyDB by hand (the API also seeds an empty database on startup):
+
+```bash
+uv run seed              # seed only if empty
+uv run seed --reset      # wipe and reload the 15 initial suppliers
+```
+
+`uv run seed` uses the `seed` script declared in `pyproject.toml` (uv installs the dependencies on first run). Run it from `services/api`; from the repo root use `uv run --project services/api seed`, since the root has no Python project. `python seed.py` works too if the dependencies are already installed.
+
 `ALLOWED_ORIGINS` (comma-separated) controls CORS; defaults to the local Vite dev ports (`5173`, `5174`) used by `uis/website` and `uis/backoffice` when unset. Set it explicitly in production — see `docs/ARCHITECTURE_PROPOSAL.md` section 4.4.
 
 ## Known limitations
