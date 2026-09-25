@@ -9,19 +9,21 @@ Centralized FastAPI backend for Nexova, per [docs/ARCHITECTURE_PROPOSAL.md](../.
 
 ## Endpoints
 
+Supplier routes are served at `/suppliers` (shown in `/docs`) and also at `/api/suppliers`, the path the backoffice uses through the Vite proxy (which only forwards `/api`).
+
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/api/incidents/analyze` | Upload a CSV (`multipart/form-data`, field name `file`), get back the analysis as JSON. `400` if the file isn't `.csv`, `422` if required columns are missing or the file has no data rows. |
 | `GET` | `/api/incidents/results/export` | Download the most recent analysis as `results.csv` (one metric per row). `404` if no analysis has run yet in this process. |
-| `GET` | `/api/suppliers` | List all suppliers. |
-| `GET` | `/api/suppliers/search/by-country?country=Spain\|USA` | Filter by country. |
-| `GET` | `/api/suppliers/search/by-category?category=...` | Filter by category (one of `job_boards`, `ats_software`, `assessment_tools`, `training_platforms`, `payroll_and_hr_software`, `video_interview`, `background_check`, `office_and_facilities`, `it_and_software_licenses`). |
-| `GET` | `/api/suppliers/{id}` | Get one supplier. `404` if missing. |
-| `POST` | `/api/suppliers` | Create a supplier. `422` on invalid data. |
-| `PATCH` | `/api/suppliers/{id}` | Partial update. Changing `monthly_rate` stamps `updated_at` (audit). The merged record is re-validated, so changing `country` alone (currency mismatch) is a `422`. |
-| `PATCH` | `/api/suppliers/{id}/rate` | Update the monthly rate (`{"monthly_rate": 350}`). Always stamps `updated_at` with the time of the change. `422` if the rate is `<= 0`; `404` if the supplier doesn't exist. |
-| `PATCH` | `/api/suppliers/{id}/status` | Activate/suspend (`{"status": "active" \| "suspended"}`). |
-| `DELETE` | `/api/suppliers/{id}` | Remove a supplier (`204`). `404` if it doesn't exist. The CONTEXT prefers suspending to keep the relationship history; use this for entries made by mistake. |
+| `GET` | `/suppliers` | List all suppliers. |
+| `GET` | `/suppliers/search/by-country?country=Spain\|USA` | Filter by country. |
+| `GET` | `/suppliers/search/by-category?category=...` | Filter by category (one of `job_boards`, `ats_software`, `assessment_tools`, `training_platforms`, `payroll_and_hr_software`, `video_interview`, `background_check`, `office_and_facilities`, `it_and_software_licenses`). |
+| `GET` | `/suppliers/{id}` | Get one supplier. `404` if missing. |
+| `POST` | `/suppliers` | Create a supplier. `422` on invalid data. |
+| `PATCH` | `/suppliers/{id}` | Partial update. Changing `monthly_rate` stamps `updated_at` (audit). The merged record is re-validated, so changing `country` alone (currency mismatch) is a `422`. |
+| `PATCH` | `/suppliers/{id}/rate` | Update the monthly rate (`{"monthly_rate": 350}`). Always stamps `updated_at` with the time of the change. `422` if the rate is `<= 0`; `404` if the supplier doesn't exist. |
+| `PATCH` | `/suppliers/{id}/status` | Activate/suspend (`{"status": "active" \| "suspended"}`). |
+| `DELETE` | `/suppliers/{id}` | Remove a supplier (`204`). `404` if it doesn't exist. The CONTEXT prefers suspending to keep the relationship history; use this for entries made by mistake. |
 | `GET` | `/health` | Liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running.
