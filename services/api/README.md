@@ -23,7 +23,7 @@ Supplier routes are served at `/suppliers` (shown in `/docs`) and also at `/api/
 | `PATCH` | `/suppliers/{id}` | Partial update. Changing `monthly_rate` stamps `updated_at` (audit). The merged record is re-validated, so changing `country` alone (currency mismatch) is a `422`. |
 | `PATCH` | `/suppliers/{id}/rate` | Update the monthly rate (`{"monthly_rate": 350}`). Always stamps `updated_at` with the time of the change. `422` if the rate is `<= 0`; `404` if the supplier doesn't exist. |
 | `PATCH` | `/suppliers/{id}/status` | Activate/suspend (`{"status": "active" \| "suspended"}`). |
-| `DELETE` | `/suppliers/{id}` | Remove a supplier (`204`). `404` if it doesn't exist. The CONTEXT prefers suspending to keep the relationship history; use this for entries made by mistake. |
+| `DELETE` | `/suppliers/{id}` | Remove an **active** supplier (`204`). `404` if it doesn't exist. `409` if it is suspended: the CONTEXT keeps suspended suppliers in the directory for the commercial history, so suspend first and never delete. |
 | `GET` | `/health` | Liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running.

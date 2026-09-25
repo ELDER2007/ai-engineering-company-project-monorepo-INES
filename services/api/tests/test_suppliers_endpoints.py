@@ -99,12 +99,26 @@ def test_patch_status_accepts_the_two_allowed_values(client):
     assert client.patch("/suppliers/1/status", json={"status": "active"}).json()["status"] == "active"
 
 
-def test_delete_removes_supplier_and_404_for_unknown(client):
+def test_delete_removes_active_supplier_and_404_for_unknown(client):
+    assert client.get("/suppliers/3").json()["status"] == "active"
     assert client.delete("/suppliers/3").status_code == 204
     assert client.get("/suppliers/3").status_code == 404
     assert client.delete("/suppliers/3").status_code == 404
     assert client.delete("/suppliers/999").status_code == 404
     assert len(client.get("/suppliers").json()) == 14
+
+
+def test_delete_refuses_suspended_suppliers_with_409(client):
+    """The CONTEXT keeps suspended suppliers in the directory for the history."""
+    assert client.get("/suppliers/5").json()["status"] == "suspended"  # Greenhouse
+    response = client.delete("/suppliers/5")
+    assert response.status_code == 409
+    assert "suspended" in response.json()["detail"]
+    assert client.get("/suppliers/5").status_code == 200
+    assert len(client.get("/suppliers").json()) == 15
+
+    client.patch("/suppliers/5/status", json={"status": "active"})
+    assert client.delete("/suppliers/5").status_code == 204
 
 
 def test_backoffice_alias_under_api_prefix_still_works(client):

@@ -84,3 +84,18 @@ def test_updated_at_is_generated_by_the_system(client):
 
     updated = client.patch(f"/api/suppliers/{created['id']}/rate", json={"monthly_rate": 150}).json()
     assert updated["updated_at"] > created["updated_at"]
+
+
+@pytest.mark.parametrize("email", ["no-es-email", "a@b", "@dominio.com", "a b@c.com", ""])
+def test_invalid_contact_email_is_rejected_with_422(client, db, email):
+    before = len(db)
+    assert client.post("/api/suppliers", json={**VALID, "contact_email": email}).status_code == 422
+    assert client.patch("/api/suppliers/1", json={"contact_email": email}).status_code == 422
+    assert len(db) == before
+    assert db.get(doc_id=1)["contact_email"] == "account@linkedin.com"
+
+
+def test_valid_or_absent_contact_email_is_accepted(client):
+    assert client.post("/api/suppliers", json={**VALID, "contact_email": "ok@proveedor.es"}).status_code == 201
+    assert client.post("/api/suppliers", json=VALID).status_code == 201
+    assert client.post("/api/suppliers", json={**VALID, "contact_email": None}).status_code == 201

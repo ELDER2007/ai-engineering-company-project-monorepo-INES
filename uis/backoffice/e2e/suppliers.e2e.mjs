@@ -1,14 +1,15 @@
-// End-to-end check of the suppliers page (needs Chromium: npx playwright install chromium).
+// End-to-end check of the suppliers page (needs a browser: npx playwright install chromium; set E2E_BROWSER=firefox|webkit to change it).
 // Prerequisites: API on :8000 seeded with a fresh directory (cd services/api && uv run seed --reset)
 // and the backoffice on :5174 (npm run dev). Run from uis/backoffice: npm run e2e
 // It creates one supplier and edits/suspends Gusto, so re-seed with --reset before re-running.
-import { chromium } from "playwright";
+import * as playwright from "playwright";
+const browserName = process.env.E2E_BROWSER ?? "chromium"; // chromium | firefox | webkit
 const SHOTS = process.env.E2E_SCREENSHOTS_DIR; // optional
 const APP = process.env.E2E_APP_URL ?? "http://localhost:5174";
 const API = process.env.E2E_API_URL ?? "http://localhost:8000";
 const URL = `${APP}/suppliers`;
 const shot = (name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }) : Promise.resolve());
-const browser = await chromium.launch();
+const browser = await playwright[browserName].launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -121,6 +122,19 @@ await shot("suspended");
 await page.getByRole("button", { name: "Activar Gusto" }).click();
 await page.getByRole("button", { name: "Suspender Gusto" }).waitFor();
 ok(/Activo/.test(await rowOf("Gusto").innerText()), "reactivar: vuelve a 'Activo'");
+
+// 6. renovaciones próximas: se resaltan solo las que vencen en <= 60 días
+const isoIn = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+for (const [name, n] of [["Renueva en 30 dias", 30], ["Renueva en 61 dias", 61]]) {
+  await fetch(`${API}/suppliers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, country: "Spain", categories: ["job_boards"], monthly_rate: 10, currency: "EUR", status: "active", contract_renewal_date: isoIn(n) }) });
+}
+await page.reload();
+await page.waitForSelector("tbody tr");
+const soonRow = rowOf("Renueva en 30 dias"), lateRow = rowOf("Renueva en 61 dias");
+ok(/Renueva en 30 días/.test(await soonRow.innerText()) && !/Renueva en \d+ días/.test(await lateRow.innerText()), "renovación a 30 días muestra aviso; a 61 días no");
+const border = (r) => r.locator("td").first().evaluate((e) => getComputedStyle(e).borderLeftWidth);
+ok((await border(soonRow)) === "4px" && (await border(lateRow)) === "0px", "renovación próxima: borde ámbar visible en la fila; la lejana no lo tiene");
+ok(/Fecha vencida/.test(await rowOf("LinkedIn").innerText()), "fecha pasada: 'Fecha vencida' en rojo");
 
 ok(errors.length === 0, `sin errores de consola/página (${errors.length}) ${errors.slice(0, 2).join(" || ")}`);
 console.log(fails === 0 ? "\nALL OK" : `\n${fails} FAILED`);
