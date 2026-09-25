@@ -10,7 +10,7 @@ from tinydb import TinyDB
 
 from main import app
 from seed import seed_database
-from suppliers import service
+import database
 
 NEW = {
     "name": "Proveedor Nuevo",
@@ -24,11 +24,11 @@ NEW = {
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch) -> TestClient:
-    database = TinyDB(tmp_path / "db.json")
-    seed_database(database)
-    monkeypatch.setattr(service, "_db", database)
+    db_file = TinyDB(tmp_path / "db.json")
+    seed_database(db_file)
+    monkeypatch.setattr(database, "_db", db_file)
     yield TestClient(app)
-    database.close()
+    db_file.close()
 
 
 def test_post_creates_supplier_and_returns_full_object_with_id(client):

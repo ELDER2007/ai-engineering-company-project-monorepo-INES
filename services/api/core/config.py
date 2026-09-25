@@ -23,5 +23,5 @@ def get_allowed_origins() -> list[str]:
 
 
 def get_suppliers_db_path() -> Path:
-    """TinyDB file for the suppliers domain (gitignored runtime state)."""
-    return Path(__file__).resolve().parent.parent / "suppliers" / "db.json"
+    """TinyDB file for the supplier directory (gitignored runtime state)."""
+    return Path(__file__).resolve().parent.parent / "db.json"

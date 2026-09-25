@@ -1,4 +1,4 @@
-"""Business logic for the suppliers domain (Directorio de Proveedores).
+"""TinyDB initialisation and data access for the suppliers directory.
 
 Backed by TinyDB rather than a full RDBMS: a small internal directory with a
 still-settling data model doesn't need more, and Postgres comes later once the
@@ -23,7 +23,7 @@ from tinydb import Query, TinyDB
 from core.config import get_suppliers_db_path
 from seed import seed_database
 
-from .schemas import (
+from models import (
     SupplierCategory,
     SupplierCreate,
     SupplierOut,

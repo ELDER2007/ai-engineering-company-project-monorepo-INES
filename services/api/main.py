@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_allowed_origins
 from incidents.router import router as incidents_router
-from suppliers.router import router as suppliers_router
+from routes.suppliers import router as suppliers_router
 
 app = FastAPI(title="Nexova API")
 

@@ -22,7 +22,7 @@ seed = "seed:main"
 incidents-analyzer = { path = "../../packages/incidents_analyzer", editable = true }
 
 [tool.setuptools]
-py-modules = ["main", "seed"]
+py-modules = ["main", "seed", "models", "database"]
 
 [tool.setuptools.packages.find]
-include = ["core*", "incidents*", "suppliers*"]
+include = ["core*", "incidents*", "routes*"]

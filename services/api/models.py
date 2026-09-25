@@ -1,4 +1,4 @@
-"""Pydantic contracts for the suppliers domain (Directorio de Proveedores).
+"""Pydantic models for the suppliers domain (Directorio de Proveedores).
 
 These are the only gate the data has: anything that doesn't fit — a
 missing country, a status outside the two allowed values, a currency that
