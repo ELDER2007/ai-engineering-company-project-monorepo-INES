@@ -22,7 +22,8 @@ app.add_middleware(
 )
 
 app.include_router(incidents_router)
-app.include_router(suppliers_router)
+app.include_router(suppliers_router, prefix="/suppliers")
+app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=False)
 
 
 @app.get("/health")
