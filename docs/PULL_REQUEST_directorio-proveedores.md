@@ -1,11 +1,3 @@
-# Texto del Pull Request — Directorio de proveedores
-
-Copia el título y el cuerpo en el Pull Request al repositorio original.
-
-**Título sugerido:** `Directorio de proveedores: API FastAPI + TinyDB + Pydantic y página en uis/application`
-
----
-
 ## Qué incluye
 
 API de gestión de proveedores de Nexova (FastAPI + TinyDB + Pydantic) con seeder, y la página del directorio en el frontend. Sustituye la hoja de cálculo de Patricia por una única fuente de verdad.
