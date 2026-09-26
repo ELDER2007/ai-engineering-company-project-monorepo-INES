@@ -33,15 +33,15 @@ Tests: `cd services/api && uv run --with pytest --with httpx pytest -q` (42) y, 
 
 **1. Salida de `uv run seed`** (primera ejecución sobre una base vacía y una repetida: no duplica). Salida real del comando, renderizada como imagen.
 
-![uv run seed](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/blob/delivery/suppliers-directory/docs/screenshots/suppliers-seed.png?raw=true)
+![uv run seed](https://raw.githubusercontent.com/ELDER2007/ai-engineering-company-project-monorepo-INES/delivery/suppliers-directory/docs/screenshots/suppliers-seed.png)
 
 **2. Endpoint de filtrado en Swagger UI:** `GET /suppliers?country=USA` devuelve solo los proveedores de USA.
 
-![Swagger filtro por país](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/blob/delivery/suppliers-directory/docs/screenshots/suppliers-swagger-filter.png?raw=true)
+![Swagger filtro por país](https://raw.githubusercontent.com/ELDER2007/ai-engineering-company-project-monorepo-INES/delivery/suppliers-directory/docs/screenshots/suppliers-swagger-filter.png)
 
 **3. Listado en la interfaz web con un filtro aplicado** (país = USA, 7 proveedores; los suspendidos se ven atenuados).
 
-![Listado con filtro](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/blob/delivery/suppliers-directory/docs/screenshots/suppliers-ui-filter.png?raw=true)
+![Listado con filtro](https://raw.githubusercontent.com/ELDER2007/ai-engineering-company-project-monorepo-INES/delivery/suppliers-directory/docs/screenshots/suppliers-ui-filter.png)
 
 ## Requisitos del proyecto
 
