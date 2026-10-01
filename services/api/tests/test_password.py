@@ -472,3 +472,84 @@ def test_a_token_whose_own_expiry_passed_is_refused_even_if_the_store_still_hold
     assert response.status_code == 400 and response.json() == {"detail": "Invalid or expired reset link"}
     assert login(client, BOB, PASSWORD).status_code == 200
 
+
+
+def test_a_resend_refusal_is_reported_with_its_reason(real_send, monkeypatch):
+    import io
+    import urllib.error
+
+    def refuse(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url, 403, "Forbidden", {}, io.BytesIO(b'{"message":"You can only send testing emails to your own email address"}')
+        )
+
+    monkeypatch.setattr(mailer.urllib.request, "urlopen", refuse)
+    monkeypatch.setenv("EMAIL_BACKEND", "resend")
+    monkeypatch.setenv("EMAIL_FROM", "Nexova <onboarding@resend.dev>")
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    with pytest.raises(RuntimeError, match="Resend answered 403.*your own email address") as caught:
+        mailer.send(MAIL)
+    assert "re_test_key" not in str(caught.value)
+
+
+def _count_attempts(monkeypatch, outcomes):
+    """Replace the real send with a scripted one; returns the list of attempts made."""
+    attempts, sleeps = [], []
+
+    def scripted(mail):
+        attempts.append(mail)
+        outcome = outcomes[min(len(attempts) - 1, len(outcomes) - 1)]
+        if outcome is not None:
+            raise outcome
+
+    monkeypatch.setattr(mailer, "send", scripted)
+    monkeypatch.setattr(mailer.time, "sleep", sleeps.append)
+    return attempts, sleeps
+
+
+def test_a_transient_failure_is_retried_until_it_goes_through(monkeypatch, caplog):
+    attempts, sleeps = _count_attempts(monkeypatch, [mailer.TransientMailError("Resend answered 429"), OSError("down"), None])
+    mailer.deliver(MAIL)
+    assert len(attempts) == 3 and sleeps == [1, 3]
+    assert "Could not send" not in caplog.text
+
+
+def test_a_transient_failure_gives_up_after_three_attempts(monkeypatch, caplog):
+    attempts, _ = _count_attempts(monkeypatch, [mailer.TransientMailError("Resend answered 503")])
+    mailer.deliver(MAIL)
+    assert len(attempts) == 3 and "Could not send the email" in caplog.text
+
+
+def test_a_definitive_failure_is_not_retried(monkeypatch, caplog):
+    attempts, sleeps = _count_attempts(monkeypatch, [RuntimeError("Resend answered 403: domain not verified")])
+    mailer.deliver(MAIL)
+    assert len(attempts) == 1 and sleeps == [] and "Could not send the email" in caplog.text
+
+
+def test_resend_429_and_5xx_are_transient_but_403_is_not(real_send, monkeypatch):
+    import io
+    import urllib.error
+
+    def answering(code):
+        def urlopen(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, code, "x", {}, io.BytesIO(b"{}"))
+        return urlopen
+
+    monkeypatch.setenv("EMAIL_BACKEND", "resend")
+    monkeypatch.setenv("EMAIL_FROM", "Nexova <onboarding@resend.dev>")
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    for code, transient in ((429, True), (500, True), (503, True), (403, False), (422, False)):
+        monkeypatch.setattr(mailer.urllib.request, "urlopen", answering(code))
+        with pytest.raises(RuntimeError) as caught:
+            mailer.send(MAIL)
+        assert isinstance(caught.value, mailer.TransientMailError) is transient, code
+
+
+def test_smtp_auth_failure_is_definitive_but_a_4xx_is_transient():
+    import smtplib
+
+    assert not mailer._is_transient(smtplib.SMTPAuthenticationError(535, b"bad credentials"))
+    assert mailer._is_transient(smtplib.SMTPResponseException(451, b"try again later"))
+    assert mailer._is_transient(smtplib.SMTPServerDisconnected("connection lost"))
+    assert mailer._is_transient(ConnectionRefusedError())
+    assert not mailer._is_transient(ValueError("bug"))

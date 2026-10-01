@@ -37,7 +37,7 @@ Protection is applied on the routers themselves (`dependencies=[Depends(get_curr
 - **The link never comes from the request.** It is built from `FRONTEND_URL`, not from the `Host` header, so nobody can make the email point at another site.
 - **Changing it while logged in** — `POST /auth/change-password` with `{"current_password", "new_password"}` (`204`). A wrong current password is a `400` (not a `401`, which would mean "no session"); a new password equal to the current one is a `422`. `PUT /users/{id}` with `password` + `current_password` still works too.
 - **A notice is emailed** to the owner after every reset or change, without the password.
-- **Emails** are sent in a background task, after the response, through `core/mailer.py`. `EMAIL_BACKEND` picks how: `console` (default) prints them to the API's output instead of sending them, which is what you want in development: copy the link from the terminal. `smtp` works with any provider's SMTP relay, and `resend` uses Resend's HTTP API. A failed delivery is logged (without the link) and does not change the answer.
+- **Emails** are sent in a background task, after the response, through `core/mailer.py`. `EMAIL_BACKEND` picks how: `console` (default) prints them to the API's output instead of sending them, which is what you want in development: copy the link from the terminal. `smtp` works with any provider's SMTP relay, and `resend` uses Resend's HTTP API. A transient failure (network, `429`, `5xx`) is retried twice, 1 s and 3 s later; a definitive one (bad key, unverified sender) is not. If it still fails it is logged, with the provider's reason and without the link, and the answer does not change.
 
 ### Profiles (one-to-one with users)
 

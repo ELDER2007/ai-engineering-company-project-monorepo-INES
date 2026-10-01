@@ -21,6 +21,8 @@ import logging
 import os
 import smtplib
 import ssl
+import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -33,6 +35,11 @@ SMTP_SECURITY_MODES = ("starttls", "ssl", "none")
 DEFAULT_FROM = "Nexova <no-reply@nexova.local>"
 RESEND_URL = "https://api.resend.com/emails"
 TIMEOUT_SECONDS = 10
+RETRY_DELAYS = (1, 3)  # seconds before the 2nd and 3rd attempt; only for transient failures
+
+
+class TransientMailError(RuntimeError):
+    """The provider could not take the message right now (rate limit, outage): worth retrying."""
 
 
 @dataclass(frozen=True)
@@ -93,13 +100,32 @@ def send(mail: Mail) -> None:
         _send_console(mail)
 
 
+def _is_transient(exc: Exception) -> bool:
+    if isinstance(exc, TransientMailError):
+        return True
+    if isinstance(exc, smtplib.SMTPResponseException):  # the server answered: only 4xx ("try later") is transient
+        return 400 <= exc.smtp_code < 500
+    # No answer at all (DNS, refused, timeout, dropped connection). Every SMTP error is an OSError too,
+    # but the ones that carry an answer were handled above.
+    return isinstance(exc, (OSError, smtplib.SMTPServerDisconnected))
+
+
 def deliver(mail: Mail) -> None:
     """``send`` for background tasks: a failure is logged, never raised (the HTTP
-    response is already gone). The body is not logged: it may carry a reset link."""
-    try:
-        send(mail)
-    except Exception:
-        logger.exception("Could not send the email %r", mail.subject)
+    response is already gone). A transient one (network, rate limit, 5xx) is retried
+    twice first; a definitive one (bad key, unverified sender) is not. The body is
+    not logged: it may carry a reset link."""
+    for attempt in range(len(RETRY_DELAYS) + 1):
+        try:
+            send(mail)
+            return
+        except Exception as exc:
+            if attempt < len(RETRY_DELAYS) and _is_transient(exc):
+                logger.warning("Email %r not sent (%s); retrying", mail.subject, exc)
+                time.sleep(RETRY_DELAYS[attempt])
+                continue
+            logger.exception("Could not send the email %r", mail.subject)
+            return
 
 
 def _send_console(mail: Mail) -> None:
@@ -148,6 +174,12 @@ def _send_resend(mail: Mail) -> None:
         },
         method="POST",
     )
-    # urlopen raises HTTPError on a 4xx/5xx, which is what ``deliver`` logs.
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-        response.read()
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        # Resend says why in the body (unverified domain, rate limit, test-mode recipient...). It never
+        # echoes the API key, so it is safe to log.
+        reason = exc.read().decode("utf-8", errors="replace")[:300]
+        error = TransientMailError if exc.code == 429 or exc.code >= 500 else RuntimeError
+        raise error(f"Resend answered {exc.code}: {reason}") from None
