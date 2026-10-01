@@ -6,3 +6,6 @@ users/db.json
 
 # User profiles store (display names and contact data, created at runtime)
 profiles/db.json
+
+# Pending password-reset tokens (hashes only, created at runtime)
+auth/db.json

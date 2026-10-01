@@ -19,6 +19,9 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 JWT_ALGORITHM = "HS256"
 MIN_SECRET_KEY_LENGTH = 32
 DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES = 30
+DEFAULT_PASSWORD_RESET_EXPIRE_MINUTES = 30
+MIN_PASSWORD_RESET_EXPIRE_MINUTES = 15  # short enough to limit a leaked link, long enough for slow email
+MAX_PASSWORD_RESET_EXPIRE_MINUTES = 60
 
 
 def get_allowed_origins() -> list[str]:
@@ -83,3 +86,45 @@ def get_access_token_expire_minutes() -> int:
     if minutes <= 0:
         raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES must be a positive integer")
     return minutes
+
+
+def get_password_resets_db_path() -> Path:
+    """TinyDB file for the pending password-reset tokens (gitignored runtime state).
+
+    Only the SHA-256 of each token is stored. It is a separate file on purpose:
+    the user documents keep their fixed shape (see ``tests/test_architecture.py``)."""
+    return Path(__file__).resolve().parent.parent / "auth" / "db.json"
+
+
+def get_password_reset_expire_minutes() -> int:
+    """Lifetime of a password-reset link, from PASSWORD_RESET_EXPIRE_MINUTES (default 30, allowed 15-60)."""
+    raw = os.environ.get("PASSWORD_RESET_EXPIRE_MINUTES")
+    if not raw:
+        return DEFAULT_PASSWORD_RESET_EXPIRE_MINUTES
+    try:
+        minutes = int(raw)
+    except ValueError:
+        minutes = 0
+    if not MIN_PASSWORD_RESET_EXPIRE_MINUTES <= minutes <= MAX_PASSWORD_RESET_EXPIRE_MINUTES:
+        raise RuntimeError(
+            f"PASSWORD_RESET_EXPIRE_MINUTES must be an integer between "
+            f"{MIN_PASSWORD_RESET_EXPIRE_MINUTES} and {MAX_PASSWORD_RESET_EXPIRE_MINUTES}"
+        )
+    return minutes
+
+
+def get_frontend_url() -> str:
+    """Base URL of the backoffice, used to build the links sent by email (FRONTEND_URL).
+
+    It always comes from configuration, never from the request's ``Host`` header:
+    otherwise whoever asks for a reset could make the email point at their own site.
+    Unset, it falls back to the Codespace's forwarded URL or the local dev server.
+    """
+    raw = os.environ.get("FRONTEND_URL")
+    if raw:
+        return raw.rstrip("/")
+    codespace = os.environ.get("CODESPACE_NAME")
+    domain = os.environ.get("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
+    if codespace and domain:
+        return f"https://{codespace}-5174.{domain}"
+    return "http://localhost:5174"
