@@ -2,7 +2,7 @@
 
 Internal operations app, built with **Next.js 16 (App Router)**, React 19 and Tailwind. Tools: **Análisis de
 incidentes** (uploads a support-ticket CSV to `services/api` and shows the validation/metrics report),
-**Proveedores** (supplier directory) and **Mi perfil**.
+**Proveedores** (supplier directory), **Mi perfil** and **Cambiar contraseña**.
 
 ## Structure
 
@@ -12,18 +12,21 @@ src/
 │   ├── layout.tsx            root layout: <html>, metadata, <AuthProvider>
 │   ├── (public)/             no session needed
 │   │   ├── login/page.tsx
-│   │   └── register/page.tsx
+│   │   ├── register/page.tsx
+│   │   ├── forgot-password/page.tsx
+│   │   └── reset-password/page.tsx
 │   ├── (app)/                session required
 │   │   ├── layout.tsx        layout guard: <RequireAuth> + sidebar
 │   │   ├── page.tsx          /
 │   │   ├── incidents/        /incidents
 │   │   ├── suppliers/        /suppliers
-│   │   └── account/profile/  /account/profile
+│   │   ├── account/profile/  /account/profile
+│   │   └── account/change-password/ /account/change-password
 │   └── not-found.tsx         unknown URL → /
 ├── views/                    the page components (client components)
 ├── auth/                     AuthContext (useAuth hook) and RequireAuth (guard)
-├── lib/                      token.ts, api.ts, returnTo.ts, profileFields.ts
-└── components/               sidebar layout, incidents and suppliers widgets
+├── lib/                      token.ts, api.ts, returnTo.ts, profileFields.ts, password.ts
+└── components/               sidebar layout, the public pages' card, incidents and suppliers widgets
 ```
 
 `(public)` and `(app)` are route groups: they share a layout but do not appear in the URL. The route files
@@ -32,7 +35,8 @@ lives in the browser.
 
 ## Login
 
-The API only answers to a valid JWT, so every page except `/login` and `/register` needs a session. `/login` posts
+The API only answers to a valid JWT, so every page except `/login`, `/register`, `/forgot-password` and
+`/reset-password` needs a session. `/login` posts
 the email and password to `POST /auth/login` and keeps the returned token in `localStorage`; from then on every
 API call carries `Authorization: Bearer <token>` (`src/lib/api.ts`). Auth is stateless: no cookies and no
 server-side session. The token expires by itself (`ACCESS_TOKEN_EXPIRE_MINUTES` on the API); a `401` from the API,
@@ -44,8 +48,9 @@ or "Cerrar sesión", forgets the token and sends the user back to `/login`. You 
 
 | Views | Access |
 | --- | --- |
-| `/login`, `/register` | Public (a logged-in user is sent to the app) |
-| `/`, `/incidents`, `/suppliers`, `/account/profile`, and any unknown URL | Session required |
+| `/login`, `/register`, `/forgot-password` | Public (a logged-in user is sent to the app) |
+| `/reset-password` | Public, with or without a session (the emailed token says whose password it is) |
+| `/`, `/incidents`, `/suppliers`, `/account/profile`, `/account/change-password`, and any unknown URL | Session required |
 
 The public website (`uis/website`) has no authentication at all and must stay that way.
 
@@ -59,7 +64,8 @@ The public website (`uis/website`) has no authentication at all and must stay th
   answers `401` without a valid token.
 - **Storing:** login and a successful sign-up store the token in `localStorage` (`src/lib/token.ts`).
 - **Sending:** every protected call goes through `apiFetch` (`src/lib/api.ts`), which adds
-  `Authorization: Bearer <token>`. Only `POST /auth/login` and `POST /users` go without it.
+  `Authorization: Bearer <token>`. Only `POST /auth/login`, `POST /users`, `POST /auth/forgot-password` and
+  `POST /auth/reset-password` go without it.
 - **Logout:** removes the token and goes to `/login`; the next login starts at `/`.
 - **401:** a protected call answered `401` removes the token and goes to `/login?next=<that page>`. A late `401`
   for a token that has since been replaced does not end the newer session.
@@ -74,10 +80,28 @@ The API creates sign-ups active, so the new user is in straight away. If that au
 or an admin switched the account off in between), the page says the account was created and points to `/login`;
 it is never reported as a failed sign-up.
 
+## Forgotten and changed passwords
+
+- **Forgotten** — "¿Olvidaste tu contraseña?" on `/login` goes to `/forgot-password`, which posts the email to
+  `POST /auth/forgot-password` and then shows the same notice whether the account exists or not (the API does not
+  say, and neither does the page). The email links to `/reset-password?token=…`, where the new password is typed
+  twice and sent with the token to `POST /auth/reset-password`. A used, expired or made-up link (`400`) shows
+  "enlace no válido" with a way to ask for another. Resetting does not log in: the page sends to `/login`.
+  The page declares a `no-referrer` policy, so the token in the URL is never sent to another site.
+- **Changed** — `/account/change-password` (sidebar: "Cambiar contraseña") asks for the current password and the new one
+  twice, and posts to `POST /auth/change-password`. A wrong current password is a `400`, shown next to the field;
+  it is not a `401`, so it does not end the session. The open session keeps working after the change.
+- The three forms check the API's password rules (8 characters, 72 bytes) before sending (`src/lib/password.ts`).
+- In development the API prints the emails instead of sending them (`EMAIL_BACKEND=console`): copy the reset link
+  from the API's terminal. See `services/api/README.md`.
+
 ## Pages
 
 - `/login` — sign-in form.
 - `/register` — sign-up form (account + optional profile), then automatic login.
+- `/forgot-password` — asks for the email and requests the reset link.
+- `/reset-password` — where the emailed link lands: choose the new password.
+- `/account/change-password` — change your password (needs the current one).
 - `/account/profile` — your email (read-only) and your profile (name, phone, address), loaded from `GET /auth/me`
   and saved with `PUT /profiles/me` (bearer token; only the changed fields, an emptied field is sent as `null`,
   which clears it).
@@ -129,5 +153,8 @@ With the API and the backoffice running (`npm run dev`, or `npm run build && npm
 - `npm run e2e:guard` — route protection, open-redirect check, several tabs; also opens the public website on
   `:5173` (skip with `E2E_WEBSITE_URL=none`).
 - `npm run e2e:token` — token lifecycle (needs the supplier seed).
+- `npm run e2e:password` — forgotten and changed password. Needs no `E2E_EMAIL`: it signs up its own user. To
+  cover the emailed link too, run the API with `EMAIL_BACKEND=console FRONTEND_URL=http://localhost:5174`, send
+  its output to a file and pass it as `E2E_API_LOG=<file>`; without it those steps are skipped.
 
-All five pass against `next dev` and against the production build. See the header of each file in `e2e/`.
+All six pass against `next dev` and against the production build. See the header of each file in `e2e/`.

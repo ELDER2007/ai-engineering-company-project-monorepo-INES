@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import AuthShell from "../components/AuthShell";
 import { ApiError } from "../lib/api";
+import { validateNewPassword } from "../lib/password";
 import { validateProfileFields } from "../lib/profileFields";
 import type { SignUpPayload } from "../types/auth";
 
 const inputClass =
   "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none aria-[invalid=true]:border-rose-500";
 
-// Same limits as the API (services/api/users/schemas.py, UserCreate); the profile ones live in lib/profileFields.
-const PASSWORD_MIN = 8;
-const PASSWORD_MAX_BYTES = 72;
+// The API's own limits (services/api/users/schemas.py, UserCreate) live in lib/password and lib/profileFields.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Field = "email" | "password" | "confirmPassword" | "name" | "phone" | "address";
@@ -29,11 +29,8 @@ function validate(form: Form): FieldErrors {
   if (!email) errors.email = "El email es obligatorio.";
   else if (!EMAIL_PATTERN.test(email)) errors.email = "El email no es válido.";
 
-  if (!form.password) errors.password = "La contraseña es obligatoria.";
-  else if (form.password.length < PASSWORD_MIN)
-    errors.password = `La contraseña debe tener al menos ${PASSWORD_MIN} caracteres.`;
-  else if (new TextEncoder().encode(form.password).length > PASSWORD_MAX_BYTES)
-    errors.password = `La contraseña es demasiado larga (máximo ${PASSWORD_MAX_BYTES} bytes).`;
+  const passwordError = validateNewPassword(form.password);
+  if (passwordError) errors.password = passwordError;
 
   if (form.confirmPassword !== form.password) errors.confirmPassword = "Las contraseñas no coinciden.";
 
@@ -110,7 +107,7 @@ export default function RegisterPage() {
 
   if (created) {
     return (
-      <Shell>
+      <AuthShell title="Crear cuenta">
         <div role="status" className="mt-6 flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
           <p>Cuenta creada, pero no se pudo iniciar sesión automáticamente. Inicia sesión con tus datos.</p>
@@ -121,7 +118,7 @@ export default function RegisterPage() {
         >
           Ir a iniciar sesión
         </Link>
-      </Shell>
+      </AuthShell>
     );
   }
 
@@ -140,7 +137,7 @@ export default function RegisterPage() {
     );
 
   return (
-    <Shell>
+    <AuthShell title="Crear cuenta">
       <form onSubmit={handleSubmit} noValidate>
         <div className="mt-4 text-sm text-slate-300">
           <label className="block">
@@ -208,21 +205,6 @@ export default function RegisterPage() {
           Inicia sesión
         </Link>
       </p>
-    </Shell>
-  );
-}
-
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <p className="text-xl font-black text-white">
-          nexova<span className="text-cyan-400">.</span>
-        </p>
-        <p className="text-xs uppercase tracking-widest text-slate-500">Backoffice</p>
-        <h1 className="mt-6 text-lg font-semibold text-white">Crear cuenta</h1>
-        {children}
-      </div>
-    </div>
+    </AuthShell>
   );
 }
