@@ -49,13 +49,16 @@ You are building **one company** across many milestones and projects. Each top-l
 
 ---
 
-## Current status of the template
+## Current project status
 
-> 💡 This repository currently provides a **base folder structure and documentation skeleton** only. It does not include runnable apps or global scripts yet.
->
-> - `CONTEXT.md` is a placeholder and must be replaced with your assigned company context.
-> - There is no root `AGENTS.md` yet.
-> - Shared package metadata exists in `packages/shared/package.json` (`@repo/shared-types`), but no workspace runner is configured at root.
+This monorepo already contains runnable applications for Nexova:
+
+- `services/api`: FastAPI backend with authentication, profiles, suppliers, and incident analysis.
+- `uis/backoffice`: Next.js app with sign-up, login, password reset/change, and protected views.
+- `uis/website`: public website built with Vite.
+- The root provides npm commands for development, builds, and type checks for both frontends. Run the API test suite from `services/api` with pytest.
+
+`CONTEXT.md` contains the public website brief. `CONTEXT.es.md` is a separate incident-analysis brief, not a translation; see [`scripts/CONTEXT-nexova.md`](./scripts/CONTEXT-nexova.md) for the analyzer requirements. See each app’s README for setup and configuration instructions.
 
 ---
 

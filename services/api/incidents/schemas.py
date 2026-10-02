@@ -9,10 +9,14 @@ from pydantic import BaseModel
 
 
 class InvalidBreakdownOut(BaseModel):
+    invalid_or_missing_ticket_id: int
+    duplicate_ticket_id: int
+    invalid_or_missing_date: int
     missing_client_company: int
     invalid_or_missing_category: int
     invalid_description: int
     invalid_or_missing_agent_id: int
+    invalid_or_missing_status: int
     invalid_or_missing_email: int
     closed_without_score: int
     score_out_of_range: int

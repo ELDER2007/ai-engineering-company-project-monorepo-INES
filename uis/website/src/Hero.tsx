@@ -86,30 +86,6 @@ export default function Hero({ onNavigate }: { onNavigate: () => void }) {
             </button>
           </div>
 
-          {/* ── Social proof ── */}
-          <div className="animate-fade-up delay-5 mt-2 flex flex-wrap items-center gap-6 text-sm text-slate-500">
-            <span className="flex items-center gap-2">
-              <span
-                className="inline-flex size-2 rounded-full bg-green-400"
-                aria-hidden="true"
-              />
-              Confianza verificada
-            </span>
-            <span className="flex items-center gap-2">
-              <span
-                className="inline-flex size-2 rounded-full bg-cyan-400"
-                aria-hidden="true"
-              />
-              Tasa de retenci&oacute;n &gt;90%
-            </span>
-            <span className="flex items-center gap-2">
-              <span
-                className="inline-flex size-2 rounded-full bg-indigo-400"
-                aria-hidden="true"
-              />
-              Clientes recurrentes
-            </span>
-          </div>
         </div>
 
         {/* ── Columna derecha: tarjeta glassmorphism con métricas ── */}

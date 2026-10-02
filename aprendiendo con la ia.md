@@ -449,7 +449,7 @@ Esto hace que cuando el frontend llama a `/api/suppliers`, Vite lo reenvía a `h
 
 ### 📝 Tests (pytest)
 
-Tenemos **155 tests** que verifican TODO:
+La API cuenta con **206 tests automatizados** que verifican sus contratos y reglas principales:
 
 ```python
 # tests/test_suppliers_validation.py
@@ -791,7 +791,7 @@ curl http://localhost:8000/suppliers \
 
 - ✅ **Separación de responsabilidades** — frontend ≠ backend ≠ base de datos
 - ✅ **Validaciones en ambos lados** — frontend (UX rápida) + backend (seguridad)
-- ✅ **Tests automatizados** — 155 tests que verifican que todo funciona
+- ✅ **Tests automatizados** — 206 tests de API que verifican contratos y reglas principales
 - ✅ **Accesibilidad** — aria-labels, focus-visible, prefers-reduced-motion
 - ✅ **SEO** — Schema.org markup, HTML semántico
 - ✅ **Código compartido** — incidents_analyzer lo usan CLI y API

@@ -16,7 +16,9 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date
 from typing import IO, Iterable
 
 VALID_CATEGORIES: tuple[str, ...] = (
@@ -42,6 +44,8 @@ REQUIRED_COLUMNS: tuple[str, ...] = (
 )
 
 _AGENT_ID_PATTERN = re.compile(r"^AGT-\d{2}$")
+_TICKET_ID_PATTERN = re.compile(r"^NXV-\d{6}$")
+_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def missing_required_columns(fieldnames: Iterable[str] | None) -> list[str]:
@@ -53,10 +57,14 @@ def missing_required_columns(fieldnames: Iterable[str] | None) -> list[str]:
 # labels for reports. Keys are stable identifiers used in JSON/CSV output;
 # labels are only for display.
 _INVALID_RULES: tuple[tuple[str, str], ...] = (
+    ("invalid_or_missing_ticket_id", "Invalid or missing ticket_id"),
+    ("duplicate_ticket_id", "Duplicate ticket_id"),
+    ("invalid_or_missing_date", "Invalid or missing date"),
     ("missing_client_company", "Missing client_company"),
     ("invalid_or_missing_category", "Invalid or missing category"),
     ("invalid_description", "Invalid or missing description"),
     ("invalid_or_missing_agent_id", "Invalid or missing agent_id"),
+    ("invalid_or_missing_status", "Invalid or missing status"),
     ("invalid_or_missing_email", "Invalid or missing email"),
     ("closed_without_score", "Closed ticket, no score"),
     ("score_out_of_range", "Satisfaction score out of range"),
@@ -68,10 +76,14 @@ class InvalidBreakdown:
     """Count of records per invalid-record rule (a record may trigger more
     than one rule, so these counts do not have to sum to ``invalid_records``)."""
 
+    invalid_or_missing_ticket_id: int = 0
+    duplicate_ticket_id: int = 0
+    invalid_or_missing_date: int = 0
     missing_client_company: int = 0
     invalid_or_missing_category: int = 0
     invalid_description: int = 0
     invalid_or_missing_agent_id: int = 0
+    invalid_or_missing_status: int = 0
     invalid_or_missing_email: int = 0
     closed_without_score: int = 0
     score_out_of_range: int = 0
@@ -131,16 +143,37 @@ def read_rows(source: str | IO[str]) -> list[dict[str, str]]:
     and the backend.
     """
     if isinstance(source, str):
-        with open(source, newline="", encoding="utf-8") as handle:
-            return list(csv.DictReader(handle))
+        with open(source, newline="", encoding="utf-8-sig") as handle:
+            reader = csv.DictReader(handle)
+            missing = missing_required_columns(reader.fieldnames)
+            if missing:
+                raise ValueError(f"Missing required columns: {', '.join(missing)}")
+            return list(reader)
     if isinstance(source, io.TextIOBase) or hasattr(source, "read"):
-        return list(csv.DictReader(source))
+        reader = csv.DictReader(source)
+        missing = missing_required_columns(reader.fieldnames)
+        if missing:
+            raise ValueError(f"Missing required columns: {', '.join(missing)}")
+        return list(reader)
     raise TypeError(f"Unsupported CSV source type: {type(source)!r}")
 
 
 def _validate_record(row: dict[str, str]) -> list[str]:
     """Return the list of rule keys violated by a single row. Empty means valid."""
     violations: list[str] = []
+
+    ticket_id = (row.get("ticket_id") or "").strip()
+    if not _TICKET_ID_PATTERN.fullmatch(ticket_id):
+        violations.append("invalid_or_missing_ticket_id")
+
+    raw_date = (row.get("date") or "").strip()
+    if not _DATE_PATTERN.fullmatch(raw_date):
+        violations.append("invalid_or_missing_date")
+    else:
+        try:
+            date.fromisoformat(raw_date)
+        except ValueError:
+            violations.append("invalid_or_missing_date")
 
     if not (row.get("client_company") or "").strip():
         violations.append("missing_client_company")
@@ -162,6 +195,8 @@ def _validate_record(row: dict[str, str]) -> list[str]:
         violations.append("invalid_or_missing_email")
 
     status = (row.get("status") or "").strip()
+    if status not in VALID_STATUSES:
+        violations.append("invalid_or_missing_status")
     raw_score = (row.get("satisfaction_score") or "").strip()
 
     if status == "CLOSED" and not raw_score:
@@ -185,6 +220,14 @@ def _parse_int(value: str) -> int | None:
 def analyze(rows: Iterable[dict[str, str]], source_name: str) -> AnalysisResult:
     rows = list(rows)
     total_records = len(rows)
+    ticket_ids = [
+        (row.get("ticket_id") or "").strip()
+        for row in rows
+        if (row.get("ticket_id") or "").strip()
+    ]
+    duplicate_ticket_ids = {
+        ticket_id for ticket_id, count in Counter(ticket_ids).items() if count > 1
+    }
 
     invalid_breakdown = InvalidBreakdown()
     category_counts = {category: 0 for category in VALID_CATEGORIES}
@@ -196,6 +239,9 @@ def analyze(rows: Iterable[dict[str, str]], source_name: str) -> AnalysisResult:
 
     for row in rows:
         violations = _validate_record(row)
+        ticket_id = (row.get("ticket_id") or "").strip()
+        if ticket_id in duplicate_ticket_ids:
+            violations.append("duplicate_ticket_id")
 
         if violations:
             for rule_key in violations:

@@ -49,13 +49,16 @@ Estás construyendo **una sola empresa** a lo largo de muchos hitos y proyectos.
 
 ---
 
-## Estado actual de la plantilla
+## Estado actual del proyecto
 
-> 💡 Actualmente el repositorio ofrece solo una **estructura base de carpetas y documentación**. Todavía no incluye aplicaciones ejecutables ni scripts globales en la raíz.
->
-> - `CONTEXT.md` es un placeholder y debe sustituirse por el contexto de la empresa asignada.
-> - No existe todavía un `AGENTS.md` en la raíz.
-> - Existe metadata del paquete compartido en `packages/shared/package.json` (`@repo/shared-types`), pero aún no hay runner de workspace en raíz.
+El monorepo ya contiene aplicaciones ejecutables para Nexova:
+
+- `services/api`: API FastAPI con autenticación, perfiles, proveedores y análisis de incidencias.
+- `uis/backoffice`: aplicación Next.js con registro, inicio de sesión, recuperación/cambio de contraseña y vistas protegidas.
+- `uis/website`: sitio público construido con Vite.
+- La raíz ofrece comandos npm para desarrollo, compilación y comprobación de tipos de ambos frontends. La suite de la API se ejecuta desde `services/api` con pytest.
+
+`CONTEXT.md` contiene el briefing del sitio web público. `CONTEXT.es.md` es un briefing independiente para el análisis de incidencias, no una traducción; consulta [`scripts/CONTEXT-nexova.md`](./scripts/CONTEXT-nexova.md) para los requisitos del analizador. Consulta el README de cada aplicación para sus instrucciones de ejecución y configuración.
 
 ---
 

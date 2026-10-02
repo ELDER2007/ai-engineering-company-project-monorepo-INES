@@ -72,6 +72,7 @@ await page.waitForURL(`${APP}/suppliers?country=Spain`);
 ok(where(page) === "/suppliers?country=Spain", "tras el login vuelve a /suppliers?country=Spain");
 await page.goto(`${APP}/no-existe`);
 await page.waitForURL(`${APP}/`);
+await page.getByTestId("current-user").waitFor();
 ok(where(page) === "/", "con sesión, una URL desconocida lleva al inicio");
 
 // 4. token borrado a mano en la misma pestaña (sin pasar por la app): la siguiente navegación pide login

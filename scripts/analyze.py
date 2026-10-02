@@ -36,15 +36,15 @@ def main(argv: list[str]) -> int:
 
     try:
         rows = read_rows(str(csv_path))
-    except (OSError, csv.Error) as exc:
+    except (OSError, csv.Error, ValueError) as exc:
         print(f"Error: could not read CSV file: {exc}", file=sys.stderr)
         return 1
 
     result = analyze(rows, source_name=csv_path.name)
     print(format_report(result))
 
-    answer = input("¿Deseas exportar los resultados a CSV? [s / n]: ").strip().lower()
-    if answer == "s":
+    answer = input("Export results to CSV? [y / n]: ").strip().lower()
+    if answer in {"y", "s"}:
         export_path = csv_path.parent / "results.csv"
         export_rows = to_export_rows(result)
         with open(export_path, "w", newline="", encoding="utf-8") as handle:
