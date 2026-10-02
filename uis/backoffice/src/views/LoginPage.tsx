@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../lib/api";
 import { currentReturnTo } from "../lib/returnTo";
@@ -18,6 +18,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [passwordReset, setPasswordReset] = useState(false);
+
+  // Sent here by /reset-password after a successful reset (?reset=ok).
+  useEffect(() => {
+    setPasswordReset(new URLSearchParams(window.location.search).get("reset") === "ok");
+  }, []);
 
   // Logged in (by this form, by another tab, or already when opening /login): go to ?next= or the home page.
   useEffect(() => {
@@ -61,6 +67,12 @@ export default function LoginPage() {
         </p>
         <p className="text-xs uppercase tracking-widest text-slate-500">Backoffice</p>
         <h1 className="mt-6 text-lg font-semibold text-white">Iniciar sesión</h1>
+        {passwordReset && (
+          <div role="status" className="mt-4 flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            <p>Contraseña actualizada. Inicia sesión con la nueva.</p>
+          </div>
+        )}
 
         <label className="mt-4 block text-sm text-slate-300">
           Email
@@ -82,6 +94,12 @@ export default function LoginPage() {
             className={`${inputClass} mt-1`}
           />
         </label>
+
+        <p className="mt-2 text-right text-sm">
+          <Link href="/forgot-password" className="text-cyan-300 hover:text-cyan-200">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
 
         {error && (
           <div role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">

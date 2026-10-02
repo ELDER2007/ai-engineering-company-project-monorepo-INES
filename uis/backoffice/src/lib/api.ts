@@ -79,6 +79,42 @@ export async function register(payload: SignUpPayload): Promise<SignUpOut> {
   return response.json();
 }
 
+/** POST /auth/forgot-password. Resolves whether the account exists or not: the API never says which. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+}
+
+/** POST /auth/reset-password with the token of the emailed link. A 400 means the link is spent or expired. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+}
+
+/** POST /auth/change-password for the session's own account. A 400 means the current password is wrong. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await apiFetch("/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) {
+    throw await toApiError(response);
+  }
+}
+
 export async function fetchMe(): Promise<Me> {
   const response = await apiFetch("/auth/me");
   if (!response.ok) {

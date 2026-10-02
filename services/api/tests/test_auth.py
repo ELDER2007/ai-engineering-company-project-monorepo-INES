@@ -171,6 +171,8 @@ def test_changing_the_email_keeps_the_session(client, users_db):
 PUBLIC = {
     ("post", "/auth/login"),
     ("post", "/users"),  # sign-up: how an account starts
+    ("post", "/auth/forgot-password"),  # whoever forgot the password has no session
+    ("post", "/auth/reset-password"),  # ...and proves ownership with the emailed token
     ("get", "/health"),
 }
 
@@ -239,7 +241,7 @@ def test_sensitive_routes_answer_401_without_a_token(client):
         ("patch", "/suppliers/1/status"), ("delete", "/suppliers/1"),
         ("get", "/api/suppliers/1"), ("post", "/api/suppliers"), ("delete", "/api/suppliers/1"),
         ("post", "/api/incidents/analyze"), ("get", "/api/incidents/results/export"),
-        ("get", "/auth/me"),
+        ("get", "/auth/me"), ("post", "/auth/change-password"),
         ("get", "/profiles"), ("get", "/profiles/me"), ("get", f"/profiles/{uid}"),
         ("put", "/profiles/me"),
         ("get", "/users"), ("get", f"/users/{uid}"), ("put", f"/users/{uid}"),

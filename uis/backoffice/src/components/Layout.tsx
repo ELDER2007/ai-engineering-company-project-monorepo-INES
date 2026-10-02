@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileBarChart, LayoutDashboard, LogOut, Truck, UserCircle } from "lucide-react";
+import { FileBarChart, KeyRound, LayoutDashboard, LogOut, Truck, UserCircle } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/incidents", label: "Análisis de incidentes", icon: FileBarChart, end: false },
   { href: "/suppliers", label: "Proveedores", icon: Truck, end: false },
   { href: "/account/profile", label: "Mi perfil", icon: UserCircle, end: false },
+  { href: "/account/change-password", label: "Cambiar contraseña", icon: KeyRound, end: false },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

@@ -13,7 +13,16 @@ from enum import StrEnum
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field, StringConstraints, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 
 from profiles.fields import ADDRESS_MAX, NAME_MAX, PHONE_PATTERN
 
@@ -34,6 +43,9 @@ def _check_password_bytes(value: str | None) -> str | None:
 
 # Emails are case-insensitive for our purposes: stored and compared lower-cased.
 Email = Annotated[EmailStr, BeforeValidator(_normalize_email)]
+
+# A new password, with the same rules as sign-up, for the contracts outside this module.
+NewPassword = Annotated[str, Field(min_length=8), AfterValidator(_check_password_bytes)]
 
 
 class Role(StrEnum):
