@@ -105,6 +105,9 @@ class AnalysisResult:
     category_counts: dict[str, int]
     status_counts: dict[str, int]
     satisfaction: SatisfactionBreakdown
+    # Rows that pass every rule of the CONTEXT but whose status is not OPEN / CLOSED / DISCARDED. They are not
+    # valid (so they are in ``invalid_records``) but break none of the seven rules, which must not be extended.
+    unrecognised_status: int = 0
 
     def category_percentages(self) -> dict[str, float]:
         return _percentages(self.category_counts, self.valid_records)
@@ -127,7 +130,7 @@ def read_rows(source: str | IO[str]) -> list[dict[str, str]]:
     and the backend.
     """
     if isinstance(source, str):
-        with open(source, newline="", encoding="utf-8") as handle:
+        with open(source, newline="", encoding="utf-8-sig") as handle:  # -sig: a BOM must not rename the first column
             return list(csv.DictReader(handle))
     if isinstance(source, io.TextIOBase) or hasattr(source, "read"):
         return list(csv.DictReader(source))
@@ -192,6 +195,7 @@ def analyze(rows: Iterable[dict[str, str]], source_name: str) -> AnalysisResult:
     satisfaction = SatisfactionBreakdown()
 
     valid_records = 0
+    unrecognised_status = 0
     score_sum = 0
 
     for row in rows:
@@ -202,9 +206,13 @@ def analyze(rows: Iterable[dict[str, str]], source_name: str) -> AnalysisResult:
                 invalid_breakdown.increment(rule_key)
             continue
 
+        status = (row.get("status") or "").strip()
+        if status not in status_counts:
+            unrecognised_status += 1  # not counted as valid, and no KeyError on a status nobody defined
+            continue
+
         valid_records += 1
         category_counts[row["category"].strip()] += 1
-        status = row["status"].strip()
         status_counts[status] += 1
 
         if status == "CLOSED":
@@ -228,6 +236,7 @@ def analyze(rows: Iterable[dict[str, str]], source_name: str) -> AnalysisResult:
         category_counts=category_counts,
         status_counts=status_counts,
         satisfaction=satisfaction,
+        unrecognised_status=unrecognised_status,
     )
 
 
@@ -259,6 +268,13 @@ def format_report(result: AnalysisResult) -> str:
         for i, (label, count) in enumerate(invalid_items):
             branch = "└─" if i == len(invalid_items) - 1 else "├─"
             lines.append(_dotted_line(branch, label, str(count), pad_to=pad_to))
+        lines.append("")
+
+    if result.unrecognised_status:
+        lines.append(
+            f"NOTE: {result.unrecognised_status} record(s) have a status other than OPEN, CLOSED or DISCARDED "
+            "and are counted as invalid."
+        )
         lines.append("")
 
     lines.append("BREAKDOWN BY CATEGORY (valid records)")

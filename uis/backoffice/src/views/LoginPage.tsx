@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../lib/api";
+import { describeError } from "../lib/errors";
 import { currentReturnTo } from "../lib/returnTo";
 
 const inputClass =
@@ -41,8 +42,8 @@ export default function LoginPage() {
       // admin has switched off, so the message covers all three.
       setError(
         err instanceof ApiError && err.status === 401
-          ? "Email o contraseña incorrectos, o la cuenta está desactivada."
-          : "No se pudo iniciar sesión. Inténtalo de nuevo.",
+          ? "Email o contraseña incorrectos, o la cuenta está desactivada. Revisa los datos; si la cuenta está desactivada, pide a un administrador que la active."
+          : describeError(err, "No se pudo iniciar sesión. Inténtalo de nuevo."),
       );
     } finally {
       setSubmitting(false);

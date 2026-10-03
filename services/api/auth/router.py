@@ -8,6 +8,7 @@ Mounted once in ``main.py``, at ``/auth``.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,6 +22,8 @@ from .dependencies import CurrentUser
 from .schemas import MeOut, Token
 from .security import create_access_token
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["auth"])
 
 
@@ -28,6 +31,7 @@ router = APIRouter(tags=["auth"])
 async def login(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
     user = service.authenticate(form.username, form.password)  # username = email
     if user is None:
+        logger.warning("Failed login attempt")  # no email: it may be someone else's, or a password typed as a user name
         # Same answer for an unknown email and a wrong password.
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,

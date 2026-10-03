@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from auth.dependencies import CurrentUser, get_current_user
+from users.schemas import Role
 
 from . import incident_service as service
 from .incident_schemas import (
@@ -37,6 +38,11 @@ router = APIRouter(
 def _field_error(field: str, message: str) -> HTTPException:
     detail = [{"loc": ["body", field], "msg": message, "type": "value_error"}]
     return HTTPException(422, detail=detail)
+
+
+def _sees_everything(user: CurrentUser) -> bool:
+    """Only an admin sees the customer's full email and the staff emails in the history."""
+    return user.role == Role.admin
 
 
 def get_filters(
@@ -94,13 +100,13 @@ async def incidents_facets() -> IncidentFacets:
 
 @router.post("", response_model=IncidentOut, status_code=status.HTTP_201_CREATED)
 async def create_incident(payload: IncidentCreate, user: CurrentUser) -> IncidentOut:
-    return service.create_incident(payload, actor=user.email)
+    return service.create_incident(payload, actor=user.email, reveal=_sees_everything(user))
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)
-async def get_incident(incident_id: str) -> IncidentOut:
+async def get_incident(incident_id: str, user: CurrentUser) -> IncidentOut:
     try:
-        return service.get_incident(incident_id)
+        return service.get_incident(incident_id, reveal=_sees_everything(user))
     except service.IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -108,7 +114,7 @@ async def get_incident(incident_id: str) -> IncidentOut:
 @router.patch("/{incident_id}", response_model=IncidentOut)
 async def update_incident(incident_id: str, payload: IncidentUpdate, user: CurrentUser) -> IncidentOut:
     try:
-        return service.update_incident(incident_id, payload, actor=user.email)
+        return service.update_incident(incident_id, payload, actor=user.email, reveal=_sees_everything(user))
     except service.IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except service.IncidentLockedError as exc:
@@ -120,7 +126,7 @@ async def update_incident(incident_id: str, payload: IncidentUpdate, user: Curre
 @router.patch("/{incident_id}/status", response_model=IncidentOut)
 async def change_incident_status(incident_id: str, payload: StatusChange, user: CurrentUser) -> IncidentOut:
     try:
-        return service.change_status(incident_id, payload, actor=user.email)
+        return service.change_status(incident_id, payload, actor=user.email, reveal=_sees_everything(user))
     except service.IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except service.TransitionNotAllowedError as exc:

@@ -7,6 +7,8 @@ CONTEXT) into TinyDB, validating each one through the Pydantic model first.
     python seed.py --reset    # wipe the database and reload the initial data
 
 The API also seeds an empty database on startup, so it never boots empty.
+
+Exit codes: 0 done; 1 the database cannot be opened or written; 2 wrong arguments.
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ from datetime import datetime, timezone
 from tinydb import TinyDB
 
 from core.config import get_suppliers_db_path
+from core.errors import DatabaseUnavailableError
+from core.storage import open_database
 from suppliers.schemas import SupplierCreate
 from suppliers.seed_data import SUPPLIERS_SEED
 
@@ -51,9 +55,13 @@ def main() -> None:
     args = parser.parse_args()
 
     path = get_suppliers_db_path()
-    with TinyDB(path) as db:
-        inserted, skipped = seed_database(db, reset=args.reset)
-        total = len(db)
+    try:
+        with open_database(path) as db:
+            inserted, skipped = seed_database(db, reset=args.reset)
+            total = len(db)
+    except (DatabaseUnavailableError, OSError) as exc:
+        # SystemExit with a text prints it on stderr and exits with code 1.
+        raise SystemExit(f"Error: the suppliers database cannot be used ({exc}). Check the file can be read and written and is valid JSON.") from None
 
     print(f"Seeding finished: {inserted} records inserted, {skipped} skipped (already present).")
     print(f"Total suppliers in database: {total} ({path})")

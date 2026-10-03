@@ -50,7 +50,7 @@ class SupplierCreate(BaseModel):
     name: str = Field(min_length=1)
     country: Country
     categories: list[SupplierCategory] = Field(min_length=1)
-    monthly_rate: float = Field(gt=0)
+    monthly_rate: float = Field(gt=0, allow_inf_nan=False)
     currency: Currency
     status: SupplierStatus
     contract_renewal_date: date | None = None
@@ -73,7 +73,7 @@ class SupplierUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     country: Country | None = None
     categories: list[SupplierCategory] | None = Field(default=None, min_length=1)
-    monthly_rate: float | None = Field(default=None, gt=0)
+    monthly_rate: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     currency: Currency | None = None
     status: SupplierStatus | None = None
     contract_renewal_date: date | None = None
@@ -84,7 +84,7 @@ class SupplierUpdate(BaseModel):
 class SupplierRateUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    monthly_rate: float = Field(gt=0)
+    monthly_rate: float = Field(gt=0, allow_inf_nan=False)
 
 
 class SupplierStatusUpdate(BaseModel):

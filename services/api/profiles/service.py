@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 from tinydb import Query, TinyDB
 
 from core.config import get_profiles_db_path
+from core.storage import open_database
 
 from .fields import NAME_MAX
 from .schemas import Profile, ProfileUpdate
@@ -38,7 +39,7 @@ class ProfileNotFoundError(Exception):
 def get_db() -> TinyDB:
     global _db
     if _db is None:
-        _db = TinyDB(get_profiles_db_path())
+        _db = open_database(get_profiles_db_path())
     return _db
 
 

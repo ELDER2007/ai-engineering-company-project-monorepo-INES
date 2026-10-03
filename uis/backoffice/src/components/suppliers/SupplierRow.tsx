@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Check, Pencil, Power, X } from "lucide-react";
 import { CATEGORY_LABELS, type Supplier } from "../../types/suppliers";
+import { formatDateTime, formatMoney, labelOf, MISSING } from "../../lib/format";
 
 interface Props {
   supplier: Supplier;
@@ -21,24 +22,27 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(supplier.monthly_rate));
   const [busy, setBusy] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   const suspended = supplier.status === "suspended";
   const days = supplier.contract_renewal_date ? daysUntil(supplier.contract_renewal_date) : null;
   const renewalSoon = days !== null && days >= 0 && days <= RENEWAL_WARNING_DAYS;
   const renewalOverdue = days !== null && days < 0;
 
-  const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: supplier.currency });
-
   const submitRate = async (event: FormEvent) => {
     event.preventDefault();
     const value = Number(draft);
-    if (!(value > 0)) return;
+    if (!(value > 0)) {
+      setRateError("Indica una tarifa mayor que 0.");
+      return;
+    }
+    setRateError(null);
     setBusy(true);
     try {
       await onRateChange(supplier.id, value);
       setEditing(false);
     } catch {
-      // The page already shows the API error; keep the editor open so the value can be fixed.
+      // The page already shows the error (with its message): the editor stays open so the value can be fixed.
     } finally {
       setBusy(false);
     }
@@ -48,6 +52,8 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
     setBusy(true);
     try {
       await onToggleStatus(supplier);
+    } catch {
+      // The page shows the error; the button only has to come back to life.
     } finally {
       setBusy(false);
     }
@@ -56,16 +62,16 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
   return (
     <tr className={`border-t border-slate-800 ${suspended ? "opacity-60" : ""} ${renewalSoon ? "bg-amber-400/5" : ""}`}>
       <td className="px-4 py-3">
-        <p className="font-medium text-white">{supplier.name}</p>
+        <p className="font-medium text-white">{supplier.name || MISSING}</p>
         {supplier.contact_email && <p className="mt-0.5 text-xs text-slate-400">{supplier.contact_email}</p>}
         {supplier.notes && <p className="mt-0.5 max-w-xs text-xs text-slate-500">{supplier.notes}</p>}
       </td>
-      <td className="px-4 py-3 text-sm text-slate-300">{supplier.country}</td>
+      <td className="px-4 py-3 text-sm text-slate-300">{supplier.country || MISSING}</td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-1">
           {supplier.categories.map((c) => (
             <span key={c} className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
-              {CATEGORY_LABELS[c]}
+              {labelOf(CATEGORY_LABELS, c)}
             </span>
           ))}
         </div>
@@ -81,18 +87,20 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               aria-label={`Nueva tarifa de ${supplier.name}`}
+              aria-invalid={rateError ? true : undefined}
               className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-white"
             />
             <button type="submit" disabled={busy} aria-label="Guardar tarifa" className="text-emerald-400 hover:text-emerald-300">
               <Check size={16} />
             </button>
-            <button type="button" aria-label="Cancelar" onClick={() => setEditing(false)} className="text-slate-400 hover:text-white">
+            <button type="button" aria-label="Cancelar" onClick={() => { setEditing(false); setRateError(null); }} className="text-slate-400 hover:text-white">
               <X size={16} />
             </button>
+            {rateError && <span role="alert" className="ml-1 text-xs text-rose-300">{rateError}</span>}
           </form>
         ) : (
           <div className="flex items-center gap-2">
-            {money.format(supplier.monthly_rate)}
+            {formatMoney(supplier.monthly_rate, supplier.currency)}
             <button
               onClick={() => {
                 setDraft(String(supplier.monthly_rate));
@@ -106,7 +114,7 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
           </div>
         )}
         <p className="mt-0.5 text-xs text-slate-500">
-          Actualizada {new Date(supplier.updated_at).toLocaleString("es-ES")}
+          Actualizada {formatDateTime(supplier.updated_at)}
         </p>
       </td>
       <td className="px-4 py-3 text-sm">

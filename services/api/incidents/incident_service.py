@@ -3,6 +3,7 @@ lifecycle, list with filters and summarise."""
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter
 from dataclasses import dataclass
@@ -41,10 +42,15 @@ __all__ = [
     "TransitionNotAllowedError",
 ]
 
+logger = logging.getLogger(__name__)
+
 SortField = Literal["created_at", "id", "updated_at"]
 SortOrder = Literal["asc", "desc"]
 TOP_N = 5
 _CONTENT_FIELDS = (*REQUIRED_FIELDS, "client_company", "agent_id", "customer_email")
+# What a stored document must have to be shown. Anything else (left by an older data model, or damaged)
+# is skipped and logged instead of making every list and summary fail.
+_READABLE_KEYS = ("id", "title", "description", "category", "status", "origin", "branch", "created_at", "updated_at", "history")
 
 
 class IncidentNotFoundError(Exception):
@@ -82,9 +88,9 @@ class IncidentFilters:
             return False
         if self.branch and doc["branch"].casefold() != self.branch.casefold():
             return False
-        if self.agent_id and doc["agent_id"] != self.agent_id:
+        if self.agent_id and doc.get("agent_id") != self.agent_id:
             return False
-        if self.client_company and self.client_company.casefold() not in (doc["client_company"] or "").casefold():
+        if self.client_company and self.client_company.casefold() not in (doc.get("client_company") or "").casefold():
             return False
         created_day = doc["created_at"][:10]
         if self.date_from and created_day < self.date_from.isoformat():
@@ -94,7 +100,7 @@ class IncidentFilters:
         if self.q:
             # The customer's email is deliberately not searchable.
             haystack = " ".join(
-                (doc["id"], doc["title"], doc["description"], doc["client_company"] or "", doc["branch"])
+                (doc["id"], doc["title"], doc["description"], doc.get("client_company") or "", doc["branch"])
             ).casefold()
             if self.q.casefold() not in haystack:
                 return False
@@ -119,8 +125,20 @@ def _view(doc: dict) -> dict:
     }
 
 
-def _to_out(doc: dict) -> IncidentOut:
-    return IncidentOut(**_view(doc), customer_email=doc.get("customer_email"), history=doc["history"])
+def _mask_actor(actor: str) -> str:
+    """The history names who did what by email; only an admin sees the full address."""
+    return mask_email(actor) if "@" in actor else actor
+
+
+def _to_out(doc: dict, *, reveal: bool = False) -> IncidentOut:
+    """The full incident. ``reveal`` (admins only) shows the customer's address and the emails of the staff
+    in the history; for everybody else they are masked, as they already are in the list."""
+    email = doc.get("customer_email")
+    history = doc["history"]
+    if not reveal:
+        email = mask_email(email) if email else None
+        history = [{**entry, "actor": _mask_actor(str(entry.get("actor", "")))} for entry in history]
+    return IncidentOut(**_view(doc), customer_email=email, history=history)
 
 
 def _to_list_item(doc: dict) -> IncidentListItem:
@@ -135,11 +153,11 @@ def _require(incident_id: str) -> dict:
     return doc
 
 
-def get_incident(incident_id: str) -> IncidentOut:
-    return _to_out(_require(incident_id))
+def get_incident(incident_id: str, *, reveal: bool = False) -> IncidentOut:
+    return _to_out(_require(incident_id), reveal=reveal)
 
 
-def create_incident(payload: IncidentCreate, *, actor: str) -> IncidentOut:
+def create_incident(payload: IncidentCreate, *, actor: str, reveal: bool = False) -> IncidentOut:
     now = _now()
     with store.lock:
         record = IncidentRecord(
@@ -152,10 +170,10 @@ def create_incident(payload: IncidentCreate, *, actor: str) -> IncidentOut:
         )
         doc = record.model_dump(mode="json")
         store.insert(doc)
-    return _to_out(doc)
+    return _to_out(doc, reveal=reveal)
 
 
-def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str) -> IncidentOut:
+def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str, reveal: bool = False) -> IncidentOut:
     with store.lock:
         doc = _require(incident_id)
         lifecycle.ensure_editable(doc)
@@ -163,7 +181,7 @@ def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str) ->
         changes = payload.model_dump(mode="json", exclude_unset=True)
         changed = sorted(name for name, value in changes.items() if doc.get(name) != value)
         if not changed:
-            return _to_out(doc)
+            return _to_out(doc, reveal=reveal)
 
         now = _now()
         entry = {"at": now.isoformat(), "kind": "edited", "actor": actor, "fields": changed}
@@ -179,20 +197,40 @@ def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str) ->
             ) from exc
         new_doc = record.model_dump(mode="json")
         store.replace(incident_id, new_doc)
-    return _to_out(new_doc)
+    return _to_out(new_doc, reveal=reveal)
 
 
-def change_status(incident_id: str, change: StatusChange, *, actor: str) -> IncidentOut:
+def change_status(incident_id: str, change: StatusChange, *, actor: str, reveal: bool = False) -> IncidentOut:
     with store.lock:
         doc = _require(incident_id)
         new_doc = lifecycle.apply_status_change(doc, change, actor=actor, now=_now())
         new_doc = IncidentRecord(**new_doc).model_dump(mode="json")
         store.replace(incident_id, new_doc)
-    return _to_out(new_doc)
+    return _to_out(new_doc, reveal=reveal)
+
+
+def _is_readable(doc: dict) -> bool:
+    return (
+        all(key in doc for key in _READABLE_KEYS)
+        and isinstance(doc["history"], list)
+        and doc["status"] in {s.value for s in IncidentStatus}
+        and doc["category"] in {c.value for c in IncidentCategory}
+        and doc["origin"] in {o.value for o in IncidentOrigin}
+    )
+
+
+def _readable_docs() -> list[dict]:
+    docs = []
+    for doc in store.all_docs():
+        if _is_readable(doc):
+            docs.append(doc)
+        else:
+            logger.warning("Skipping unreadable incident document %r", doc.get("id", "(no id)"))
+    return docs
 
 
 def _filtered(filters: IncidentFilters) -> list[dict]:
-    return [doc for doc in store.all_docs() if filters.matches(doc)]
+    return [doc for doc in _readable_docs() if filters.matches(doc)]
 
 
 def list_incidents(
@@ -253,7 +291,7 @@ def summarize(filters: IncidentFilters) -> IncidentSummary:
 
 
 def facets() -> IncidentFacets:
-    docs = store.all_docs()
+    docs = _readable_docs()
 
     def distinct(field: str) -> list[str]:
         return sorted({doc[field] for doc in docs if doc.get(field)}, key=str.casefold)

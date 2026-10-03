@@ -46,7 +46,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </nav>
         <div className="mt-auto border-t border-slate-800 px-2 pt-4">
           <p className="truncate text-sm font-medium text-white" data-testid="current-user">
-            {user?.profile.name ?? user?.email}
+            {user?.profile?.name || user?.email}
           </p>
           <p className="truncate text-xs text-slate-500">{user?.email}</p>
           <button

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import { ErrorNotice, LoadingNote } from "../components/feedback";
 import { ApiError } from "../lib/api";
+import { describeError, friendlyFieldErrors } from "../lib/errors";
 import { validateProfileFields, type ProfileFieldValues } from "../lib/profileFields";
 import type { Me, ProfileUpdate } from "../types/auth";
 
@@ -39,15 +41,19 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
 
   // Always show what the API has now (GET /auth/me), not what the session loaded at login.
-  useEffect(() => {
-    let cancelled = false;
-    refreshUser()
-      .then(() => !cancelled && setLoaded(true))
-      .catch(() => !cancelled && setLoadError("No se pudo cargar tu perfil. Recarga la página para intentarlo de nuevo."));
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try {
+      await refreshUser();
+      setLoaded(true);
+    } catch (err) {
+      setLoadError(describeError(err, "No se pudo cargar tu perfil."));
+    }
   }, [refreshUser]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useEffect(() => {
     if (loaded && user) setForm(toForm(user));
@@ -55,12 +61,12 @@ export default function ProfilePage() {
 
   if (loadError) {
     return (
-      <div role="alert" className="mx-auto max-w-2xl rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-        {loadError}
+      <div className="mx-auto max-w-2xl">
+        <ErrorNotice message={loadError} onRetry={() => void load()} home />
       </div>
     );
   }
-  if (!user || !form) return <p className="text-sm text-slate-400">Cargando tu perfil…</p>;
+  if (!user || !form) return <LoadingNote label="Cargando tu perfil…" />;
 
   const update = diff(toForm(user), form);
   const dirty = Object.keys(update).length > 0;
@@ -88,13 +94,13 @@ export default function ProfilePage() {
       // A 401 never lands here visibly: the API client drops the token and RequireAuth sends to /login.
       if (err instanceof ApiError && err.status === 422) {
         const fields: FieldErrors = {};
-        for (const [field, message] of Object.entries(err.fieldErrors)) {
+        for (const [field, message] of Object.entries(friendlyFieldErrors(err))) {
           if (field in form) fields[field as Field] = message;
         }
         setFieldErrors(fields);
-        setError(Object.keys(fields).length ? null : `Revisa los datos del formulario. ${err.message}`);
+        setError(Object.keys(fields).length ? null : "Revisa los datos del formulario e inténtalo de nuevo.");
       } else {
-        setError("No se pudieron guardar los cambios. Inténtalo de nuevo.");
+        setError(describeError(err, "No se pudieron guardar los cambios. Inténtalo de nuevo."));
       }
     } finally {
       setSaving(false);

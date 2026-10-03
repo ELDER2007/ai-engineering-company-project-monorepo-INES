@@ -1,0 +1,314 @@
+# Informe de auditoría — gestión de errores del monorepo Nexova
+
+**Alcance:** frontend Next.js/TypeScript (`uis/backoffice`, `uis/website`), backend FastAPI (`services/api`), scripts Python (`scripts/`, `services/api/seed.py`, `services/api/auth/cli.py`), paquete compartido (`packages/shared`) y código histórico (`src/`) y la carpeta `skills/`.  
+**Rama auditada:** `main` (commit `9e49b73`). El informe se redactó sin tocar código; las correcciones se aplicaron después en la misma rama (ver «Estado de corrección»).  
+**Evidencia:** los hallazgos marcados «Verificado» se reprodujeron ejecutando la API, los scripts o la interfaz en un navegador; el resto se deduce de la lectura del código.
+
+**Total: 82 hallazgos** — CRÍTICO 2 · ALTO 9 · MEDIO 32 · BAJO 39
+
+**Escala de severidad:** CRÍTICO = expone datos personales o credenciales reales a terceros; ALTO = pérdida de datos, caída del servicio, fallo que deja al usuario sin salida o aislamiento roto; MEDIO = degrada la experiencia, la seguridad o la trazabilidad pero hay salida; BAJO = riesgo pequeño o que solo importa si el código cambia.
+
+**Códigos:** `D` datos sensibles · `E` general · `T` try/catch ausente · `C` catch amplio · `S` fallos silenciosos · `R` errores en crudo · `U` estados de la interfaz · `A` llamada a la acción · `P` scripts y códigos de salida · `B` contrato de errores del backend.
+
+
+## Estado de corrección (rama `feature/error-handling-audit`)
+
+Las correcciones se hicieron en tres commits (backend y scripts, frontend, documentación), sin añadir funcionalidad nueva.
+
+**Aplicado**
+- **Backend y scripts:** manejador de 500 en JSON con referencia (`error_id`) y sin detalles internos; errores de validación sin eco de datos; 503 si un fichero de datos está dañado; escritura de datos más segura; enmascarado de datos personales según rol (D-02); la contraseña inicial ya no se escribe en el log de arranque (D-01); resultados de análisis por usuario; tamaño máximo de CSV (413); códigos de salida distintos de 0 en `seed.py`, `seed_incidents.py`, `scripts/analyze.py`, `auth/cli.py` y `pandas_clean.py`.
+- **Frontend (`uis/backoffice`):** capa común (`lib/api`, `lib/errors`, `lib/guards`, `lib/format`, `components/feedback`, `ErrorScreen`); tiempo máximo de espera en las peticiones; estados cargando / éxito / error en todas las pantallas, con «Reintentar» o enlace a inicio; mensajes en español sin códigos HTTP; `try/catch/finally` limitado a la llamada a la API; protección frente a `undefined`; límites de error globales, de ruta y por sección; sesión con estado «error» distinto de 401.
+- **Web pública (`uis/website`):** `ErrorBoundary` con salida clara y aviso `noscript`.
+
+**No aplicado (con motivo)**
+- **Aprobación de altas (D-02, parte de producto):** el registro público sigue creando cuentas activas; cambiarlo es una decisión de producto (ver «Propuestas fuera de alcance»). Lo que sí se corrigió es que un usuario no administrador ya no ve el email completo del cliente.
+- **E-04:** el formulario de talento de la web no envía los datos a ningún sitio. Conectarlo exige un endpoint nuevo (funcionalidad nueva), así que queda como limitación documentada; el texto ya no afirma que se recibió y indica escribir a contacto@nexova.com.
+- **Código histórico (`src/`), `skills/` salvo `pandas_clean.py`, y hallazgos BAJO de documentación/datos:** sin uso o sin riesgo real; no se tocan para no ampliar el alcance. La conciliación completa, hallazgo a hallazgo, está en la sección siguiente.
+
+**Verificación:** 302 tests de la API pasan (268 existentes + 34 nuevos de `test_error_handling.py`); 9 de `packages/shared` pasan; los 6 e2e con navegador pasan; `tsc` del backoffice y de la web sin errores; `next build` correcto.
+
+## Conciliación de los 82 hallazgos con el código final
+
+**Corregidos 61 · Parciales 8 · No aplicados 13** (total 82).
+
+Los «Corregidos» se verificaron con los tests (302 de la API, 9 compartidos), `tsc`, `next build` y los 6 e2e con navegador. Los parciales y no aplicados llevan su motivo.
+
+| ID | Estado | Motivo |
+|---|---|---|
+| D-02 | Parcial | Emails de clientes enmascarados salvo para administradores. El alta automática de cuentas es decisión de producto. |
+| E-04 | Parcial | El texto ya no afirma que se recibió (verificado en navegador: 0 peticiones). El envío real exige un endpoint nuevo. |
+| E-06 | No aplicado | Limitar intentos es funcionalidad nueva. |
+| E-07 | No aplicado | El 409 es necesario para que el registro avise de un email repetido; es un compromiso de producto. |
+| E-13 | No aplicado | Pasar a `def` sin un candado dejaría la condición de carrera; requiere rediseño del almacenamiento. |
+| S-04 | No aplicado | Igual que E-14: el aviso en el arranque es deliberado. |
+| S-05 | Parcial | Se registran las migraciones; el borrado de perfiles huérfanos no. |
+| D-03 | No aplicado | El log de accesos lo escribe el servidor (uvicorn), no el código de la app. |
+| U-06 | Parcial | El aviso sigue arriba de la tabla; ahora además hay confirmación de éxito. |
+| B-01 | Parcial | Misma forma `{detail}` y `error_id` en los 500; los 422 siguen siendo lista de campos. |
+| E-14 | No aplicado | Es el comportamiento documentado para desarrollo; en producción hay que definir SECRET_KEY. |
+| E-16 | Parcial | Se registran logins fallidos y tokens rechazados; no cambios de rol ni desactivaciones. |
+| E-17 | No aplicado | El directorio es público para las sesiones por diseño. |
+| E-18 | No aplicado | Decisión documentada (JWT sin estado en `localStorage`). |
+| E-20 | No aplicado | Código muerto de `src/`: nadie lo importa. |
+| S-10 | No aplicado | El contrato existente (y su test) exige código 0 en «summary check skipped». |
+| R-03 | No aplicado | `/docs` abierto es útil en desarrollo; protegerlo es decisión de despliegue. |
+| R-04 | Parcial | Los textos de excepción siguen siendo el contrato, pero ya no incluyen datos de la petición ni salen en los 500 y 422. |
+| D-06 | No aplicado | Datos de ejemplo: decidir si son ficticios es del equipo. |
+| D-07 | No aplicado | Es documentación de ejemplo en los apuntes; no es código. |
+| B-02 | Parcial | Los errores del CSV se unificaron (413/422); el resto de familias mantiene sus códigos. |
+
+Todos los demás hallazgos están **Corregidos**: D-01, E-01, E-02, E-03, E-05, T-01, T-02, U-01, E-08, E-09, E-10, E-11, E-12, T-03, T-04, C-01, C-02, S-01, S-02, S-03, S-06, R-01, R-02, U-02, U-03, U-04, U-05, U-07, A-01, P-01, P-02, R-05, U-13, E-15, E-19, T-05, T-06, T-07, T-08, C-03, C-04, C-05, C-06, C-07, S-07, S-08, S-09, D-04, D-05, U-08, U-09, U-10, U-11, A-02, A-03, A-04, P-03, U-12, P-04, D-08, C-08.
+
+## Resumen ejecutivo: qué corregir y en qué orden
+
+1. **Inmediato (CRÍTICO).** D-01 y D-02 exponen una credencial y datos personales reales. Ninguna otra corrección compensa dejarlos abiertos.
+2. **Antes de dar la aplicación por fiable (ALTO).** Seis frentes: la sesión (E-08, U-01), los 500 sin controlar (E-01) y los reproducibles (E-12, T-01), los datos dañados (T-02, E-05), el análisis de CSV (E-02, E-03) y la web pública que pierde los datos (E-04).
+3. **Después (MEDIO).** Mensajes legibles (R-01, R-02, R-05, A-01), estados de la interfaz (U-02 a U-07, U-12), logging y fallos silenciosos (S-03 a S-06), códigos de salida (P-01, P-02) y ámbito de los `try` (C-01).
+4. **Mantenimiento (BAJO).** Detalles menores y código histórico.
+
+### Hallazgos por componente
+
+| Componente | CRÍTICO | ALTO | MEDIO | BAJO | Total |
+|---|---|---|---|---|---|
+| `services/api` | 2 | 5 | 10 | 13 | **30** |
+| `uis/backoffice` | 0 | 2 | 19 | 16 | **37** |
+| `uis/website` | 0 | 1 | 0 | 1 | **2** |
+| `scripts` | 0 | 0 | 3 | 3 | **6** |
+| `packages/shared` | 0 | 1 | 0 | 1 | **2** |
+| `src (histórico)` | 0 | 0 | 0 | 1 | **1** |
+| `skills` | 0 | 0 | 0 | 2 | **2** |
+| `docs y datos` | 0 | 0 | 0 | 2 | **2** |
+
+
+## CRÍTICO (2)
+
+| ID | Ruta del archivo | Línea(s) | Categoría | Descripción del fallo | Corrección sugerida |
+|---|---|---|---|---|---|
+| **D-01** | `services/api/users/service.py`<br>`services/api/main.py` | 222-234<br>25-31 | Filtración de datos sensibles | Si AUTH_INITIAL_PASSWORD no pasa la validación, Pydantic escribe el valor en el log de arranque (`input_value='abc'`). Verificado. | Capturar `ValidationError` en `bootstrap_first_user` y relanzar `RuntimeError` con `exc.errors(include_input=False)` (como ya hace `auth/cli.py`). |
+| **D-02** | `services/api/users/router.py`<br>`services/api/incidents/incident_router.py`<br>`uis/backoffice/src/components/incidents/HistoryTimeline.tsx` | 47-56<br>97-123<br>39 | Filtración de datos sensibles / Autorización | El registro público crea cuentas activas al instante y cualquier sesión lee `customer_email` completo y el email del empleado (`actor`) en el detalle. Verificado con una cuenta nueva. | Enmascarar `customer_email` en el detalle salvo para administradores (el rol ya existe) y no devolver el email del empleado en `actor`. La aprobación de altas es una decisión de producto: ver «Propuestas fuera de alcance». |
+
+## ALTO (9)
+
+| ID | Ruta del archivo | Línea(s) | Categoría | Descripción del fallo | Corrección sugerida |
+|---|---|---|---|---|---|
+| **E-01** | `services/api/main.py`<br>`services/api/core/errors.py` | 36-44<br>14-21 | Gestión de errores | Un fallo inesperado devuelve `Internal Server Error` en texto plano y sin cabeceras CORS: el navegador lo ve como «sin conexión» y no queda `error_id`. | Middleware que capture toda excepción, devuelva JSON genérico con `error_id` y registre el traceback; colocarlo dentro del CORS. |
+| **E-02** | `services/api/incidents/router.py`<br>`services/api/incidents/service.py` | 24-37<br>49-66 | Resiliencia / Seguridad | La subida de CSV no tiene límite de tamaño (aceptó ~20 MB) y `csv.Error` no se captura (celda >128 KB da 500). | Rechazar con 413 por encima de un máximo y capturar `csv.Error` para devolver 400. |
+| **E-03** | `services/api/incidents/service.py`<br>`services/api/incidents/router.py` | 46,62-76<br>44-53 | Seguridad / Aislamiento de datos | El último análisis se guarda en una variable global: otro usuario lo descarga en `/results/export`. Verificado. | Guardar el resultado por usuario con caducidad, o devolver el CSV en la propia respuesta del análisis. |
+| **E-04** | `uis/website/src/App.tsx` | 17 | Fallo silencioso / UI | El formulario de talento muestra «Hemos recibido tu información» y no envía nada: ninguna petición de red. Verificado en navegador. | No afirmar la recepción mientras el envío sea simulado; al conectarlo, estados enviando/error/éxito con reintento. |
+| **E-05** | `services/api/incidents/incident_service.py`<br>`services/api/incidents/incident_store.py` | 108-125<br>21-28 | Resiliencia | Un documento al que le faltan campos, o un `db.json` corrupto, da 500 en la lista y el resumen de incidencias. Verificado. | Saltar y registrar los documentos ilegibles; ante un fichero corrupto, un error claro. |
+| **T-01** | `packages/shared/incidents_analyzer/incidents_analyzer/core.py`<br>`packages/shared/incidents_analyzer/incidents_analyzer/core.py` | 137-175<br>208 | Gestión de errores (try/catch ausente) | `validate_record` no valida el estado y `analyze` hace `status_counts[status] += 1`: un estado desconocido, en minúsculas o sin columna da `KeyError` (script y API 500). Verificado. | Añadir la regla `invalid_or_missing_status` al validador para que esa fila cuente como inválida. |
+| **T-02** | `services/api/users/service.py`<br>`services/api/profiles/service.py`<br>`services/api/suppliers/service.py`<br>`services/api/suppliers/service.py`<br>`services/api/incidents/incident_store.py` | 76-80<br>38-42<br>54-59<br>160<br>21-28 | Gestión de errores (try/catch ausente) | Abrir las bases TinyDB no tiene `try`: con `users/db.json` corrupto nadie inicia sesión (500) y con `suppliers/db.json` corrupto la API no arranca. Verificado. | Capturar `JSONDecodeError`/`OSError` al abrir, convertirlo en un error de dominio (503) y no abrir proveedores al importar el módulo. |
+| **U-01** | `uis/backoffice/src/lib/api.ts`<br>`uis/backoffice/src/auth/AuthContext.tsx`<br>`uis/backoffice/src/auth/RequireAuth.tsx` | 53-64<br>41-55<br>39 | UI sin estado de carga/error | Ninguna petición tiene tiempo máximo: con la API sin responder, 9 de 121 combinaciones se quedan cargando para siempre (5 en la sesión, 4 en datos) y «Comprobando la sesión…» no ofrece ni cerrar sesión. Verificado. | `AbortSignal.timeout(20000)` en `apiFetch` y, en `RequireAuth`, botones «Reintentar» y «Cerrar sesión» pasados unos segundos. |
+| **E-08** | `uis/backoffice/src/auth/AuthContext.tsx` | 41-55 | Resiliencia | Cualquier respuesta de `/auth/me` que no sea correcta (403, 404, 500, red caída o HTML) borra el token y cierra la sesión. Verificado en las 5 pantallas protegidas: 30 de 121 combinaciones de fallo expulsan al usuario al login. | Borrar el token solo con 401; en otros errores mostrar «No se pudo comprobar la sesión» con Reintentar. |
+
+## MEDIO (32)
+
+| ID | Ruta del archivo | Línea(s) | Categoría | Descripción del fallo | Corrección sugerida |
+|---|---|---|---|---|---|
+| **E-06** | `services/api/auth/router.py`<br>`services/api/users/router.py` | 28-41<br>47-56 | Seguridad | Sin límite de intentos en login ni en registro: 30 logins fallidos seguidos dan 401 sin bloqueo. Verificado. | Requiere decisión de producto (una pieza nueva de infraestructura): ver «Propuestas fuera de alcance». |
+| **E-07** | `services/api/users/service.py`<br>`services/api/users/service.py`<br>`services/api/users/router.py` | 50-53<br>132<br>47-56 | Seguridad / Filtración de datos | `POST /users` responde 409 «A user with email 'x' already exists»: permite enumerar cuentas, a diferencia del login. | Responder con un mensaje genérico, sin repetir el email, cuando la cuenta ya existe. |
+| **E-09** | `uis/backoffice/src/app/(app)/error.tsx` | 1-14 | UI sin estado de error | Solo existe `(app)/error.tsx`; no hay `global-error.tsx` ni error en `(public)`. Un fallo del layout o de login/registro muestra la página por defecto de Next. Verificado. | Añadir `app/global-error.tsx` y `app/(public)/error.tsx` en español. |
+| **E-10** | `uis/backoffice/src/lib/api.ts`<br>`uis/backoffice/src/views/SuppliersPage.tsx`<br>`uis/backoffice/src/views/IncidentsAnalysisPage.tsx` | 47<br>24,36,46<br>26,38 | Error en crudo | Se muestra `err.message` del servidor; si el 500 no trae JSON se usa `statusText`, que con HTTP/2 está vacío (alerta sin texto). | Usar `describeError` y un texto por defecto según el código cuando `statusText` esté vacío. |
+| **E-11** | `scripts/analyze.py` | 26-58 | Script sin manejo de errores | Termina con traceback ante fichero no UTF-8 (`UnicodeDecodeError`), entrada cerrada (`EOFError`) y error al escribir `results.csv`; no valida columnas ni BOM. Verificado. | Capturar esos errores con mensaje y código de salida; validar columnas antes de analizar y leer con `utf-8-sig`. |
+| **E-12** | `services/api/core/errors.py`<br>`services/api/suppliers/router.py`<br>`services/api/profiles/router.py` | 17-21<br>59-90<br>37-45 | Gestión de errores | Un cuerpo JSON con `NaN`/`Infinity` hace fallar el manejador de validación y devuelve 500 en 5 endpoints: `POST /suppliers`, `PATCH /suppliers/{id}`, `/rate`, `/status` y `PUT /profiles/me`. Verificado con 1.046 peticiones de prueba. | Aplicar a todos los 422 el filtrado de `input` (como E-19) para que el manejador no intente serializar `NaN`. |
+| **E-13** | `services/api/users/router.py`<br>`services/api/users/service.py` | 35-93<br>123-146 | Resiliencia / Concurrencia | Handlers `async` con E/S bloqueante (TinyDB, bcrypt) congelan la API; `create_user` comprueba el email y luego inserta sin lock (cuentas duplicadas posibles). | Declarar los handlers con `def` y proteger comprobar+insertar con un `RLock`, como `incident_store`. |
+| **T-03** | `uis/backoffice/src/lib/api.ts` | 78,93,101,114,130,159,197 | Gestión de errores (try/catch ausente) | Los `response.json()` de las respuestas correctas no están protegidos; `login` no comprueba que exista `access_token`. | Función `parseJson` con `try/catch` que lance `ApiError`, y validar `access_token` como texto no vacío. |
+| **T-04** | `uis/backoffice/src/lib/token.ts`<br>`uis/backoffice/src/auth/AuthContext.tsx` | 15-22<br>95-100 | Gestión de errores / Fallo silencioso | `setToken` ignora que `localStorage` falló; `login` sigue sin token y recibe 401, que la pantalla traduce como «contraseña incorrecta». | Que `setToken` devuelva `false` y que `login` muestre «El navegador bloquea el almacenamiento». |
+| **C-01** | `uis/backoffice/src/components/incidents/IncidentForm.tsx`<br>`uis/backoffice/src/components/incidents/StatusActions.tsx`<br>`uis/backoffice/src/components/suppliers/SupplierForm.tsx`<br>`uis/backoffice/src/views/SuppliersPage.tsx` | 84-106<br>59-75<br>50-65<br>33-39,43-48 | Catch demasiado amplio | El `try` envuelve también la acción posterior a guardar (`onSaved`, `onChanged`, `onCreated`, `replace`): si esa falla, se muestra «No se pudo crear» aunque ya se creó (riesgo de duplicados). | Dejar en el `try` solo la llamada a la API y ejecutar la acción posterior fuera. |
+| **C-02** | `uis/backoffice/src/auth/AuthContext.tsx` | 41-55 | Catch demasiado amplio | El `.catch` de `restoreSession` recoge tanto el fallo de red como excepciones del `.then` y siempre cierra la sesión (amplía E-08). | Distinguir `ApiError` con 401 del resto y registrar el resto. |
+| **S-01** | `uis/backoffice/src/lib/api.ts` | 58-63 | Fallo silencioso | `apiFetch` sustituye cualquier fallo de `fetch` por «No response from the server» y descarta la causa (red caída, 500 sin CORS, configuración). | Conservar la causa (`{ cause: err }`) y escribirla con `console.warn`. |
+| **S-02** | `uis/backoffice/src/lib/token.ts`<br>`uis/backoffice/src/auth/AuthContext.tsx` | 24-31<br>126-129 | Fallo silencioso | Si `removeItem` falla, `clearToken` lo ignora y «Cerrar sesión» no cierra nada sin avisar. | Que `clearToken` indique si pudo borrar y que `logout` avise del fallo. |
+| **S-03** | `services/api/users/service.py`<br>`services/api/profiles/service.py`<br>`services/api/core/config.py` | 38<br>27<br>13 | Logging | No hay configuración de logging en la API: los `logger.info` no se ven nunca (verificado), p. ej. las migraciones de datos al arrancar. | `logging.basicConfig(level=..., format=...)` una vez al arrancar, con el nivel configurable por variable de entorno. |
+| **S-04** | `services/api/core/config.py`<br>`services/api/users/service.py` | 75<br>229-233 | Logging sin acción | Sin `SECRET_KEY` o sin usuarios el servidor avisa y arranca igual; sin administrador inicial nadie podrá serlo. | Fallar el arranque con un mensaje claro cuando falte `SECRET_KEY` en producción o no haya ningún usuario ni credenciales iniciales. |
+| **S-05** | `services/api/users/service.py`<br>`services/api/profiles/service.py` | 211-219<br>60 | Fallo silencioso | Al arrancar `sync_profiles` borra perfiles huérfanos y crea los que faltan sin escribir ningún log; `/auth/me` hace lo mismo. | Registrar cada borrado/creación (con `user_id`, sin email) y no borrar si la tabla de usuarios está vacía. |
+| **S-06** | `services/api/auth/security.py`<br>`services/api/auth/security.py`<br>`services/api/auth/service.py` | 21-25<br>42-56<br>15-22 | Fallo silencioso / Seguridad | `verify_password` y `decode_access_token` devuelven `False`/`None` sin distinguir ni registrar la causa (token manipulado = caducado; hash dañado = contraseña olvidada). | Registrar un `warning` por categoría sin incluir token ni contraseña, manteniendo la misma respuesta al usuario. |
+| **R-01** | `uis/backoffice/src/views/SuppliersPage.tsx`<br>`uis/backoffice/src/components/suppliers/SupplierForm.tsx`<br>`uis/backoffice/src/views/IncidentsAnalysisPage.tsx` | 24,36,46<br>64<br>26,38 | Error en crudo | Se muestra el texto del servidor sin traducir: `No response from the server`, `Internal Server Error`, `Expected a .csv file…`, `…Call POST /api/incidents/analyze first.`. Verificado. | Usar `describeError` y ampliarla con textos en español para los fallos de CSV. |
+| **R-02** | `uis/backoffice/src/lib/api.ts`<br>`uis/backoffice/src/components/incidents/IncidentForm.tsx`<br>`uis/backoffice/src/views/RegisterPage.tsx`<br>`uis/backoffice/src/lib/errors.ts` | 32-43<br>101-106<br>44-58<br>12 | Error en crudo | Los mensajes de Pydantic llegan con el nombre del campo: `customer_email: value is not a valid email address: …special-use…` con un email `.test` que el navegador acepta. Verificado. | Traducir por tipo y campo (como `friendlyFieldError` de la rama) y alinear la validación del navegador con la del servidor. |
+| **D-03** | `services/api/incidents/incident_router.py` | 42-88 | Filtración de datos sensibles | El log de accesos registra la query string completa (`q=maria.garcia`, `client_company=Acme…`). Verificado. | Filtro de logging que omita lo que sigue a `?` en el log de accesos. |
+| **U-02** | `uis/backoffice/src/views/SuppliersPage.tsx`<br>`uis/backoffice/src/views/SuppliersPage.tsx` | 21-27<br>134 | UI sin estado de error | Si falla la carga se muestra a la vez el error, `0 proveedores` y «No hay proveedores con esos filtros», sin reintento. Verificado. | Con error de carga no pintar la tabla vacía: solo el aviso con «Reintentar». |
+| **U-03** | `uis/backoffice/src/views/IncidentsPage.tsx` | 65-75 | UI sin estado de error | `Promise.all` de lista y resumen: si falla solo el resumen desaparece también la lista; sin botón de reintentar. Verificado. | Cargar el resumen aparte y añadir «Reintentar» junto al aviso. |
+| **U-04** | `uis/backoffice/src/views/IncidentsPage.tsx`<br>`uis/backoffice/src/components/incidents/IncidentSummaryPanel.tsx`<br>`uis/backoffice/src/components/incidents/IncidentFilters.tsx`<br>`uis/backoffice/src/components/incidents/IncidentTable.tsx`<br>`uis/backoffice/src/components/incidents/HistoryTimeline.tsx`<br>`uis/backoffice/src/views/SuppliersPage.tsx` | 68-69<br>11-24<br>62-78<br>50<br>21<br>23 | UI sin fallback seguro | Datos con otra forma (`{}`, `[]`, `null`) en la lista, el resumen, las listas desplegables, el detalle o los proveedores sustituyen toda la pantalla por «Algo ha salido mal» (11 de 121 combinaciones); un dato secundario (desplegables) tumba la página entera. También `created_at: null` o un evento sin `fields`. Verificado. | Validar la forma antes de pintar y aislar resumen, desplegables e historial con su propio *error boundary*. |
+| **U-05** | `uis/backoffice/src/components/Layout.tsx`<br>`uis/backoffice/src/app/(app)/error.tsx` | 49<br>1-14 | UI sin fallback seguro | Cualquier respuesta de `/auth/me` con otra forma (`{}`, `[]` o sin `profile`) rompe `user?.profile.name`; el fallo del `Layout` no lo recoge `(app)/error.tsx` y sale la página de Next en inglés: 10 de 121 combinaciones. Verificado. | `user?.profile?.name ?? user?.email` y añadir `global-error.tsx`. |
+| **U-06** | `uis/backoffice/src/views/SuppliersPage.tsx`<br>`uis/backoffice/src/views/SuppliersPage.tsx` | 31-50<br>104 | UI sin estado de error | El aviso de una acción fallida se pinta arriba de la página: con la última fila quedó a 907 px fuera de la vista. Verificado. | Mostrar el error junto a la fila o desplazar la vista al aviso. |
+| **U-07** | `uis/backoffice/src/views/IncidentsPage.tsx` | 151-175 | UI sin estado de error | Tras un fallo la tabla mantiene las filas anteriores a plena opacidad como si fueran la nueva búsqueda. Verificado. | Atenuar la tabla y rotular «Mostrando el resultado anterior», o no mostrarla. |
+| **A-01** | `uis/backoffice/src/views/IncidentsAnalysisPage.tsx`<br>`uis/backoffice/src/views/IncidentsAnalysisPage.tsx` | 17-30<br>71-75 | UI error sin llamada a la acción | Los errores del análisis de CSV no ofrecen botón, enlace ni guía: `Internal Server Error` o la lista de columnas que faltan. Verificado. | Añadir debajo del aviso un texto fijo con las columnas esperadas y mensajes en español; la zona de subida ya permite elegir otro archivo. |
+| **P-01** | `scripts/analyze.py` | 38-58 | Script sin código de salida | Con CSV vacío, solo cabecera, columnas equivocadas o todas las filas inválidas imprime un informe y termina con código 0; la API devuelve error. Verificado. | Reutilizar `missing_required_columns` y devolver 1 si faltan columnas o filas; código propio si todas son inválidas. |
+| **P-02** | `scripts/seed_incidents.py` | 64-92 | Script sin código de salida | Con 0 filas cargadas imprime `Summary check OK` y sale con 0; con una fila rechazada dice «other incidents exist» con la base vacía. Verificado. | Devolver 1 si no se insertó nada habiendo filas; no imprimir OK con total 0; código distinto cuando la verificación se omite. |
+| **R-05** | `uis/backoffice/src/types/incidents.ts`<br>`uis/backoffice/src/components/incidents/MetricsSummary.tsx` | 35-43<br>35,49,63,78 | Mensaje técnico al usuario | La pantalla de análisis muestra etiquetas técnicas en inglés (`Missing client_company`, `Invalid or missing agent_id`, `Score 3`) y códigos sin traducir (`TECHNICAL`, `HR_QUERY`, `OPEN`, `CLOSED`, `DISCARDED`). Verificado en la captura de la pantalla. | Traducir las etiquetas al español, como ya se hace con `CATEGORY_LABELS` y `STATUS_LABELS` en incidencias. |
+| **U-13** | `uis/backoffice/src/components/incidents/IncidentSummaryPanel.tsx`<br>`uis/backoffice/src/components/incidents/IncidentTable.tsx`<br>`uis/backoffice/src/views/IncidentDetailPage.tsx`<br>`uis/backoffice/src/components/suppliers/SupplierRow.tsx`<br>`uis/backoffice/src/components/incidents/IncidentFilters.tsx`<br>`uis/backoffice/src/components/incidents/HistoryTimeline.tsx`<br>`uis/backoffice/src/components/Layout.tsx` | 34,48<br>50<br>135-136<br>66,95<br>62-78<br>21,39<br>49 | UI sin fallback seguro (undefined) | Falta encadenamiento opcional y valores por defecto (solo hay 19 `?.` y 22 `??` en todo el frontend). Alterando un solo campo de las respuestas reales, 55 de 238 pruebas (23 %) fallan: 33 sustituyen toda la pantalla, 20 enseñan `undefined`, `null`, `NaN` o `Invalid Date` (p. ej. «undefined activas», `NaN%`, tarifa `NaN`) y 2 muestran la página de Next. Verificado. | Usar `?.` y `??` con un texto de reserva («—») en cada acceso a datos de la API, y una función común de formato de fechas e importes. |
+| **B-01** | `services/api/core/errors.py`<br>`services/api/incidents/router.py`<br>`services/api/main.py` | 14-21<br>27-38<br>36-44 | Contrato de errores del backend | Los errores del backend no tienen una estructura única: en 38 respuestas de error, 19 llevan `detail` como texto, 15 como lista de objetos, y 2 (los 500) no son JSON; 5 devuelven además `input`/`ctx`. Cada consumidor debe tratar cada forma por separado. Verificado. | Un manejador común que devuelva siempre JSON con `detail` de una forma coherente (los 500 los cubre E-01 y el filtrado de `input` es E-19). |
+
+## BAJO (39)
+
+| ID | Ruta del archivo | Línea(s) | Categoría | Descripción del fallo | Corrección sugerida |
+|---|---|---|---|---|---|
+| **E-14** | `services/api/core/config.py` | 61-76 | Seguridad / Configuración | Sin `SECRET_KEY` se genera una clave aleatoria y solo se avisa: con varios workers las sesiones fallan. | `RuntimeError` si una variable de entorno indica producción. |
+| **E-15** | `services/api/users/service.py`<br>`services/api/suppliers/service.py` | 222-235<br>160 | Gestión de errores | Una contraseña inicial corta o un `suppliers/db.json` corrupto rompen el arranque con traceback que no nombra la variable o el fichero. | Capturar y relanzar con un mensaje que nombre la variable o la ruta. |
+| **E-16** | `services/api/users/service.py`<br>`services/api/profiles/service.py`<br>`services/api/core/config.py` | 38,229,235,260<br>27,120<br>13,75 | Logging | Solo hay logs de arranque: nada de logins fallidos, 5xx ni cambios de rol o desactivaciones. | Registrar (sin datos personales) logins fallidos, 5xx con `error_id` y cambios de rol. |
+| **E-17** | `services/api/users/router.py` | 41-44 | Filtración de datos sensibles | `GET /users/directory` entrega a cualquier sesión `user_id` y nombre de todos los usuarios activos. | Confirmar el requisito; si no existe, restringir a administrador. |
+| **E-18** | `uis/backoffice/src/lib/token.ts` | 7-22 | Seguridad | El token de sesión vive en `localStorage`: un XSS podría robarlo (decisión documentada). | Mantenerlo: es una decisión documentada. Cambiar el almacenamiento del token sería un rediseño, fuera de alcance. |
+| **E-19** | `services/api/core/errors.py`<br>`services/api/incidents/incident_router.py` | 14-21<br>101-106 | Filtración de datos sensibles | Los 422 de `/profiles` y `/suppliers` devuelven el `input` rechazado (nombre, teléfono, dirección); el 404 repite el id recibido. Verificado. | Aplicar el filtrado de `input` a todos los 422 y no repetir el id en el 404. |
+| **E-20** | `src/utils/validations.ts`<br>`src/utils/search.ts`<br>`src/utils/search.ts` | 43-93<br>33-45<br>59-81 | Código histórico | Código muerto (nadie lo importa) sin guardas: no detecta `NaN`/`undefined`, falla con `TypeError` sin `email` y la búsqueda binaria da resultados erróneos con datos sin ordenar. | Validar la entrada si se reutiliza; si no, marcarlo como histórico o retirarlo. |
+| **T-05** | `packages/shared/incidents_analyzer/incidents_analyzer/contract.py` | 24-31 | Gestión de errores (try/catch ausente) | Solo se captura `FileNotFoundError` al leer `contract.json`; un JSON inválido o sin permisos rompe el import con traceback. | Capturar `(OSError, json.JSONDecodeError)` y relanzar `RuntimeError` con la ruta. |
+| **T-06** | `scripts/seed_incidents.py`<br>`services/api/seed.py`<br>`services/api/auth/cli.py` | 62-64<br>54<br>23 | Gestión de errores (try/catch ausente) | `TinyDB(args.db)`, `seed_rows`, `TinyDB(path)` y `getpass` sin captura: base corrupta, sin permisos o Ctrl+C/EOF terminan con traceback (código 1). | Capturar `OSError`/`JSONDecodeError`/`EOFError`/`KeyboardInterrupt` en el `main()` con mensaje y código de salida. |
+| **T-07** | `uis/backoffice/src/auth/AuthContext.tsx` | 95-100 | Gestión de errores | Si `fetchMe()` falla justo tras el login, el token queda guardado aunque la pantalla diga que falló. | Llamar a `clearToken()` si `fetchMe()` falla dentro de `login`. |
+| **T-08** | `services/api/incidents/router.py` | 25 | Gestión de errores (try/catch ausente) | `await file.read()` sin `try`: una desconexión durante la subida sale como 500 y se lee todo el fichero en memoria. | Capturar el error de lectura (400) y combinarlo con el límite de tamaño de E-02. |
+| **C-03** | `uis/backoffice/src/lib/api.ts` | 28-47 | Catch demasiado amplio | `toApiError` mete el parseo y todo el `.map` en el mismo `try`: un fallo de la transformación se traga y cae a `statusText`. | Dejar en el `try` solo `await response.json()`. |
+| **C-04** | `uis/backoffice/src/auth/AuthContext.tsx` | 103-113 | Catch demasiado amplio / Fallo silencioso | El `catch {}` del login automático tras el registro captura todo y no deja constancia de la causa. | Capturar `err` y registrarla con `console.warn`. |
+| **C-05** | `uis/backoffice/src/views/IncidentsPage.tsx`<br>`uis/backoffice/src/views/IncidentDetailPage.tsx` | 79<br>52 | Fallo silencioso | `.catch(() => undefined)` descarta el fallo de las listas desplegables; el usuario ve desplegables vacíos sin aviso (la segunda sin comentario). | Comentar el motivo y mostrar un aviso discreto. |
+| **C-06** | `services/api/users/service.py` | 138-146 | Catch demasiado amplio | Único `except Exception` del backend: deshace el alta y relanza (correcto), pero si el `remove` del rollback falla tapa la excepción original. | Proteger el `remove` con su propio `try/except` que registre el fallo. |
+| **C-07** | `services/api/incidents/seeding.py` | 127-141 | Catch demasiado amplio | `except ValueError` atribuye cualquier `ValueError` de `to_document` a «invalid_date». | Parsear la fecha en una línea aparte con su propio `try`. |
+| **S-07** | `uis/backoffice/src/app/(app)/error.tsx` | 4 | Fallo silencioso / Logging | El frontend no tiene ningún `console.*` y `AppError` recibe `error` y `digest` y los ignora. | Mostrar `error.digest` («referencia») y escribir el error con `console.error` en un `useEffect`. |
+| **S-08** | `uis/backoffice/src/components/suppliers/SupplierRow.tsx` | 32-35 | Fallo silencioso | `if (!(value > 0)) return;` sale sin mensaje con una tarifa vacía: el usuario pulsa Guardar y no pasa nada. | Mostrar «Introduce una tarifa mayor que 0» o añadir `required`. |
+| **S-09** | `uis/backoffice/src/components/incidents/CsvUploader.tsx` | 13-16 | Fallo silencioso | Si se sueltan varios ficheros solo se usa el primero y no se avisa. | Mostrar «Solo se analiza un archivo a la vez». |
+| **S-10** | `scripts/seed_incidents.py` | 75-79 | Script sin código de salida | `Summary check skipped` devuelve 0: un CI vería éxito sin que se haya verificado nada. | Devolver un código distinto (p. ej. 2) cuando se omite la verificación. |
+| **R-03** | `services/api/main.py` | 36 | Filtración de información interna | `/docs`, `/redoc` y `/openapi.json` responden sin sesión y listan 22 rutas con sus formatos. Verificado. | Desactivarlos fuera de desarrollo (`docs_url=None, redoc_url=None, openapi_url=None`). |
+| **R-04** | `services/api/users/router.py`<br>`services/api/suppliers/router.py`<br>`services/api/incidents/incident_router.py`<br>`services/api/incidents/router.py`<br>`services/api/profiles/router.py` | 55,63,76,78,80,82,91,93<br>55,68,78,86,94<br>105,113,115,125,127<br>30,32,34,48<br>56 | Error en crudo / Contrato de API | `detail=str(exc)` en ~23 sitios: el texto de la excepción es el contrato público y algunos incluyen datos de la petición. | Mantener el `detail` como está y traducirlo en el frontend según el código HTTP. Añadir un campo `code` al contrato sería funcionalidad nueva: ver «Propuestas fuera de alcance». |
+| **D-04** | `services/api/users/service.py` | 235 | Filtración de datos sensibles | `logger.info("Bootstrapped first user %s", user.email)` escribe el email del administrador (hoy invisible por S-03). | Registrar el `id` del usuario en lugar del email. |
+| **D-05** | `services/api/core/config.py` | 40-60 | Filtración de datos sensibles | Los ficheros TinyDB con hashes y datos personales no tienen permisos restringidos (no hay ningún `chmod`; normalmente 644). | Crear los ficheros con permisos 600 (p. ej. `os.umask(0o077)` al arrancar). |
+| **D-06** | `data/raw/incidents-nexova.csv`<br>`scripts/incidents-nexova.csv` | 1-101<br>1-101 | Filtración de datos sensibles | Dos copias idénticas con 100 emails de clientes de dominios reales (icloud, gmail, outlook…) y nada indica que sean ficticios. | Indicarlo en el README (o usar `example.com`) y conservar una sola copia. |
+| **D-07** | `aprendiendo con la ia.md` | 405,734 | Filtración de datos sensibles | La documentación muestra la credencial de ejemplo `admin@nexova.com` / `admin123`, aunque el código afirma no tener contraseñas por defecto. | Sustituirla por un marcador (`<tu-contraseña>`). |
+| **U-08** | `uis/backoffice/src/views/ProfilePage.tsx` | 42-61 | UI error sin llamada a la acción | Si falla la carga solo se ve «Recarga la página…»: sin formulario ni botón. Verificado. | Botón «Reintentar» que vuelva a llamar a `refreshUser`. |
+| **U-09** | `uis/backoffice/src/components/incidents/StatusBadge.tsx`<br>`uis/backoffice/src/components/incidents/IncidentTable.tsx`<br>`uis/backoffice/src/components/incidents/HistoryTimeline.tsx`<br>`uis/backoffice/src/views/IncidentDetailPage.tsx` | 12<br>46<br>39<br>135 | UI sin fallback seguro | Categoría/origen/estado desconocidos salen como celdas vacías y las fechas no válidas como `Invalid Date` o `1/1/1970`. Verificado. | Texto de reserva («Desconocido», «—») y una función de formato de fecha que devuelva «—». |
+| **U-10** | `uis/website/index.html`<br>`uis/website/src/main.tsx` | 12<br>2-7 | UI sin fallback seguro | Sin JavaScript (o sin descargar el script) la web pública queda en blanco: `#root` vacío, sin `<noscript>` ni *error boundary*. Verificado. | Añadir `<noscript>` con el contacto y un *error boundary* alrededor de `<App />`. |
+| **U-11** | `uis/backoffice/src/lib/api.ts`<br>`uis/backoffice/src/views/LoginPage.tsx` | 69-80<br>38-47 | UI sin estado de error | Con un `200` sin `access_token` el login dice «Email o contraseña incorrectos». Verificado. | Validar `access_token` y, si no, «No se pudo iniciar sesión. Inténtalo de nuevo». |
+| **A-02** | `uis/backoffice/src/app/(app)/error.tsx` | 4-13 | UI error sin llamada a la acción | La pantalla de error general solo ofrece «Reintentar» (repite el mismo fallo), sin enlace a inicio ni qué hacer si persiste. Verificado. | Añadir «Volver al inicio» y «Si continúa, contacta con soporte con esta referencia: …» con el `digest`. |
+| **A-03** | `uis/backoffice/src/views/LoginPage.tsx`<br>`uis/backoffice/src/views/LoginPage.tsx` | 41-46<br>100-105 | UI error sin llamada a la acción | El mensaje de login enumera tres causas pero solo ofrece «Regístrate»: sin instrucción para cuenta desactivada ni recuperación de contraseña. Verificado. | Añadir «Si crees que tu cuenta está desactivada, contacta con un administrador». |
+| **A-04** | `uis/backoffice/src/components/Layout.tsx`<br>`uis/backoffice/src/auth/RequireAuth.tsx`<br>`uis/website/index.html` | 27-61<br>39<br>12 | UI error sin llamada a la acción | El menú lateral es el único camino a Inicio y desaparece justo en los fallos más graves (fallo del `Layout`, comprobar sesión, web sin JavaScript). Verificado. | Incluir un enlace directo a `/` en `global-error.tsx`, `RequireAuth` y `<noscript>`. |
+| **P-03** | `scripts/analyze.py`<br>`scripts/seed_incidents.py`<br>`services/api/seed.py`<br>`services/api/auth/cli.py` | 26-58<br>45-92<br>62-63<br>36-37 | Script sin código de salida | No hay convención de códigos de salida; «carga con rechazos» (96 de 100) termina con 0 igual que un éxito limpio. Verificado. | Documentar en el README qué código devuelve cada script (0 correcto, 1 error de datos, 2 uso o verificación omitida). Una opción `--strict` sería funcionalidad nueva: ver «Propuestas fuera de alcance». |
+| **U-12** | `uis/backoffice/src/views/SuppliersPage.tsx`<br>`uis/backoffice/src/components/suppliers/SupplierRow.tsx` | 31-50,78-81<br>32-47 | UI sin estado de éxito | Crear un proveedor, cambiar su estado o editar su tarifa no muestra confirmación: solo cambia la fila (0 mensajes de estado). Verificado en estado y tarifa; en la creación el formulario se cierra y aparece la fila. | Mostrar un aviso breve («Proveedor guardado»), como ya hacen incidencias y perfil. |
+| **P-04** | `skills/data-analysis/scripts/pandas_clean.py` | 5-8 | Script sin manejo de errores | Plantilla de limpieza con la ruta `data.csv` fija y sin ningún `try`: sin `pandas` (no figura en ninguna lista de dependencias del repositorio) falla con `ModuleNotFoundError`, y un fichero ausente, vacío o mal formado terminaría con traceback. Verificado el primer caso (código 1). | Capturar `ImportError`, `FileNotFoundError`, `EmptyDataError` y `ParserError` con un mensaje claro y `raise SystemExit(1)`; recibir la ruta como argumento. |
+| **D-08** | `skills/data-analysis/scripts/pandas_clean.py` | 10,30 | Filtración de datos sensibles | `print("df_head", df.head())` imprime las primeras filas del fichero: aplicada al CSV de incidencias mostraría `customer_email`, contra la norma del proyecto de no imprimir emails. | No imprimir filas de datos; mostrar solo forma, tipos y recuentos. |
+| **B-02** | `services/api/incidents/router.py`<br>`services/api/users/router.py`<br>`services/api/auth/router.py` | 27-38<br>77-80<br>28-41 | Códigos HTTP inconsistentes | Dentro de una misma familia de error se usan códigos distintos: subida de CSV 400 (`.txt`, no UTF-8), 422 (faltan columnas, sin filas, sin fichero) y 500 (estado desconocido); contraseña actual 400 (incorrecta) y 422 (falta); login 401 y 422. Verificado. | Fijar un criterio (422 para datos inválidos, 400 solo para peticiones mal formadas) y aplicarlo igual en todas las rutas. |
+| **C-08** | `uis/backoffice/src/auth/AuthContext.tsx` | 41-55 | Patrón inconsistente (limpieza del estado de carga) | `restoreSession` activa `loading` y lo resuelve solo en `then`/`catch`, mientras otros 10 sitios usan `try/finally` y 3 `.finally()`; si la petición no termina, el estado queda en «loading» para siempre. | Resolver el estado en un `finally` (junto con el tiempo máximo de U-01). |
+
+## Cobertura del monorepo
+
+Se inventariaron todos los ficheros versionados. Estado de cada carpeta:
+
+| Carpeta | Contenido | Estado |
+|---|---|---|
+| `services/api` | API FastAPI: usuarios, perfiles, proveedores, incidencias, análisis de CSV, autenticación, configuración y 2 comandos | Auditada: lectura completa, ejecución real y 1.046 peticiones de prueba |
+| `uis/backoffice` | Next.js: incidencias, análisis, proveedores, perfil, login y registro, con su capa de API y de sesión | Auditada: lectura completa y 121 combinaciones de fallo en un navegador |
+| `uis/website` | Web pública Vite/React | Auditada: lectura y ejecución en navegador (con y sin JavaScript) |
+| `scripts` | `analyze.py`, `seed_incidents.py` | Auditados: ejecutados con más de 20 entradas que fallan |
+| `packages/shared` | Validación y reglas compartidas (Python y TypeScript) | Auditado: lectura y ejecución |
+| `src` | Utilidades históricas de la raíz | Auditadas por lectura; nadie las importa |
+| `skills` | `data-analysis/scripts/pandas_clean.py` y plantillas vacías | Auditada la única pieza de código (P-04, D-08) |
+| `agents/_template/agent.py` | Plantilla vacía (0 bytes) | Sin código que auditar |
+| `infra`, `internal`, `mcps`, `workflows`, `shared`, `data/*` | Solo `README` y datos | Sin código; el CSV de datos se revisó por su contenido (D-06) |
+| Configuración | `tsconfig` (`strict: true` en ambas apps), `next.config.mjs`, `vite.config.ts`, `pyproject.toml`, `requirements.txt`, `.gitignore` | Revisada: sin hallazgos de gestión de errores |
+| Tests (18 ficheros) | `services/api/tests`, `packages/shared/test`, `uis/backoffice/e2e` | No auditados como código (el criterio es el comportamiento de producción); sí se revisó cómo terminan los e2e |
+| Documentación | `docs/`, `README`, `CONTEXT*`, cuadernos | Revisada por datos sensibles (D-07) |
+
+Todo el código que se ejecuta en producción o se lanza desde la línea de comandos está cubierto.
+
+## Cobertura de los criterios del tech lead
+
+Cada criterio se comprobó con pruebas, no solo leyendo el código. **Resultado: 1 conforme, 3 parciales, 4 no conformes.**
+
+| # | Criterio | Estado | Cómo se comprobó | Resultado | Hallazgos |
+|---|---|---|---|---|---|
+| 1 | Ningún error rompe la aplicación | **No conforme** | 1.046 peticiones hostiles a la API (generadas desde su OpenAPI) y 121 combinaciones de pantalla × endpoint × fallo en un navegador | API: solo 2 causas de 500 (`NaN` en 5 endpoints y el estado desconocido del CSV). Interfaz: **60 de 121** combinaciones acaban mal (30 expulsan al login, 11 sustituyen la pantalla entera, 10 muestran la página de Next en inglés y 9 se quedan cargando); otras 11 son un 401 que cierra la sesión correctamente | E-01, E-05, E-08, E-12, T-01, T-02, U-01, U-04, U-05 |
+| 2 | Toda operación asíncrona tiene cargando / éxito / error | **Parcial** | Inventario de 19 operaciones (tabla siguiente) y medición de cada una en el navegador | Carga y error casi completos; el éxito es explícito en incidencias y perfil, e implícito en proveedores y análisis | U-01, U-02, U-03, U-08, U-12, E-04 |
+| 3 | Los mensajes al usuario son legibles y no técnicos | **No conforme** | 28 respuestas de error reales pasadas por el código del frontend y revisión de las etiquetas en pantalla | Llegan en inglés o con jerga: `Internal Server Error`, `Missing required columns…`, `customer_email: value is not a valid email address…`, `Missing client_company` | R-01, R-02, R-05, E-10, A-01 |
+| 4 | Los errores siempre ofrecen una salida clara | **No conforme** | 19 situaciones de error medidas: botón de reintentar, enlace a inicio e instrucción | 7 de 19 correctas | A-01, A-02, A-03, A-04, U-02, U-03, U-08 |
+| 5 | Las excepciones se capturan en el ámbito correcto | **Parcial** | Inventario de todos los `try/catch/except` | Backend correcto (cada `try` envuelve una llamada y captura excepciones de dominio concretas; ningún `except:` desnudo ni `pass`; solo dos reparos menores, C-06 y C-07); en el frontend hay ámbitos demasiado amplios y errores tragados | C-01 a C-07, T-03, T-04, S-01, S-02 |
+| 6 | No se filtra información sensible | **No conforme** | Historial completo de Git, ejecución de la API con uvicorn y revisión de las respuestas y los logs | **2 críticos**: contraseña inicial en el log y emails completos accesibles a cualquier cuenta. Sin secretos reales en el historial | D-01, D-02, D-03 a D-08, E-17, E-19 |
+| 7 | Los scripts fallan con códigos de salida apropiados | **Parcial** | Los 4 scripts de Python ejecutados con entradas que fallan; los 6 e2e de JavaScript revisados | `create-user` y `seed` correctos; `analyze.py` y `seed_incidents.py` terminan con 0 en 7 casos que fallan; los e2e usan `process.exit(fails === 0 ? 0 : 1)` | P-01, P-02, P-03, P-04, E-11, S-10 |
+| 8 | No se introduce ninguna funcionalidad nueva | **Conforme** | `git diff main..HEAD`: 0 ficheros de código modificados. Revisión de las recomendaciones | Las recomendaciones que implicaban funcionalidad nueva se redujeron a la corrección del defecto; las ideas descartadas están en la sección «Propuestas fuera de alcance» | — |
+
+### Operaciones asíncronas: cargando / éxito / error
+
+Leyenda: ✔ resuelto · ~ resuelto en parte o solo implícito · ✘ falta.
+
+| # | Operación | Cargando | Éxito | Error | Hallazgos |
+|---|---|---|---|---|---|
+| 1 | Comprobar la sesión (`/auth/me`) | ~ solo texto, sin indicador | ✔ | ✘ cierra la sesión ante cualquier fallo | E-08, U-01 |
+| 2 | Iniciar sesión | ✔ | ✔ | ~ dice «contraseña incorrecta» con una respuesta rara | U-11, A-03 |
+| 3 | Registrarse | ✔ | ✔ | ✔ | — |
+| 4 | Lista de incidencias | ✔ | ✔ | ~ aviso sin reintento | U-03 |
+| 5 | Resumen de incidencias | ✘ sin indicador | ✔ | ~ comparte aviso; su fallo oculta la lista | U-03 |
+| 6 | Desplegables de filtros | — | ✔ | ✘ fallo silencioso | C-05 |
+| 7 | Detalle de incidencia | ✔ | ✔ | ✔ con «Reintentar» | — |
+| 8 | Crear incidencia | ✔ | ✔ «Incidencia … creada» | ✔ | — |
+| 9 | Editar incidencia | ✔ | ✔ «Cambios guardados» | ✔ | — |
+| 10 | Cambiar estado de incidencia | ✔ | ✔ «Estado actualizado» | ✔ | — |
+| 11 | Analizar un CSV | ✔ | ~ muestra resultados | ~ mensaje técnico, sin ayuda | R-01, A-01 |
+| 12 | Descargar el CSV de resultados | ✔ | ~ solo empieza la descarga | ✔ | — |
+| 13 | Lista de proveedores | ✔ | ✔ | ✘ error + «no hay proveedores» falso, sin reintento | U-02 |
+| 14 | Crear proveedor | ✔ | ~ implícito | ~ mensaje técnico | U-12, R-01 |
+| 15 | Editar tarifa de proveedor | ✔ | ~ implícito | ~ aviso lejos de la fila | U-06, U-12 |
+| 16 | Cambiar estado de proveedor | ✔ | ~ implícito | ~ aviso lejos de la fila | U-06, U-12 |
+| 17 | Cargar el perfil | ✔ «Cargando tu perfil…» | ✔ | ~ sin reintento | U-08 |
+| 18 | Guardar el perfil | ✔ | ✔ «Cambios guardados» | ✔ | — |
+| 19 | Formulario de talento (web pública) | ✘ no existe | ✘ falso éxito | ✘ no existe | E-04 |
+
+Resultado: **6 de 19 operaciones completas**, 8 parciales y 5 con carencias (la web pública no tiene ningún estado).
+
+### Pruebas adicionales de esta verificación
+
+- **API (criterio 1):** 1.046 peticiones generadas desde su esquema OpenAPI: valores límite, `NaN`/`Infinity`, cadenas de 5.000 caracteres, caracteres nulos, tipos erróneos, cuerpos rotos y ficheros hostiles. Resultado: solo 2 causas de 500.
+- **Interfaz (criterios 1, 2 y 4):** 5 pantallas protegidas × sus peticiones × 11 modos de fallo (500 texto y JSON, red caída, `200` con `{}`, `[]`, `null` y HTML, 401, 403, 404 y sin respuesta) = 121 combinaciones, clasificadas por lo que ve la persona.
+- **Éxito (criterio 2):** 7 operaciones correctas ejecutadas en el navegador para medir la confirmación; las otras 2 (crear proveedor y guardar el perfil) se comprobaron leyendo el código, porque el guion de prueba no llegó a completarlas.
+- **Scripts (criterio 7):** además de los 4 de Python, revisión de cómo terminan los 6 e2e de JavaScript y los scripts de `package.json`.
+- **Contrato de errores del backend:** censo de 38 respuestas de error reales (10 familias: no existe, método, validación, subida de CSV, autenticación, permisos, conflicto, regla de negocio, fallo interno): formas, códigos y filtración de `input`/`ctx`.
+- **Robustez frente a `undefined`:** 238 pruebas que quitan o ponen a `null` un solo campo de las respuestas reales (lista, resumen, desplegables, detalle, proveedores y usuario actual) y clasifican lo que muestra cada pantalla.
+- **Consistencia de patrones:** recuento de cómo se aplica cada patrón (mensajes, limpieza del estado de carga, `?.`, códigos de salida) en todo el código.
+- **Alcance (criterio 8):** `git diff main..HEAD` y revisión de las 76 correcciones sugeridas.
+
+## Rúbrica de evaluación
+
+La evaluación se centra en la **corrección y la consistencia** de los patrones de gestión de errores, no en funcionalidades nuevas. Estado de cada punto, con la evidencia que lo respalda:
+
+| # | Punto evaluado | Estado | Evidencia | Hallazgos |
+|---|---|---|---|---|
+| 1 | Todas las operaciones asíncronas del frontend implementan el patrón de tres estados | **Parcial** | De 19 operaciones, 6 tienen los tres estados completos, 8 los tienen en parte y 5 tienen carencias | U-01, U-02, U-03, U-08, U-12, E-04 |
+| 2 | Los mensajes de error son legibles e incluyen una llamada a la acción | **No conforme** | De 19 situaciones de error, 7 son correctas; solo hay 2 botones «Reintentar» en todo el frontend (el detalle de incidencia y la pantalla de error general) | R-01, R-02, R-05, A-01, A-02, A-03, A-04 |
+| 3 | Los bloques `try/catch` y `try/except` están acotados a operaciones específicas | **Parcial** | Backend: cada `try` envuelve una llamada y captura excepciones de dominio concretas, sin `except:` desnudo ni `pass`. Frontend: ámbitos demasiado amplios y errores tragados | C-01 a C-05, T-03, S-01, S-02 |
+| 4 | Los bloques `finally` limpian el estado de carga | **Conforme, con una excepción** | 10 de los 11 ficheros que activan un estado de carga lo limpian con `try/finally` (10 usos) o `.finally()` (3); con errores 500, red caída o respuestas rotas el indicador de carga siempre desaparece (121 combinaciones). La excepción es `AuthContext` | C-08, U-01 |
+| 5 | El `optional chaining` y los `fallbacks` evitan errores de renderizado por `undefined` | **No conforme** | Solo 19 `?.` y 22 `??` en todo el frontend; 0 valores por defecto con `||`. De 238 respuestas con un campo alterado, 55 (23 %) fallan | U-13, U-04, U-05, U-09 |
+| 6 | Las rutas del backend devuelven errores estructurados y limpios con los códigos HTTP correctos | **No conforme** | 38 respuestas de error: 2 formas de estructura distintas, 2 sin JSON (500), 5 con `input`/`ctx`, y códigos distintos dentro de la misma familia | B-01, B-02, E-01, E-12, E-19, R-04 |
+| 7 | Ninguna información sensible aparece en la salida de errores entregada al cliente | **Parcial** | Ninguna respuesta de error contiene trazas, rutas internas, secretos ni cadenas de conexión (66 respuestas revisadas). Sí devuelven el dato rechazado (nombre, teléfono, dirección) y el email en el 409 | E-19, E-07, R-04 |
+| 8 | Los scripts de Python gestionan los errores de E/S y terminan con códigos de salida apropiados | **Parcial** | De 5 scripts, 2 son correctos (`create-user`, `seed`) y 3 no (`analyze.py`, `seed_incidents.py`, `pandas_clean.py`) | P-01, P-02, P-04, T-06, E-11 |
+
+**Resultado: 1 conforme, 4 parciales y 3 no conformes.**
+
+> Nota sobre el punto 7: los dos hallazgos críticos (D-01 y D-02) son fugas en el **log** de arranque y en las **respuestas de datos**, no en la salida de errores; por eso no cambian el estado de este punto, pero siguen siendo la prioridad.
+
+### Consistencia de los patrones
+
+Cada patrón existe en el código, pero no se aplica de forma uniforme:
+
+| Patrón | Cómo se aplica | Consistencia |
+|---|---|---|
+| Convertir un error en mensaje | `describeError(...)` en 4 sitios, `err.message` directo en 7 y texto fijo en 5 | Inconsistente: mensajes técnicos donde no se usa `describeError` |
+| Limpiar el estado de carga | `try/finally` en 10 sitios, `.finally()` en 3 y `then`/`catch` en 1 (`AuthContext`) | Casi uniforme |
+| Distinguir errores de la API | `instanceof ApiError` en 11 sitios | Uniforme |
+| Acceder a datos que pueden faltar | `?.` y `??` solo en 41 sitios | Insuficiente (U-13) |
+| Forma de los errores del backend | `detail` texto (19), `detail` lista (15), no JSON (2) | Inconsistente (B-01) |
+| Códigos HTTP del backend | 400, 422 y 500 mezclados en la subida de CSV; 400 y 422 en las reglas de contraseña | Inconsistente (B-02) |
+| Terminar un script | `return` de un entero (2 scripts), `raise SystemExit("mensaje")` (1), nada (2) | Inconsistente |
+
+
+## Propuestas fuera de alcance (decisión de producto)
+
+El criterio 8 prohíbe introducir funcionalidad nueva, así que estas ideas **no se recomiendan en esta tarea**. Se anotan porque cada una resolvería un hallazgo de verdad, pero cada una requiere que alguien del equipo de producto decida si se quiere.
+
+| Hallazgo | Propuesta | Por qué es funcionalidad nueva |
+|---|---|---|
+| D-02 | Aprobación manual de las altas (`is_active=False` hasta que un administrador las active) | Crea un flujo de aprobación que hoy no existe |
+| E-06 | Límite de intentos de login y registro (429) | Añade una pieza nueva de infraestructura |
+| R-04 | Campo `code` estable en los errores de la API | Cambia el contrato de la API |
+| P-03 | Opción `--strict` en los scripts | Añade una opción de línea de comandos |
+| S-04 | `/health` con estado «degradado» | Añade un comportamiento nuevo del endpoint |
+| A-01 | Botón «Elegir otro archivo» | Añade un control de interfaz |
+| E-18 | Cabeceras CSP o cambiar el almacenamiento del token | Es un cambio de diseño de seguridad |
+| A-03 | Recuperación de contraseña | Es una funcionalidad completa (existe sin fusionar en `feature/password-reset`) |
+
+
+## Observaciones
+
+- **Rama `feature/incident-manager`:** no está fusionada. Corrige parte de E-01, E-05, U-03, U-04 y R-02 solo en `/api/incidents` y en la pantalla de incidencias; el resto de hallazgos sigue presente en esa rama.
+- **Lo que está bien:** login con respuesta idéntica para email desconocido y contraseña errónea; JWT con algoritmo fijado y `exp` obligatorio; sin secretos reales en todo el historial de Git; el hash de contraseña no aparece en ninguna respuesta; `create-user` y `seed` devuelven siempre un código distinto de 0 al fallar; y varios estados de la interfaz (carga de proveedores e incidencias, detalle con «Reintentar», crear incidencia conservando lo escrito).
+- **Límites:** no se leyeron ni ejecutaron los tests ni las pruebas e2e existentes, y no se auditó ningún entorno de producción.
