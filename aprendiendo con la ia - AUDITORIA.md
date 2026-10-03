@@ -24,6 +24,8 @@
 14. [Sexta pasada: interfaz sin estados de carga ni de error](#14-sexta-pasada-interfaz-sin-estados-de-carga-ni-de-error)
 15. [Séptima pasada: errores sin acción y scripts sin código de salida](#15-séptima-pasada-errores-sin-acción-y-scripts-sin-código-de-salida)
 16. [Octava pasada: ¿cumple la auditoría los criterios del tech lead?](#16-octava-pasada-cumple-la-auditoría-los-criterios-del-tech-lead)
+17. [Pasada final: ¿hemos mirado todo el monorepo?](#17-pasada-final-hemos-mirado-todo-el-monorepo)
+18. [Última pasada: la rúbrica de evaluación](#18-última-pasada-la-rúbrica-de-evaluación)
 
 ---
 
@@ -1121,6 +1123,226 @@ La solución fue **reducir cada recomendación a corregir el defecto** (por ejem
 3. Mira la tabla de 19 operaciones. ¿Cuál te parece la **más grave**? Justifica la elección.
 4. Para cada una de estas ideas, di si es **corregir un defecto** o **funcionalidad nueva**: (a) añadir un tiempo máximo a las peticiones; (b) permitir exportar el informe a PDF; (c) mostrar «Cambios guardados» tras editar; (d) enviar un correo cuando falla un script.
 5. **Pregunta de reflexión:** ¿por qué subió de gravedad un hallazgo sin que el código cambiara? ¿Qué papel juega la evidencia al decidir una severidad?
+
+---
+
+## 17. Pasada final: ¿hemos mirado todo el monorepo?
+
+La última instrucción fue: *analiza el monorepo completo y entrega un informe exhaustivo, priorizado por severidad*. Casi todo el informe ya existía; lo que faltaba era **demostrar que no se había quedado nada sin mirar** y entregarlo de forma que se pueda actuar sobre él. El resultado es el [informe final](./docs/INFORME-AUDITORIA.md).
+
+### 17.1 Cómo se comprueba que no falta nada
+
+Una auditoría puede ser muy buena y aun así dejarse una carpeta entera. Para evitarlo se hace un **inventario de cobertura**:
+
+1. Listar **todos** los ficheros que Git tiene registrados (`git ls-files`).
+2. Agruparlos por carpeta y quitar los que no son código (`README`, imágenes).
+3. Para cada carpeta, anotar uno de tres estados: **auditada**, **sin código** o **fuera de alcance (con motivo)**.
+
+Esto es lo que se encontró:
+
+| Resultado | Qué significa |
+|---|---|
+| La mayor parte del repositorio (`services`, `uis`, `scripts`, `packages`, `src`) | Ya estaba auditada |
+| `infra`, `internal`, `mcps`, `workflows`, `shared` | Solo contienen `README`: **no hay código que auditar** |
+| `agents/_template/agent.py` | Está **vacío** (0 bytes) |
+| `skills/data-analysis/scripts/pandas_clean.py` | **Un script que no se había revisado** → 2 hallazgos nuevos |
+
+> 💡 **Aprendizaje:** un inventario no solo ayuda a encontrar lo que se escapó (aquí, un script). También te permite **decir con seguridad lo que NO hay**: "las carpetas `infra` y `mcps` no tienen código" es una afirmación que ahora tiene una prueba detrás.
+
+### 17.2 Los dos hallazgos del script olvidado
+
+El script `pandas_clean.py` es una plantilla de limpieza de datos. Se ejecutó sin tener `pandas` instalado y falló con un error (`ModuleNotFoundError`) y código de salida 1. De ahí salió:
+
+- **P-04:** el script abre `data.csv` sin ningún `try`; y **`pandas` no está en ninguna lista de dependencias del repositorio**, así que quien lo ejecute se encuentra el fallo.
+- **D-08:** al final hace `print(df.head())`, que **imprime las primeras filas del fichero**. Si alguien lo aplica al CSV de incidencias, mostraría los emails de los clientes, justo lo que la norma del proyecto prohíbe.
+
+Son hallazgos de severidad baja, pero son un buen ejemplo de **cómo un hallazgo de seguridad puede esconderse en una plantilla inocente** ("Safe snippet for basic pandas cleaning").
+
+### 17.3 Priorizar: el resumen ejecutivo
+
+Un informe con 78 hallazgos no se puede arreglar "de arriba abajo". Hace falta **un orden**. El informe final empieza con un resumen ejecutivo de cuatro pasos:
+
+| Paso | Qué | Por qué en ese orden |
+|---|---|---|
+| 1 | **Críticos** (D-01, D-02) | Exponen una credencial y datos personales reales: no se puede esperar |
+| 2 | **Altos** (sesión, 500 sin controlar, datos dañados, CSV, web pública) | Rompen la aplicación o pierden datos |
+| 3 | **Medios** (mensajes, estados de la interfaz, logging, códigos de salida) | Degradan la experiencia y la trazabilidad |
+| 4 | **Bajos** | Detalles y código histórico |
+
+También se añadió una tabla **por componente**: de un vistazo se ve que el 80 % de los hallazgos está en dos sitios (`uis/backoffice` y `services/api`). Eso ayuda a repartir el trabajo.
+
+> 💡 **Aprendizaje:** priorizar es decir **qué NO hacer todavía**. Un informe sin orden es una lista de la compra; con orden, es un plan.
+
+### 17.4 Decisiones de esta pasada
+
+| Decisión | Por qué |
+|---|---|
+| No repetir pruebas ya hechas | Todo el código de producción ya estaba cubierto con ejecución real; solo faltaba comprobar los márgenes |
+| Añadir una sección **"Cobertura del monorepo"** | Que el tech lead vea qué se miró y qué no, con el motivo |
+| Dejar los **tests** como "no auditados como código" | El criterio es el comportamiento de producción; sí se revisó cómo terminan los e2e |
+| Añadir un **resumen ejecutivo** al principio | Es lo único que leerá quien tenga cinco minutos |
+| Mantener **un único informe** como entrega final | Evita que haya dos versiones con cifras distintas |
+
+### 17.5 Problemas que aparecieron en esta pasada
+
+#### 🔴 1. Una cifra del informe que no podía sostener
+**Síntoma:** al escribir la tabla de cobertura puse "ejecutados con 22 entradas que fallan" para los scripts.
+**Causa:** era una cifra que había calculado de memoria.
+**Solución:** recontar (10 casos en `analyze.py` y 11 en `seed_incidents.py`) y cambiar la frase por *"más de 20 entradas"*, que sí es verdad. De paso corregí otras dos descripciones demasiado precisas ("7 dominios", "5 pantallas").
+**Aprendizaje:** **si no puedes demostrar una cifra, usa una frase que sí puedas demostrar.** "Más de 20" es menos bonito que "22", pero es cierto.
+
+#### 🔴 2. Un comando que terminó con un error en el último paso
+**Síntoma:** mi comprobación del script de `pandas` acabó con `pwd: error retrieving current directory`.
+**Causa:** la carpeta temporal en la que estaba trabajando **la borré en el mismo comando** (`rm -rf` con `cd` dentro), así que el sistema ya no sabía dónde estaba.
+**Solución:** los resultados importantes ya se habían impreso antes del error, así que no hubo que repetir nada.
+**Aprendizaje:** no borres la carpeta en la que estás. Sal primero (`cd /`) y luego borra.
+
+### 17.6 Ejercicios de esta parte
+
+1. Ejecuta `git ls-files | grep -v README | awk -F/ '{print $1}' | sort | uniq -c`. ¿Qué carpeta tiene más ficheros? ¿Coincide con la que más hallazgos tiene?
+2. Elige una carpeta que el informe dice **"sin código"** y compruébalo tú: ¿qué contiene realmente?
+3. Explica por qué `print(df.head())` puede ser un problema de seguridad aunque el script parezca inofensivo.
+4. Ordena estos cuatro hallazgos del más al menos urgente y justifica el orden: la contraseña inicial en el log (D-01), el `NaN` que da 500 (E-12), las etiquetas en inglés (R-05) y el código histórico sin guardas (E-20).
+5. **Pregunta de reflexión:** el informe dice "no auditados como código" sobre los tests. ¿Estás de acuerdo con esa decisión? ¿Qué razones habría para auditarlos también?
+
+---
+
+## 18. Última pasada: la rúbrica de evaluación
+
+Te enseñaron **la lista con la que van a evaluar el trabajo**: ocho puntos, y una nota que dice que se evalúa *la corrección y la consistencia de los patrones de gestión de errores*, no si se añadieron funcionalidades. La pregunta fue la misma que en la pasada 16: *¿la auditoría responde de verdad a cada punto?* El resultado está en la sección «Rúbrica de evaluación» del [informe](./docs/INFORME-AUDITORIA.md#rúbrica-de-evaluación).
+
+### 18.1 Leer una rúbrica antes de entregar
+
+Una **rúbrica** es la lista de lo que el evaluador va a mirar. Lo más útil que se puede hacer con ella es **comparar cada línea con lo que ya tienes**, y marcar tres cosas: lo que ya cubres, lo que cubres a medias y lo que **no has mirado**.
+
+| Punto de la rúbrica | ¿Estaba cubierto? |
+|---|---|
+| Operaciones con tres estados | Sí (pasadas 6 y 16) |
+| Mensajes legibles con llamada a la acción | Sí (pasadas 4 y 7) |
+| `try/catch` acotados | Sí (pasada 2) |
+| **`finally` para limpiar el estado de carga** | **A medias**: lo había visto sin medirlo |
+| **`optional chaining` y valores por defecto ante `undefined`** | **No como tal** |
+| **Backend con errores estructurados y códigos correctos** | **No de forma sistemática** |
+| Sin información sensible en los errores | Sí (pasada 5) |
+| Scripts con códigos de salida | Sí (pasada 7) |
+
+> 💡 **Aprendizaje:** los tres huecos eran justo los puntos más "técnicos" de la rúbrica. Cuando una lista de evaluación usa palabras muy concretas (*finally*, *optional chaining*), probablemente quien evalúa **va a buscar exactamente eso**.
+
+### 18.2 Qué es el *optional chaining* y por qué importa
+
+En JavaScript, si un dato **no existe** (`undefined`) y tratas de entrar en él, el programa se rompe:
+
+```ts
+const nombre = usuario.perfil.nombre;     // ❌ si perfil no existe: "Cannot read properties of undefined"
+const nombre = usuario?.perfil?.nombre;   // ✅ devuelve undefined en vez de romperse
+const nombre = usuario?.perfil?.nombre ?? "—";   // ✅ y además pone un texto de reserva
+```
+
+- **`?.`** ("encadenamiento opcional") significa: *"si lo de la izquierda no existe, para aquí y devuelve `undefined`"*.
+- **`??`** significa: *"si lo de la izquierda es `undefined` o `null`, usa esto otro"*.
+
+Ya habíamos visto este fallo una vez: `user?.profile.name` en el menú tenía el primer `?.` pero **le faltaba el segundo**. Pero ¿cuánto se repetía en todo el proyecto?
+
+### 18.3 Cómo se midió: una prueba de mutación
+
+Para medirlo no basta con buscar `?.` en el código. Se hizo una prueba más ingeniosa, que se llama **prueba de mutación de datos**:
+
+1. Se pide a la API **una respuesta real** (por ejemplo, la lista de incidencias).
+2. Para **cada campo**, se hace una copia de la respuesta **sin ese campo** (y otra con ese campo a `null`).
+3. Se carga la pantalla con esa respuesta alterada y se mira **si se rompe o si enseña cosas raras**.
+
+Se hicieron **238 pruebas**. Resultado: **55 (23 %) fallan**:
+
+| Qué pasa | Cuántas | Ejemplo |
+|---|---|---|
+| Se sustituye **toda la pantalla** por "Algo ha salido mal" | 33 | Falta `created_at` en una fila de la lista |
+| Aparece texto raro en pantalla | 20 | `undefined activas`, `NaN%`, tarifa `NaN`, `Invalid Date` |
+| Sale la página de error de Next, en inglés | 2 | `/auth/me` sin `profile` |
+
+Además, solo hay **19 `?.` y 22 `??`** en todo el frontend.
+
+> 💡 **Aprendizaje:** para saber si un código es robusto frente a datos que faltan, **no mires el código: estropea los datos y observa**. Es lo mismo que una prueba de resistencia, pero con datos en lugar de con peso.
+
+### 18.4 El `finally` y el estado de carga
+
+El patrón correcto es este:
+
+```ts
+setLoading(true);
+try {
+  await llamarALaApi();
+} catch (err) {
+  setError("No se pudo cargar");
+} finally {
+  setLoading(false);      // se ejecuta SIEMPRE, haya ido bien o mal
+}
+```
+
+Si `setLoading(false)` se pusiera dentro del `try`, un error dejaría el indicador de carga girando para siempre. Se revisaron todos los sitios: **10 de los 11 ficheros con estado de carga lo hacen bien** (con `try/finally` o con `.finally()`). La excepción es `AuthContext`, que lo resuelve en dos sitios distintos (`then` y `catch`).
+
+**Una buena noticia que hay que contar:** esta parte está bien resuelta. Un informe justo cuenta lo que funciona.
+
+### 18.5 Los errores del backend: estructura y códigos
+
+Un backend ordenado debería responder a todos los errores con **la misma forma** y con **el código HTTP que toca**. Se hizo un **censo de 38 errores reales** de la API, agrupados en 10 familias (no existe, validación, subida de CSV, autenticación, permisos…):
+
+| Qué se midió | Resultado |
+|---|---|
+| Forma del error | **Dos distintas**: `detail` como texto (19) y como lista de objetos (15), más 2 que **no son JSON** |
+| Códigos | En una **misma familia** salen códigos distintos: la subida de CSV da **400, 422 y 500** |
+| Datos del usuario devueltos en el error | **5 de 38** devuelven el valor rechazado (`input`) |
+
+> 💡 **Aprendizaje (consistencia):** el problema no es tanto que un error esté "mal", sino que **dos errores parecidos se traten de forma diferente**. Quien consume la API (el frontend) tiene que escribir un caso especial por cada forma.
+
+### 18.6 Decisiones de esta pasada
+
+| Decisión | Por qué |
+|---|---|
+| Añadir una sección **«Rúbrica de evaluación»** con los 8 puntos tal cual | Quien evalúa busca esas frases exactas; mejor que las encuentre en el informe |
+| Medir `undefined` con **mutación de datos** | Un recuento de `?.` no demuestra nada sobre si algo se rompe |
+| Hacer un **censo** de los errores del backend, no una lista de ejemplos | Para hablar de consistencia hay que contar: "19 de una forma, 15 de otra" |
+| Añadir una **tabla de consistencia** | La rúbrica dice "consistencia": hay que mostrar qué patrones son uniformes y cuáles no |
+| **Contar lo que está bien** (`finally`) | Evita que el informe parezca una lista de quejas |
+| No tocar el código | La instrucción sigue siendo solo auditar |
+
+### 18.7 Problemas que aparecieron en esta pasada
+
+#### 🔴 1. Mi entorno de pruebas se había borrado otra vez
+**Síntoma:** al ir a lanzar el censo no existía ni el entorno de Python, ni el navegador, ni las librerías.
+**Solución:** reconstruirlo por partes: dependencias de la API, Chromium y las librerías del sistema (descargadas a una carpeta temporal, sin permisos de administrador).
+**Aprendizaje:** si tu entorno se puede perder, **apunta los pasos para reconstruirlo**. Hacerlo la segunda vez fue más rápido porque ya sabía qué faltaba.
+
+#### 🔴 2. La instalación de dependencias falló por una ruta relativa
+**Síntoma:** `is not a valid editable requirement` al instalar `requirements.txt`.
+**Causa:** el fichero contiene `-e ../../packages/shared/incidents_analyzer`, una ruta **relativa a donde está el fichero**, y yo lo ejecutaba desde otra carpeta.
+**Solución:** lanzar el comando **desde `services/api`**.
+**Aprendizaje:** una ruta relativa depende de **dónde estás**. Si falla con "no encuentro eso", mira primero en qué carpeta ejecutas.
+
+#### 🔴 3. El primer censo se cortó con "Connection reset by peer"
+**Síntoma:** a mitad de la lista de pruebas, el cliente dejó de funcionar con `ReadError`.
+**Causa:** tras un error 500 el servidor **cierra la conexión**, y mi cliente intentaba reutilizarla. Ya me había pasado en otra pasada.
+**Solución:** pedir una **conexión nueva en cada petición** (`Connection: close`).
+**Aprendizaje:** cuando un error se repite, **déjalo resuelto en la herramienta** para no volver a tropezar.
+
+#### 🔴 4. Dos "200" que parecían un fallo de la API y eran un fallo de mi prueba
+**Síntoma:** pedí una transición de estado no permitida y una edición de una incidencia final, y el servidor respondió `200` en lugar de `409`.
+**Causa:** en esta versión del proyecto, una incidencia resuelta **se puede reabrir**; mi escenario asumía las reglas de otra versión.
+**Solución:** no contarlos como fallo y decirlo en el análisis.
+**Aprendizaje:** antes de decidir que el sistema se equivoca, **comprueba que tu expectativa es la correcta**.
+
+#### 🔴 5. Otro dato de prueba inválido
+**Síntoma:** al sembrar incidencias de prueba, `KeyError: 'id'`.
+**Causa:** una incidencia de origen `branch` con sucursal `central` es inválida en esta versión (hay que nombrar una sucursal real). El servidor devolvió un 422 y mi script no lo comprobó.
+**Solución:** usar una sucursal real y **comprobar el código de respuesta** (`assert r.status_code == 201`).
+**Aprendizaje:** al preparar datos de prueba, **verifica que se han creado** antes de usarlos.
+
+### 18.8 Ejercicios de esta parte
+
+1. Reescribe esta línea con `?.` y `??` para que nunca se rompa y muestre "—" si falta algo: `usuario.perfil.telefono.toUpperCase()`.
+2. Explica con tus palabras qué es una **prueba de mutación de datos** y por qué encuentra cosas que un recuento de `?.` no ve.
+3. Escribe el `try/catch/finally` de una función que carga una lista y que **siempre** deja de mostrar "Cargando…". ¿Qué pasaría si pusieras `setLoading(false)` solo dentro del `try`?
+4. En el censo del backend, ¿qué ventaja tendría para el frontend que **todos** los errores tuvieran la misma forma?
+5. **Pregunta de reflexión:** la rúbrica pide "consistencia". ¿Es peor un patrón que se aplica **mal en todas partes** o uno que se aplica **bien en unos sitios y mal en otros**? Justifica tu respuesta.
 
 ---
 

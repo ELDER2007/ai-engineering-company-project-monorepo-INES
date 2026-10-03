@@ -959,4 +959,34 @@ El tech lead fijó ocho criterios que la auditoría debe garantizar. Esta parte 
 
 ## Cambios en el recuento
 
-Con esta parte el informe consolidado pasa a **76 hallazgos**: 2 críticos, 9 altos, 30 medios y 35 bajos. Cambian tres cosas respecto al recuento anterior: E-08 sube de severidad con la evidencia nueva, se añaden R-05 y U-12, y C-02 se cuenta por separado.
+Con esta parte el informe consolidado pasa a **76 hallazgos**: 2 críticos, 9 altos, 30 medios y 35 bajos. La revisión final de cobertura del monorepo añade 2 hallazgos bajos (P-04 y D-08, en `skills/data-analysis`), con lo que el total definitivo es **78**: 2 críticos, 9 altos, 30 medios y 37 bajos. Cambian tres cosas respecto al recuento anterior: E-08 sube de severidad con la evidencia nueva, se añaden R-05 y U-12, y C-02 se cuenta por separado.
+
+---
+
+# Parte 9 — Rúbrica de evaluación
+
+Se contrastó la auditoría con los ocho puntos de la rúbrica de evaluación (que se centra en la corrección y la consistencia de los patrones de gestión de errores, no en funcionalidades nuevas). Tres de esos puntos no se habían auditado como tal: la limpieza del estado de carga con `finally`, el `optional chaining` con sus `fallbacks`, y que el backend devuelva errores estructurados con los códigos HTTP correctos. La tabla completa está en [INFORME-AUDITORIA.md](./INFORME-AUDITORIA.md#rúbrica-de-evaluación).
+
+## Resultado: 1 conforme, 4 parciales y 3 no conformes
+
+| # | Punto evaluado | Estado |
+|---|---|---|
+| 1 | Operaciones asíncronas con tres estados | Parcial |
+| 2 | Mensajes legibles con llamada a la acción | No conforme |
+| 3 | `try/catch` y `try/except` acotados | Parcial |
+| 4 | `finally` limpia el estado de carga | Conforme, con una excepción |
+| 5 | `optional chaining` y `fallbacks` ante `undefined` | No conforme |
+| 6 | Backend con errores estructurados y códigos HTTP correctos | No conforme |
+| 7 | Sin información sensible en la salida de errores | Parcial |
+| 8 | Scripts de Python con errores de E/S y códigos de salida | Parcial |
+
+## Pruebas nuevas
+
+- **`finally` (punto 4):** 10 de los 11 ficheros que activan un estado de carga lo limpian con `try/finally` (10 usos) o `.finally()` (3). La excepción es `AuthContext` (C-08). Con errores 500, red caída o respuestas rotas el indicador de carga siempre desaparece.
+- **`undefined` (punto 5):** 238 pruebas que quitan o ponen a `null` **un solo campo** de las respuestas reales de la API. **55 (23 %) fallan**: 33 sustituyen toda la pantalla, 20 enseñan `undefined`, `null`, `NaN` o `Invalid Date`, y 2 muestran la página de Next. En todo el frontend hay solo 19 `?.` y 22 `??`. Nuevo U-13.
+- **Contrato de errores (punto 6):** censo de 38 respuestas de error del backend. Hay **dos estructuras** (`detail` como texto en 19 y como lista en 15), 2 respuestas sin JSON (los 500) y 5 que devuelven `input`/`ctx`. Los códigos varían dentro de una misma familia: la subida de CSV usa 400, 422 y 500. Nuevos B-01 y B-02.
+- **Consistencia:** el mismo patrón se aplica de formas distintas (mensajes con `describeError` en 4 sitios, con `err.message` en 7 y con texto fijo en 5; scripts que terminan con `return`, con `SystemExit` o con nada).
+
+## Cambios en el recuento
+
+El total definitivo del informe consolidado pasa a **82 hallazgos**: 2 críticos, 9 altos, 32 medios y 39 bajos. Se añaden U-13 y B-01 (medios) y B-02 y C-08 (bajos). No se ha modificado ningún fichero de código.
