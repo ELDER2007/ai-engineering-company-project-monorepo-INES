@@ -1,5 +1,11 @@
 # Auditoría de gestión de errores — monorepo Nexova
 
+> **Cómo leer este documento.** Es la versión **detallada por partes**: explica el método y la evidencia de cada pasada, en el orden en que se hicieron. El **informe final** es [INFORME-AUDITORIA.md](./INFORME-AUDITORIA.md): **82 hallazgos** en el formato pedido (ruta, línea o rango, categoría, descripción, corrección y severidad **CRÍTICO / ALTO / MEDIO / BAJO**), con la matriz de los criterios del tech lead y la rúbrica de evaluación.
+>
+> Dos cosas que conviene saber para no confundirse al comparar los dos documentos:
+> - **Escala.** Aquí se usa la escala de tres niveles con la que se fue trabajando: *Alta* equivale a ALTO, *Media* a MEDIO y *Baja* a BAJO. Los dos hallazgos que el informe final marca como **CRÍTICO** (D-01 y D-02) aparecen aquí como *Alta*.
+> - **Totales.** Las tablas de resumen reflejan el recuento **de cada momento** (por ejemplo, 73 tras la Parte 7). El total definitivo, 82, se explica en las Partes 8 y 9 de este documento y es el que figura en el informe final.
+
 **Alcance:** resiliencia, manejo de errores, mensajes al usuario y seguridad.
 **Código auditado:** rama `main` (commit `9e49b73`): `services/api`, `uis/backoffice`, `uis/website`, `scripts/`, `packages/shared` y `src/` (código histórico de la raíz).
 **Fuera de alcance:** funcionalidades nuevas y refactorizaciones. Cada hallazgo lleva solo una corrección breve.
