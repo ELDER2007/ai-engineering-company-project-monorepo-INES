@@ -1431,7 +1431,14 @@ Pediste «el trabajo completo»: no solo el informe, también arreglar el códig
 - **El test nuevo (`test_error_handling.py`) se ejecutó al final y encontró un fallo real:** enviar `Infinity` como tarifa de un proveedor devolvía 200 y dejaba la tarifa en `null`. Lo arreglé con `allow_inf_nan=False` en el esquema. Los otros dos fallos eran errores del propio test (columnas del CSV en otro orden y una comprobación demasiado estricta del log). **Aprendizaje:** un test sin ejecutar no demuestra nada; al correrlo apareció un error que yo no había visto.
 
 ### 20.3 Cómo lo comprobé
-302 tests de la API (268 existentes + 34 nuevos) ✅ · 9 tests de `packages/shared` ✅ · `tsc` del backoffice y de la web ✅ · `next build` ✅. No he vuelto a pasar la batería de pruebas con navegador (Playwright) tras esta tanda.
+302 tests de la API (268 existentes + 34 nuevos) ✅ · 9 tests de `packages/shared` ✅ · `tsc` del backoffice y de la web ✅ · `next build` ✅. Los 6 e2e con navegador (Playwright) también pasan; tuve que actualizar 3 aserciones que esperaban mensajes técnicos en inglés, porque ahora el usuario ve mensajes en español.
+
+### 20.3b Cierre de los tres pendientes
+1. **Test ejecutado:** encontró un error real (`Infinity` como tarifa).
+2. **E-04:** el formulario de talento ya no dice «recibido»; dice la verdad y da una salida (email). Lo comprobé en el navegador: 0 peticiones enviadas.
+3. **Conciliación de los 82 hallazgos:** 61 corregidos, 8 parciales y 13 no aplicados, cada uno con su motivo en `docs/INFORME-AUDITORIA.md`. Los «no aplicados» son funcionalidad nueva o decisiones de producto/despliegue; **no los he arreglado a propósito** porque el tech lead pidió no añadir funcionalidad.
+4. **Playwright:** reconstruí Chromium sin permisos de administrador (descargando las librerías con `apt-get download` y extrayéndolas con `dpkg -x`) y pasaron los 6 e2e.
+5. Pequeños arreglos extra que salieron al conciliar: aviso si la tarifa está vacía (S-08), aviso si se sueltan varios CSV (S-09), confirmaciones de éxito en proveedores (U-12), instrucción en el login si la cuenta está desactivada (A-03) y permisos 600 en los ficheros de datos (D-05).
 
 ### 20.4 Ejercicios
 1. Abre `StatusActions.tsx`: ¿qué hay dentro del `try` y qué fuera? ¿Por qué?

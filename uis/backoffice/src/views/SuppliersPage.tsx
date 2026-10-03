@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { ErrorNotice, LoadingNote } from "../components/feedback";
+import { ErrorNotice, LoadingNote, SuccessNotice } from "../components/feedback";
 import SupplierForm from "../components/suppliers/SupplierForm";
 import SupplierRow from "../components/suppliers/SupplierRow";
 import { listSuppliers, setSupplierStatus, updateSupplierRate } from "../lib/api";
@@ -17,6 +17,7 @@ export default function SuppliersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [country, setCountry] = useState<Country | "">("");
   const [category, setCategory] = useState<Category | "">("");
@@ -42,8 +43,10 @@ export default function SuppliersPage() {
 
   const handleRateChange = async (id: number, rate: number) => {
     setError(null);
+    setNotice(null);
     try {
       replace(await updateSupplierRate(id, rate));
+      setNotice("Tarifa actualizada.");
     } catch (err) {
       setError(describeError(err, "No se pudo actualizar la tarifa. Revisa el importe e inténtalo de nuevo."));
       throw err;
@@ -52,8 +55,10 @@ export default function SuppliersPage() {
 
   const handleToggleStatus = async (supplier: Supplier) => {
     setError(null);
+    setNotice(null);
     try {
       replace(await setSupplierStatus(supplier.id, supplier.status === "active" ? "suspended" : "active"));
+      setNotice("Estado actualizado.");
     } catch (err) {
       setError(describeError(err, "No se pudo cambiar el estado del proveedor. Inténtalo de nuevo."));
       throw err;
@@ -91,6 +96,8 @@ export default function SuppliersPage() {
             onCreated={(created) => {
               setSuppliers((prev) => [...prev, created]);
               setShowForm(false);
+              setError(null);
+              setNotice("Proveedor creado.");
             }}
           />
         </div>
@@ -116,6 +123,11 @@ export default function SuppliersPage() {
       {error && (
         <div className="mt-6">
           <ErrorNotice message={error} />
+        </div>
+      )}
+      {notice && !error && (
+        <div className="mt-6">
+          <SuccessNotice message={notice} />
         </div>
       )}
 

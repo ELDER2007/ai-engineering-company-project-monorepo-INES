@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 from pathlib import Path
 
 from tinydb import TinyDB
@@ -20,6 +22,8 @@ def open_database(path: Path) -> TinyDB:
     try:
         database = TinyDB(path)
         len(database)  # TinyDB reads the file lazily: reading it now is what finds a damaged one
+        with contextlib.suppress(OSError):  # hashes and personal data: only the owner reads them (no effect on Windows)
+            os.chmod(path, 0o600)
         return database
     except (OSError, ValueError) as exc:  # json.JSONDecodeError is a ValueError
         if database is not None:

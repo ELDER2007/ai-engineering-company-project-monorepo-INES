@@ -96,7 +96,7 @@ try {
   await page.getByLabel("Dirección").fill("Otra calle 1");
   await save.click();
   await page.locator("#address-error").waitFor();
-  ok(/at most 200/.test(await page.locator("#address-error").innerText()) && (await page.getByLabel("Dirección").inputValue()) === "Otra calle 1", "422 de la API mostrado junto al campo, sin perder lo escrito");
+  ok(/dirección no es válida/.test(await page.locator("#address-error").innerText()) && (await page.getByLabel("Dirección").inputValue()) === "Otra calle 1", "422 de la API mostrado junto al campo, sin perder lo escrito");
   await page.unroute("**/profiles/me");
 
   // 6. sesión caducada al guardar -> 401 -> login

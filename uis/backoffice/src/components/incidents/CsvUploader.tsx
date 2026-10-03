@@ -8,10 +8,12 @@ interface CsvUploaderProps {
 
 export default function CsvUploader({ onFileSelected, disabled }: CsvUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (files: FileList | null) => {
     const file = files?.[0];
+    setNotice(files && files.length > 1 ? "Has elegido varios archivos: solo se analiza el primero. Sube el resto de uno en uno." : null);
     if (file) onFileSelected(file);
   };
 
@@ -57,6 +59,7 @@ export default function CsvUploader({ onFileSelected, disabled }: CsvUploaderPro
         Arrastra el CSV de incidentes aquí
       </p>
       <p className="mt-1 text-sm text-slate-400">o haz clic para seleccionar un archivo</p>
+      {notice && <p role="status" className="mt-3 text-sm text-amber-300">{notice}</p>}
       <input
         ref={inputRef}
         type="file"

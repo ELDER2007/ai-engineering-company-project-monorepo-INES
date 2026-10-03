@@ -22,6 +22,7 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(supplier.monthly_rate));
   const [busy, setBusy] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   const suspended = supplier.status === "suspended";
   const days = supplier.contract_renewal_date ? daysUntil(supplier.contract_renewal_date) : null;
@@ -31,7 +32,11 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
   const submitRate = async (event: FormEvent) => {
     event.preventDefault();
     const value = Number(draft);
-    if (!(value > 0)) return;
+    if (!(value > 0)) {
+      setRateError("Indica una tarifa mayor que 0.");
+      return;
+    }
+    setRateError(null);
     setBusy(true);
     try {
       await onRateChange(supplier.id, value);
@@ -82,14 +87,16 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               aria-label={`Nueva tarifa de ${supplier.name}`}
+              aria-invalid={rateError ? true : undefined}
               className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-white"
             />
             <button type="submit" disabled={busy} aria-label="Guardar tarifa" className="text-emerald-400 hover:text-emerald-300">
               <Check size={16} />
             </button>
-            <button type="button" aria-label="Cancelar" onClick={() => setEditing(false)} className="text-slate-400 hover:text-white">
+            <button type="button" aria-label="Cancelar" onClick={() => { setEditing(false); setRateError(null); }} className="text-slate-400 hover:text-white">
               <X size={16} />
             </button>
+            {rateError && <span role="alert" className="ml-1 text-xs text-rose-300">{rateError}</span>}
           </form>
         ) : (
           <div className="flex items-center gap-2">

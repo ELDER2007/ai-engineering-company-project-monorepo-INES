@@ -22,10 +22,42 @@ Las correcciones se hicieron en tres commits (backend y scripts, frontend, docum
 
 **No aplicado (con motivo)**
 - **Aprobación de altas (D-02, parte de producto):** el registro público sigue creando cuentas activas; cambiarlo es una decisión de producto (ver «Propuestas fuera de alcance»). Lo que sí se corrigió es que un usuario no administrador ya no ve el email completo del cliente.
-- **E-04:** el formulario de talento de la web no envía los datos a ningún sitio. Conectarlo exige un endpoint nuevo (funcionalidad nueva), así que queda como limitación documentada; el mensaje de «recibido» sigue siendo simulado.
-- **Código histórico (`src/`), `skills/` salvo `pandas_clean.py`, y hallazgos BAJO de documentación/datos:** sin uso o sin riesgo real; no se tocan para no ampliar el alcance. No he revisado uno a uno cada uno de los 82 códigos contra el código final, así que esta lista es un resumen, no una conciliación completa.
+- **E-04:** el formulario de talento de la web no envía los datos a ningún sitio. Conectarlo exige un endpoint nuevo (funcionalidad nueva), así que queda como limitación documentada; el texto ya no afirma que se recibió y indica escribir a contacto@nexova.com.
+- **Código histórico (`src/`), `skills/` salvo `pandas_clean.py`, y hallazgos BAJO de documentación/datos:** sin uso o sin riesgo real; no se tocan para no ampliar el alcance. La conciliación completa, hallazgo a hallazgo, está en la sección siguiente.
 
-**Verificación:** 302 tests de la API pasan (268 existentes + 34 nuevos de `test_error_handling.py`); 9 de `packages/shared` pasan; `tsc` del backoffice y de la web sin errores; `next build` correcto.
+**Verificación:** 302 tests de la API pasan (268 existentes + 34 nuevos de `test_error_handling.py`); 9 de `packages/shared` pasan; los 6 e2e con navegador pasan; `tsc` del backoffice y de la web sin errores; `next build` correcto.
+
+## Conciliación de los 82 hallazgos con el código final
+
+**Corregidos 61 · Parciales 8 · No aplicados 13** (total 82).
+
+Los «Corregidos» se verificaron con los tests (302 de la API, 9 compartidos), `tsc`, `next build` y los 6 e2e con navegador. Los parciales y no aplicados llevan su motivo.
+
+| ID | Estado | Motivo |
+|---|---|---|
+| D-02 | Parcial | Emails de clientes enmascarados salvo para administradores. El alta automática de cuentas es decisión de producto. |
+| E-04 | Parcial | El texto ya no afirma que se recibió (verificado en navegador: 0 peticiones). El envío real exige un endpoint nuevo. |
+| E-06 | No aplicado | Limitar intentos es funcionalidad nueva. |
+| E-07 | No aplicado | El 409 es necesario para que el registro avise de un email repetido; es un compromiso de producto. |
+| E-13 | No aplicado | Pasar a `def` sin un candado dejaría la condición de carrera; requiere rediseño del almacenamiento. |
+| S-04 | No aplicado | Igual que E-14: el aviso en el arranque es deliberado. |
+| S-05 | Parcial | Se registran las migraciones; el borrado de perfiles huérfanos no. |
+| D-03 | No aplicado | El log de accesos lo escribe el servidor (uvicorn), no el código de la app. |
+| U-06 | Parcial | El aviso sigue arriba de la tabla; ahora además hay confirmación de éxito. |
+| B-01 | Parcial | Misma forma `{detail}` y `error_id` en los 500; los 422 siguen siendo lista de campos. |
+| E-14 | No aplicado | Es el comportamiento documentado para desarrollo; en producción hay que definir SECRET_KEY. |
+| E-16 | Parcial | Se registran logins fallidos y tokens rechazados; no cambios de rol ni desactivaciones. |
+| E-17 | No aplicado | El directorio es público para las sesiones por diseño. |
+| E-18 | No aplicado | Decisión documentada (JWT sin estado en `localStorage`). |
+| E-20 | No aplicado | Código muerto de `src/`: nadie lo importa. |
+| S-10 | No aplicado | El contrato existente (y su test) exige código 0 en «summary check skipped». |
+| R-03 | No aplicado | `/docs` abierto es útil en desarrollo; protegerlo es decisión de despliegue. |
+| R-04 | Parcial | Los textos de excepción siguen siendo el contrato, pero ya no incluyen datos de la petición ni salen en los 500 y 422. |
+| D-06 | No aplicado | Datos de ejemplo: decidir si son ficticios es del equipo. |
+| D-07 | No aplicado | Es documentación de ejemplo en los apuntes; no es código. |
+| B-02 | Parcial | Los errores del CSV se unificaron (413/422); el resto de familias mantiene sus códigos. |
+
+Todos los demás hallazgos están **Corregidos**: D-01, E-01, E-02, E-03, E-05, T-01, T-02, U-01, E-08, E-09, E-10, E-11, E-12, T-03, T-04, C-01, C-02, S-01, S-02, S-03, S-06, R-01, R-02, U-02, U-03, U-04, U-05, U-07, A-01, P-01, P-02, R-05, U-13, E-15, E-19, T-05, T-06, T-07, T-08, C-03, C-04, C-05, C-06, C-07, S-07, S-08, S-09, D-04, D-05, U-08, U-09, U-10, U-11, A-02, A-03, A-04, P-03, U-12, P-04, D-08, C-08.
 
 ## Resumen ejecutivo: qué corregir y en qué orden
 

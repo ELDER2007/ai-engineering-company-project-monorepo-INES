@@ -93,8 +93,8 @@ await page.route("**/users", async (route) => {
   await route.continue({ postData: JSON.stringify({ ...body, email: `e2e-422-${Date.now()}@example.com`, name: "x".repeat(81) }) });
 });
 await page.getByRole("button", { name: "Crear cuenta" }).click();
-await page.waitForFunction(() => document.querySelector("#name-error")?.textContent?.includes("80"));
-ok(/at most 80/.test(await fieldError("name").innerText()), `422 de la API mostrado junto al campo -> "${await fieldError("name").innerText()}"`);
+await page.waitForFunction(() => document.querySelector("#name-error")?.textContent?.includes("nombre"));
+ok(/nombre no es válido/.test(await fieldError("name").innerText()), `422 de la API mostrado junto al campo -> "${await fieldError("name").innerText()}"`);
 await page.unroute("**/users");
 
 // 5. la cuenta se crea pero el login automático falla (se simula un fallo del servidor): aviso, no error
