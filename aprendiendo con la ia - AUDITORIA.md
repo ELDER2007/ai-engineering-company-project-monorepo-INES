@@ -26,6 +26,7 @@
 16. [Octava pasada: ¿cumple la auditoría los criterios del tech lead?](#16-octava-pasada-cumple-la-auditoría-los-criterios-del-tech-lead)
 17. [Pasada final: ¿hemos mirado todo el monorepo?](#17-pasada-final-hemos-mirado-todo-el-monorepo)
 18. [Última pasada: la rúbrica de evaluación](#18-última-pasada-la-rúbrica-de-evaluación)
+19. [La entrega: rama, push y pull request](#19-la-entrega-rama-push-y-pull-request)
 
 ---
 
@@ -1343,6 +1344,72 @@ Un backend ordenado debería responder a todos los errores con **la misma forma*
 3. Escribe el `try/catch/finally` de una función que carga una lista y que **siempre** deja de mostrar "Cargando…". ¿Qué pasaría si pusieras `setLoading(false)` solo dentro del `try`?
 4. En el censo del backend, ¿qué ventaja tendría para el frontend que **todos** los errores tuvieran la misma forma?
 5. **Pregunta de reflexión:** la rúbrica pide "consistencia". ¿Es peor un patrón que se aplica **mal en todas partes** o uno que se aplica **bien en unos sitios y mal en otros**? Justifica tu respuesta.
+
+---
+
+## 19. La entrega: rama, push y pull request
+
+Para entregar el trabajo había que **subir la rama `feature/error-handling-audit` a GitHub y compartir la URL del pull request**. Esta es la entrega: **[Pull request #14](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/14)**.
+
+### 19.1 Los conceptos
+
+| Concepto | Qué es |
+|---|---|
+| **Rama** (*branch*) | Una línea de trabajo paralela a `main`. Así tu auditoría no toca lo que ya estaba entregado |
+| **Push** | Subir tus commits locales a GitHub, para que otras personas los vean |
+| **Pull request** (PR) | Una petición para **unir** tu rama a `main`. Sirve también para que otra persona **revise** tu trabajo antes de unirlo |
+| **Remoto** (`origin`) | La copia del repositorio que está en GitHub |
+
+El orden fue siempre el mismo: **trabajar en una rama → commit → push → pull request**. Nunca se trabajó directamente sobre `main`.
+
+### 19.2 Lo que se hizo, paso a paso
+
+1. **Comprobar el terreno:** a qué repositorio apunta `origin`, si la herramienta de GitHub (`gh`) está identificada como tú, y que **la rama con ese nombre no existiera ya** en el remoto.
+2. **Renombrar la rama.** Mi rama de trabajo se llamaba `docs/error-handling-audit` y la entrega pedía `feature/error-handling-audit`. Se renombró con `git branch -m` (aún no estaba subida, así que no rompía nada).
+3. **Commit** de lo que quedaba pendiente.
+4. **Push** con `git push -u origin feature/error-handling-audit` (el `-u` deja la rama enlazada con su copia remota).
+5. **Comprobar que el remoto tiene mi último commit** (el identificador de `local` y de `remoto` coinciden).
+6. **Crear el pull request** contra `main`, con una descripción que explica qué es, dónde leerlo, el resultado y los límites.
+7. **Verificar el PR:** abierto, sin conflictos (`mergeable: clean`), 5 commits y **4 ficheros, todos de documentación**.
+
+> 💡 **Qué es un buen PR:** un título claro, una descripción que **dice lo que hay y lo que no hay**, y pocos ficheros relacionados entre sí. Aquí además se dice explícitamente "no se ha modificado ningún fichero de código".
+
+### 19.3 Decisiones
+
+| Decisión | Por qué |
+|---|---|
+| Entregar **un solo PR** con todo el trabajo | Es lo que pide la entrega; las cinco commits cuentan la historia |
+| Escribir la descripción **en español** y con una tabla | Quien evalúa lee primero el resumen; la tabla de la rúbrica le dice el resultado en 10 segundos |
+| **Verificar tras cada paso** (remoto, estado del PR) | Un push o un PR "que parece que ha ido bien" no es lo mismo que uno comprobado |
+| Pedir el cambio de nombre **antes** de subir | Cambiar el nombre de una rama ya publicada obliga a borrarla y volver a subirla |
+
+### 19.4 Problemas que aparecieron
+
+#### 🔴 1. El primer `git push` falló con un error de "Git LFS"
+**Síntoma:** `error: failed to push some refs`, con un mensaje de `git-lfs` que decía *"We couldn't respond to your request in time"*.
+**Causa:** `git-lfs` es una herramienta para ficheros grandes. Se ejecuta **antes de cada push** y consulta a GitHub; esa consulta tuvo un **timeout momentáneo**. El repositorio no tiene ningún fichero LFS, así que no tenía nada que ver con mi trabajo.
+**Solución:** leer **el registro completo** (`git lfs logs last`) para entender la causa y **repetir el push**. Funcionó a la segunda.
+**Aprendizaje:** un error de red de un servicio externo **no es un error tuyo**. Lee el mensaje entero antes de tocar nada, y comprueba si basta con reintentar.
+
+#### 🔴 2. `gh pr create` fallaba con un error raro
+**Síntoma:** `Head sha can't be blank, Base sha can't be blank, No commits between main and feature/error-handling-audit`. Pero el push sí había funcionado.
+**Causa probable:** GitHub tarda unos segundos en "ver" una rama recién subida (retraso de indexación) y, después, la herramienta `gh` siguió fallando por su vía (*GraphQL*) con el permiso con el que está identificada.
+**Cómo se investigó:** se pidió a la API de GitHub que **comparase `main` con la rama** (`compare`): respondió *"5 commits por delante, 0 por detrás"*, es decir, **la rama estaba bien subida**. El problema era solo la herramienta.
+**Solución:** crear el PR directamente con la **API REST** de GitHub (`gh api .../pulls`), que funcionó a la primera.
+**Aprendizaje:** cuando una herramienta falla, **busca otra vía que te dé la misma información** (aquí, la API REST). Y si dudas de si algo está subido, **pregúntale a GitHub directamente** (compare), en lugar de suponer.
+
+#### 🔴 3. Casi dejo un fichero temporal en `/tmp`
+**Síntoma:** para pasar el texto de la descripción a la API guardé un fichero (`pr_body.md`).
+**Solución:** lo borré en cuanto se creó el PR.
+**Aprendizaje:** **limpia lo que creas** para una tarea puntual.
+
+### 19.5 Ejercicios
+
+1. Abre el [PR #14](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/14) en GitHub. Pestaña **Files changed**: ¿cuántos ficheros ves y de qué tipo? ¿Coincide con "solo documentación"?
+2. Explica con tus palabras la diferencia entre **commit**, **push** y **pull request**.
+3. ¿Qué habría pasado si hubieras trabajado directamente en `main` y hubieras hecho push? ¿Por qué es mejor una rama?
+4. Ejecuta `git log --oneline main..feature/error-handling-audit`. ¿Qué te muestra?
+5. **Pregunta de reflexión:** el PR #14 dice "no se ha modificado ningún fichero de código". ¿Cómo lo **demostrarías** a quien lo duda? (Pista: `git diff --name-only main`.)
 
 ---
 
