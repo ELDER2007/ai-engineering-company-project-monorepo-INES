@@ -23,6 +23,8 @@
 
 ➡️ **Continuación:** [AUTH‑02 — login, registro y rutas protegidas](./aprendiendo%20con%20la%20ia%20-%20AUTH-02.md) (todo lo hecho, decisiones y problemas resueltos).
 
+➡️ **Continuación:** [Auditoría de gestión de errores](./aprendiendo%20con%20la%20ia%20-%20AUDITORIA.md) (método, decisiones, problemas y hallazgos explicados con ejemplos).
+
 ---
 
 ## 1. ¿Qué es este proyecto?
