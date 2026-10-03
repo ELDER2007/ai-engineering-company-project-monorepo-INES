@@ -4,6 +4,7 @@ domain (see docs/ARCHITECTURE_PROPOSAL.md for the reasoning).
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,7 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from auth.router import router as auth_router
 from core.config import get_allowed_origins, get_jwt_secret
-from core.errors import validation_error_handler
+from core.errors import (
+    DatabaseUnavailableError,
+    catch_unhandled_errors,
+    database_unavailable_handler,
+    validation_error_handler,
+)
+from core.logging_config import configure_logging
 from incidents.incident_router import router as incident_manager_router
 from incidents.router import router as incidents_router
 from profiles import service as profiles_service
@@ -25,6 +32,8 @@ from users.router import router as users_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    configure_logging()
+    os.umask(0o077)  # the data files hold password hashes and personal data: owner only
     get_jwt_secret()  # fail at startup, not on the first login, if SECRET_KEY is invalid
     users_service.bootstrap_first_user()
     users_service.migrate_legacy_users()
@@ -35,6 +44,10 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Nexova API", lifespan=lifespan)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(DatabaseUnavailableError, database_unavailable_handler)
+
+# Added before CORS so it sits inside it: a 500 still carries the CORS headers the browser needs.
+app.middleware("http")(catch_unhandled_errors)
 
 app.add_middleware(
     CORSMiddleware,

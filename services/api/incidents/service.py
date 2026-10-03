@@ -23,8 +23,20 @@ from incidents_analyzer import AnalysisResult, analyze, missing_required_columns
 from .schemas import AnalyzeResponse, InvalidBreakdownOut, SatisfactionOut
 
 
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # a helpdesk export is a few hundred KB; this stops a file that could exhaust memory
+MAX_KEPT_ANALYSES = 100  # one per user; the oldest is dropped beyond this
+
+
 class NotCsvFileError(Exception):
     """Uploaded file is not a .csv file."""
+
+
+class FileTooLargeError(Exception):
+    """Uploaded file is bigger than MAX_UPLOAD_BYTES."""
+
+
+class InvalidCsvError(Exception):
+    """Uploaded file cannot be parsed as CSV (for example a cell larger than the parser allows)."""
 
 
 class EmptyCsvError(Exception):
@@ -40,38 +52,45 @@ class MissingColumnsError(Exception):
 
 
 class NoAnalysisYetError(Exception):
-    """No analysis has been run in this process yet."""
+    """This user has not analysed a file since the API started."""
 
 
-_last_result: AnalysisResult | None = None
+# The last analysis of each user, so the export never hands one person the file of another.
+# In memory and single-process: it is lost on restart, and a second worker would not see it.
+_results: dict[str, AnalysisResult] = {}
 
 
-def run_analysis(*, filename: str, content: bytes) -> AnalysisResult:
+def run_analysis(*, filename: str, content: bytes, owner: str) -> AnalysisResult:
     if not filename.lower().endswith(".csv"):
         raise NotCsvFileError(f"Expected a .csv file, got: {filename}")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise FileTooLargeError(f"The file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
 
-    text_stream = io.StringIO(content.decode("utf-8-sig"))
-    reader = csv.DictReader(text_stream)
-
-    missing = missing_required_columns(reader.fieldnames)
-    if missing:
-        raise MissingColumnsError(missing)
-
-    rows = list(reader)
+    try:
+        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+        missing = missing_required_columns(reader.fieldnames)
+        if missing:
+            raise MissingColumnsError(missing)
+        rows = list(reader)
+    except csv.Error as exc:
+        raise InvalidCsvError("The file could not be read as CSV.") from exc
     if not rows:
         raise EmptyCsvError("CSV file has a header row but no data rows.")
 
     result = analyze(rows, source_name=filename)
 
-    global _last_result
-    _last_result = result
+    _results.pop(owner, None)  # re-insert so the dict stays in order of last use
+    _results[owner] = result
+    while len(_results) > MAX_KEPT_ANALYSES:
+        del _results[next(iter(_results))]
     return result
 
 
-def get_last_result() -> AnalysisResult:
-    if _last_result is None:
-        raise NoAnalysisYetError("No analysis has been run yet. Call POST /api/incidents/analyze first.")
-    return _last_result
+def get_last_result(owner: str) -> AnalysisResult:
+    result = _results.get(owner)
+    if result is None:
+        raise NoAnalysisYetError("No analysis has been run yet. Analyse a CSV file first.")
+    return result
 
 
 def to_response(result: AnalysisResult) -> AnalyzeResponse:

@@ -1,16 +1,21 @@
-"""Password hashing and JWT helpers. Pure functions, no I/O.
+"""Password hashing and JWT helpers. Pure functions, no I/O (apart from the log).
 
-Passwords are only ever stored as bcrypt hashes, through libpass (``libpass[bcrypt]``)."""
+Passwords are only ever stored as bcrypt hashes, through libpass (``libpass[bcrypt]``).
+Why a token or a hash was refused is logged by kind only: never the token, never the password."""
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 from passlib.hash import bcrypt  # libpass (maintained passlib fork, same import), not the abandoned passlib
 
 from core.config import JWT_ALGORITHM, get_access_token_expire_minutes, get_jwt_secret
+
+logger = logging.getLogger(__name__)
 
 
 def hash_password(password: str) -> str:
@@ -22,6 +27,8 @@ def verify_password(password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.verify(password, hashed_password)
     except ValueError:  # malformed hash, or a password longer than bcrypt's 72-byte limit
+        # Same answer as a wrong password, but a damaged hash must not look like a forgotten one.
+        logger.warning("A stored password hash is malformed or the password exceeds bcrypt's limit")
         return False
 
 
@@ -52,5 +59,10 @@ def decode_access_token(token: str) -> UUID | None:
         )
         raw = claims["user_id"]
         return UUID(raw) if isinstance(raw, str) else None
-    except (JWTError, KeyError, ValueError):
+    except ExpiredSignatureError:
+        logger.info("Rejected an expired token")  # the normal end of a session
+        return None
+    except (JWTError, KeyError, ValueError) as exc:
+        # A bad signature or a changed algorithm is not an expired session: it may be someone tampering.
+        logger.warning("Rejected an invalid token (%s)", type(exc).__name__)
         return None

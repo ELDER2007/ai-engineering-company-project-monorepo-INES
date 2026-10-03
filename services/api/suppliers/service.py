@@ -14,12 +14,15 @@ commercial relationships); ``delete_supplier`` exists for entries made by mistak
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
 from tinydb import Query, TinyDB
 
 from core.config import get_suppliers_db_path
+from core.errors import DatabaseUnavailableError
+from core.storage import open_database
 from seed import seed_database
 
 from .schemas import (
@@ -29,6 +32,8 @@ from .schemas import (
     SupplierStatus,
     SupplierUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 _db: TinyDB | None = None
 
@@ -54,9 +59,10 @@ def _now() -> str:
 def get_db() -> TinyDB:
     global _db
     if _db is None:
-        _db = TinyDB(get_suppliers_db_path())
-        if len(_db) == 0:
-            seed_database(_db)
+        database = open_database(get_suppliers_db_path())
+        if len(database) == 0:
+            seed_database(database)
+        _db = database  # only once it is open and seeded, so a failed attempt is tried again
     return _db
 
 
@@ -156,5 +162,9 @@ def _to_out(doc) -> SupplierOut:
     return SupplierOut(id=doc.doc_id, **doc)
 
 
-# Seed immediately on import so the directory is never empty (see docstring).
-get_db()
+# Seed immediately on import so the directory is never empty (see docstring). If the file cannot be
+# opened the app still starts: every suppliers request then answers 503 and tries again.
+try:
+    get_db()
+except DatabaseUnavailableError as exc:
+    logger.error("The suppliers store could not be opened at start-up: %s", exc)

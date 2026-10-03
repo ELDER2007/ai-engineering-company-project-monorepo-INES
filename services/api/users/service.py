@@ -27,10 +27,12 @@ import os
 from datetime import datetime, timezone
 from uuid import UUID
 
+from pydantic import ValidationError
 from tinydb import Query, TinyDB
 
 from auth.security import hash_password, verify_password
 from core.config import get_users_db_path
+from core.storage import open_database
 from profiles import service as profiles_service
 
 from .schemas import DirectoryEntry, Role, User, UserCreate, UserOut, UserUpdate
@@ -50,7 +52,8 @@ class UserNotFoundError(Exception):
 class EmailTakenError(Exception):
     def __init__(self, email: str):
         self.email = email
-        super().__init__(f"A user with email '{email}' already exists")
+        # The address is not repeated in the message: it would be sent back to whoever asked.
+        super().__init__("A user with this email already exists")
 
 
 class LastUserError(Exception):
@@ -76,7 +79,7 @@ class LastAdminError(Exception):
 def get_db() -> TinyDB:
     global _db
     if _db is None:
-        _db = TinyDB(get_users_db_path())
+        _db = open_database(get_users_db_path())
     return _db
 
 
@@ -141,7 +144,11 @@ def create_user(payload: UserCreate, role: Role = Role.user, is_active: bool = T
             doc["id"], doc["email"], name=payload.name, phone=payload.phone, address=payload.address
         )
     except Exception:
-        get_db().remove(doc_ids=[doc_id])
+        try:
+            get_db().remove(doc_ids=[doc_id])
+        except (OSError, ValueError):
+            # Do not hide the original error behind this one: say what is left over and re-raise below.
+            logger.error("Could not undo the creation of user %s: the account has no profile", doc["id"])
         raise
     return _to_out(doc)
 
@@ -213,9 +220,18 @@ def sync_profiles() -> None:
     give a Profile to every user that lacks one (users created before profiles
     existed) and drop profiles whose user is gone."""
     users = {doc["id"]: doc["email"] for doc in get_db().all()}
+    existing = profiles_service.profile_user_ids()
     for user_uuid, email in users.items():
+        if user_uuid not in existing:
+            logger.info("Created the missing profile of user %s", user_uuid)
         profiles_service.ensure_profile(user_uuid, email)
-    for orphan in profiles_service.profile_user_ids() - users.keys():
+    orphans = existing - users.keys()
+    if orphans and not users:
+        # An empty or unreadable user store would otherwise wipe every profile: leave them for a person to look at.
+        logger.warning("Found %d profile(s) but no users: not deleting anything", len(orphans))
+        return
+    for orphan in orphans:
+        logger.warning("Deleting the profile of user %s: the user no longer exists", orphan)
         profiles_service.delete_profile(orphan)
 
 
@@ -231,8 +247,14 @@ def bootstrap_first_user() -> None:
             "nobody can log in. Set them or run `create-user`."
         )
         return
-    user = create_user(UserCreate(email=email, password=password), role=Role.admin)
-    logger.info("Bootstrapped first user %s", user.email)
+    try:
+        user = create_user(UserCreate(email=email, password=password), role=Role.admin)
+    except ValidationError as exc:
+        # The text of a validation error quotes the rejected value, and here that value is the password:
+        # say which rule failed, never what was typed, and do not chain the original error.
+        problems = "; ".join(error["msg"] for error in exc.errors(include_input=False))
+        raise RuntimeError(f"AUTH_INITIAL_EMAIL / AUTH_INITIAL_PASSWORD are not valid: {problems}") from None
+    logger.info("Bootstrapped first user %s", user.id)
 
 
 def migrate_legacy_users() -> None:
