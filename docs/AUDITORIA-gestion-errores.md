@@ -15,13 +15,13 @@
 
 ## Resumen
 
-| Severidad | Parte 1 (E-xx) | Parte 2 (T-xx / C-xx) | Parte 3 (S-xx) | Parte 4 (R-xx) | Parte 5 (D-xx) | Parte 6 (U-xx) | Total |
-|---|---|---|---|---|---|---|---|
-| Alta | 5 (E-01 a E-05) | 2 (T-01, T-02) | 0 | 0 | 2 (D-01, D-02) | 1 (U-01) | **10** |
-| Media | 8 (E-06 a E-13) | 3 (T-03, T-04, C-01) | 6 (S-01 a S-06) | 2 (R-01, R-02) | 1 (D-03) | 6 (U-02 a U-07) | **26** |
-| Baja | 7 (E-14 a E-20) | 9 (T-05 a T-08, C-03 a C-07) | 4 (S-07 a S-10) | 2 (R-03, R-04) | 4 (D-04 a D-07) | 4 (U-08 a U-11) | **30** |
+| Severidad | P.1 (E) | P.2 (T / C) | P.3 (S) | P.4 (R) | P.5 (D) | P.6 (U) | P.7 (A / P) | Total |
+|---|---|---|---|---|---|---|---|---|
+| Alta | 5 | 2 | 0 | 0 | 2 | 1 | 0 | **10** |
+| Media | 8 | 3 | 6 | 2 | 1 | 6 | 3 (A-01, P-01, P-02) | **29** |
+| Baja | 7 | 9 | 4 | 2 | 4 | 4 | 4 (A-02, A-03, A-04, P-03) | **34** |
 
-La **Parte 1** es la auditoría general (resiliencia, errores, mensajes y seguridad). La **Parte 2** es la revisión archivo por archivo con dos criterios concretos: `try/catch` ausente en operaciones que pueden fallar (`fetch`, llamadas a la API, `await`, lectura de ficheros, parseo de JSON) y `catch` demasiado amplio. La **Parte 3** busca fallos silenciosos: errores capturados pero ignorados (`catch {}` vacío, `except: pass`, logs sin acción). La **Parte 4** busca errores en crudo: mensajes técnicos que podrían llegar al usuario (trazas, códigos HTTP, errores de parseo, mensajes internos del servidor). La **Parte 5** busca filtración de datos sensibles en errores y logs: claves secretas, cadenas de conexión, rutas internas y datos personales. La **Parte 6** revisa la interfaz: componentes sin estado de carga o de error, que se rompen sin avisar o que no tienen un plan B seguro. Las partes 2 a 6 están al final, antes de la tabla de la rama.
+La **Parte 1** es la auditoría general (resiliencia, errores, mensajes y seguridad). La **Parte 2** es la revisión archivo por archivo con dos criterios concretos: `try/catch` ausente en operaciones que pueden fallar (`fetch`, llamadas a la API, `await`, lectura de ficheros, parseo de JSON) y `catch` demasiado amplio. La **Parte 3** busca fallos silenciosos: errores capturados pero ignorados (`catch {}` vacío, `except: pass`, logs sin acción). La **Parte 4** busca errores en crudo: mensajes técnicos que podrían llegar al usuario (trazas, códigos HTTP, errores de parseo, mensajes internos del servidor). La **Parte 5** busca filtración de datos sensibles en errores y logs: claves secretas, cadenas de conexión, rutas internas y datos personales. La **Parte 6** revisa la interfaz: componentes sin estado de carga o de error, que se rompen sin avisar o que no tienen un plan B seguro. La **Parte 7** mira dos cosas: los estados de error de la interfaz que no ofrecen ninguna acción a la persona (botón de reintentar, enlace a inicio o una instrucción clara) y los scripts de Python que fallan pero terminan con código de salida 0. Las partes 2 a 7 están al final, antes de la tabla de la rama.
 
 **Lo más urgente:**
 1. Un error inesperado devuelve texto plano y sin cabeceras CORS, así que el navegador lo muestra como "sin conexión" (E-01).
@@ -746,6 +746,143 @@ Todo lo de esta parte está **verificado en el navegador**, salvo lo marcado con
 | E-09 | Un fallo del `Layout` muestra la página de error por defecto de Next (U-05) |
 | R-01 | El análisis de un CSV con un estado desconocido (500 real) muestra `Internal Server Error` en inglés |
 
+---
+
+# Parte 7 — Errores sin llamada a la acción y scripts sin código de salida
+
+Esta parte tiene dos mitades, A (interfaz) y B (scripts de Python). En las dos probé el comportamiento real en lugar de deducirlo.
+
+## Mitad A — Estados de error sin llamada a la acción
+
+**Criterio:** un estado de error debería ofrecer una salida: un botón de reintentar, un enlace a inicio o una instrucción clara de qué hacer.
+
+**Método:** arranqué la aplicación y, con Chromium automatizado, provoqué **19 situaciones de error** (API caída, 500, 404, respuestas rotas, fallos fuera del área protegida, páginas públicas). En cada una medí tres cosas dentro del contenido de la pantalla: si hay un botón o enlace de reintento, si hay un enlace a inicio y qué texto de instrucción se le da a la persona.
+
+> **Cómo leer la tabla.** «Reintentar» cuenta si hay un botón o un enlace para repetir la acción. En los formularios (12, 14, 15, 16) el propio botón de enviar sirve para repetir, así que ahí no lo considero una falta. «Inicio» mide solo el contenido de la pantalla: en la zona autenticada el menú lateral siempre incluye `Inicio`, salvo cuando falla el propio menú (10) o aún no hay sesión (11, 14 a 17).
+
+| # | Situación | Aviso que ve la persona | Reintentar | Inicio | Instrucción |
+|---|---|---|---|---|---|
+| 1 | Proveedores: la carga falla | `Internal Server Error` | no | no | ninguna |
+| 2 | Incidencias: la lista falla | `El servidor ha tenido un problema. Inténtalo de nuevo en unos minutos.` | **no** | no | sí, pero sin botón |
+| 3 | Incidencias: red caída | `No se pudo conectar… Comprueba tu conexión e inténtalo de nuevo.` | **no** | no | sí, pero sin botón |
+| 4 | Detalle de incidencia: 500 | El mismo aviso | **sí** | volver a incidencias | sí |
+| 5 | Detalle que no existe (404) | `Incidencia no encontrada` | no hace falta | volver a incidencias | sí |
+| 6 | Análisis de CSV: 500 | `Internal Server Error` | no | no | ninguna |
+| 7 | Análisis de CSV: faltan columnas | `Missing required columns: ticket_id, date, client_company…` | no | no | **ninguna** |
+| 8 | Mi perfil: la carga falla | `No se pudo cargar tu perfil. Recarga la página…` | **no** (solo el texto) | no | sí, pero sin botón |
+| 9 | Pantalla de error general | `Algo ha salido mal… Tus datos no se han perdido.` | sí | no | parcial |
+| 10 | Fallo del `Layout` | `This page couldn't load` (página de Next, en inglés) | sí (`Reload`, `Back`) | no | en inglés |
+| 11 | Comprobar la sesión con la API colgada | `Comprobando la sesión…` | **no** | no | **ninguna** |
+| 12 | Crear incidencia: 500 | `El servidor ha tenido un problema. Inténtalo de nuevo…` | sí, repetir el envío | no | sí |
+| 13 | Proveedores: falla el cambio de estado | `Internal Server Error` | no | no | ninguna |
+| 14 | Login: contraseña incorrecta | `Email o contraseña incorrectos, o la cuenta está desactivada.` | sí, repetir el envío | no | parcial |
+| 15 | Login: API caída | `No se pudo iniciar sesión. Inténtalo de nuevo.` | sí, repetir el envío | no | sí |
+| 16 | Registro: 500 | `No se pudo crear la cuenta. Inténtalo de nuevo.` | sí, repetir el envío | enlace a iniciar sesión | sí |
+| 17 | Web pública sin JavaScript | (página en blanco) | no | no | **ninguna** |
+| 18 | Web pública: dirección inexistente | Se muestra la página de inicio | — | sí | — |
+| 19 | Backoffice: dirección inexistente | Redirige a `/` | — | sí | — |
+
+Los estados 4, 5, 12, 15, 16, 18 y 19 están bien resueltos. Los problemas están en los que quedan.
+
+### A-01 · Análisis de CSV: los dos errores sin ninguna acción ni guía — **Media**
+- **Dónde:** el aviso de [IncidentsAnalysisPage.tsx:71](../uis/backoffice/src/views/IncidentsAnalysisPage.tsx#L71) (`handleFileSelected`, líneas 17-30)
+- **Evidencia:** ✔ Verificado (filas 6 y 7).
+  - Con un fallo del servidor se ve `Internal Server Error` y nada más.
+  - Con un CSV de otro formato se ve la lista de nombres de columna (`Missing required columns: ticket_id, date, …`): no se dice qué columnas esperaba ni dónde conseguir un fichero correcto.
+  - No hay botón, ni enlace, ni pista de qué hacer.
+- **Impacto:** quien sube un CSV equivocado se queda sin saber cómo continuar. Es justo la persona que no es técnica (Roberto, el responsable de soporte).
+- **Corrección breve:** un texto de instrucción fijo debajo del aviso («Sube el CSV exportado del helpdesk con las columnas: …»), un botón «Elegir otro archivo», y en los fallos del servidor un «Reintentar» que repita la subida.
+
+### A-02 · La pantalla de error general no dice qué hacer si persiste, ni lleva a inicio — **Baja**
+- **Dónde:** [app/(app)/error.tsx:4](../uis/backoffice/src/app/(app)/error.tsx#L4)
+- **Evidencia:** ✔ Verificado (fila 9). Solo tiene `Reintentar`. Si el dato roto sigue llegando (como en las pruebas de U-04), pulsarlo repite exactamente el mismo fallo, y no hay ninguna otra salida dentro del panel. La función recibe el `error` y su referencia (`digest`) y no la enseña (S-07).
+- **Corrección breve:** añadir un enlace «Volver al inicio», un texto «Si el problema continúa, contacta con el equipo de soporte e indica esta referencia: …» con el `digest`.
+
+### A-03 · Login: sin instrucción para una cuenta desactivada ni forma de recuperar la contraseña — **Baja**
+- **Dónde:** [LoginPage.tsx:41-46](../uis/backoffice/src/views/LoginPage.tsx#L41-L46)
+- **Evidencia:** ✔ Verificado (fila 14). El mensaje `Email o contraseña incorrectos, o la cuenta está desactivada.` enumera tres causas pero la pantalla solo ofrece el enlace a `Regístrate`. No hay un «¿Olvidaste tu contraseña?» ni «Contacta con un administrador». (La rama `feature/password-reset` no está fusionada.)
+- **Corrección breve:** añadir debajo del aviso: «Si crees que tu cuenta está desactivada, contacta con un administrador».
+
+### A-04 · En los peores casos no hay ningún camino a inicio — **Baja**
+- **Dónde:** filas 10, 11 y 17 de la tabla; [Layout.tsx](../uis/backoffice/src/components/Layout.tsx) (donde vive el único enlace a `Inicio`)
+- **Evidencia:** ✔ Verificado. El menú lateral es la única salida y desaparece justo cuando el fallo es más grave: si falla el propio `Layout` (10), mientras se comprueba la sesión (11) y en la web pública sin JavaScript (17).
+- **Corrección breve:** en las pantallas de error de nivel global (`global-error.tsx`, `RequireAuth`, `<noscript>`) incluir un enlace directo a `/`.
+
+## Evidencia nueva sobre hallazgos anteriores (mitad A)
+
+| Hallazgo | Qué muestra esta medición |
+|---|---|
+| U-01 | La fila 11 confirma que `Comprobando la sesión…` no ofrece botón, enlace ni instrucción |
+| U-02, U-03, U-08 | Las filas 1, 2, 3 y 8 confirman que no hay botón de reintentar (dos de ellas dicen «inténtalo de nuevo» pero solo como texto) |
+| U-05 | La fila 10 confirma que la página de Next solo ofrece `Reload` y `Back`, en inglés |
+| U-06, R-01 | Las filas 1, 6 y 13 muestran un `Internal Server Error` en bruto, sin acción |
+
+## Mitad B — Scripts de Python que fallan pero terminan con código 0
+
+**Criterio:** un script que falla debe terminar con un código distinto de 0 (con `sys.exit(1)` o `raise SystemExit(...)`), para que quien lo lanza (la terminal, un cron o un CI) sepa que algo ha ido mal.
+
+**Método:** hay **4 scripts** con interfaz de línea de comandos: `scripts/analyze.py`, `scripts/seed_incidents.py`, `services/api/seed.py` (comando `seed`) y `services/api/auth/cli.py` (comando `create-user`). `agents/_template/agent.py` está vacío. Ejecuté cada uno con entradas que fallan y anoté el **código de salida real**. Todo se hizo con bases de datos y ficheros temporales.
+
+### Resultados (✔ todos ejecutados)
+
+**`scripts/analyze.py`**
+
+| Entrada | Código | Qué pasa |
+|---|---|---|
+| Sin argumentos | `2` | Muestra el uso ✔ |
+| Fichero que no existe / un directorio | `1` | `Error: file not found` ✔ |
+| CSV vacío (0 bytes) | **`0`** | Imprime un informe de ceros y la pregunta de exportar |
+| CSV solo con cabecera (0 filas) | **`0`** | Igual: informe vacío |
+| Columnas equivocadas (`foo,bar`) | **`0`** | Informe, sin avisar de que el formato es otro |
+| Todas las filas inválidas | **`0`** | Informe con el 100 % inválido |
+| Fichero que no es UTF-8 | `1` | Con `UnicodeDecodeError` y traceback |
+| Estado desconocido (`PENDING`) | `1` | Con `KeyError: 'PENDING'` y traceback |
+| Exportar a una carpeta sin permiso | `1` | Con `PermissionError` y traceback |
+| Entrada cerrada (CI) | `1` | Con `EOFError` y traceback |
+
+**`scripts/seed_incidents.py`** (siempre con `--db` temporal)
+
+| Entrada | Código | Qué pasa |
+|---|---|---|
+| CSV que no existe / columnas equivocadas / CSV vacío | `1` | Mensaje claro ✔ |
+| Fichero que no es UTF-8 | `1` | Mensaje claro ✔ |
+| CSV solo con cabecera (0 filas) | **`0`** | `Summary check OK … 0 incidents` |
+| Todas las filas rechazadas por inválidas | **`0`** | `inserted 0`, `rejected 2` y después `Summary check OK` |
+| Una fila rechazada por el modelo (`schema:id`) | **`0`** | `inserted 0` y `Summary check skipped … (other incidents exist…)` con la base **vacía** |
+| Estado desconocido (`PENDING`) | `1` | Con `KeyError` y traceback |
+| `--db` apunta a un directorio / base corrupta | `1` | Con traceback |
+| Dataset real (96 cargadas, 4 rechazadas) | `0` | Éxito, con las 4 rechazadas listadas |
+
+**`services/api/seed.py` y `create-user`:** **todos sus fallos terminan con un código distinto de 0** (`2` para un argumento erróneo, `1` para base corrupta, email duplicado, contraseñas distintas, contraseña corta, email inválido y entrada cerrada). `create-user` usa `raise SystemExit("mensaje")`, que imprime el mensaje y sale con `1`: es el patrón a imitar.
+
+### P-01 · `analyze.py`: cuatro entradas inválidas terminan «con éxito» — **Media**
+- **Dónde:** [scripts/analyze.py:38-58](../scripts/analyze.py#L38-L58)
+- **Evidencia:** ✔ Verificado (tabla de arriba). El script no comprueba que el CSV tenga las columnas esperadas ni que haya datos, y termina con `return 0` siempre que consiga imprimir el informe. La API, con las mismas entradas, responde `422` por columnas que faltan y por fichero sin filas, y `400` por un fichero sin formato CSV.
+- **Impacto:** un cron o un CI que lance el script no se entera de que el fichero estaba vacío o tenía otro formato. El informe de ceros parece un resultado correcto.
+- **Corrección breve:** reutilizar `missing_required_columns` y devolver `return 1` si faltan columnas o no hay filas; si todas las filas son inválidas, devolver un código propio (por ejemplo `3`) y decirlo en el mensaje.
+
+### P-02 · `seed_incidents.py`: termina con éxito cuando no ha cargado nada, y a veces con un mensaje falso — **Media**
+- **Dónde:** [scripts/seed_incidents.py:64-92](../scripts/seed_incidents.py#L64-L92)
+- **Evidencia:** ✔ Verificado.
+  - Con todas las filas rechazadas, o sin filas, imprime `inserted 0`, la lista de rechazos y después **`Summary check OK`**, y sale con `0`. Compara 0 con 0 y lo presenta como una comprobación superada.
+  - Con una fila que el modelo rechaza (`schema:id`), imprime `Summary check skipped: the database holds 0 incidents but the CSV accounts for 1 (other incidents exist; use --reset for a clean comparison)`. **La explicación es falsa:** la base está vacía; el motivo es que la fila se rechazó. Sale con `0` (es S-10, ahora comprobado).
+- **Impacto:** quien lanza la carga ve «OK» y un código 0 con una base de datos vacía.
+- **Corrección breve:** si `inserted == 0` y había filas, `return 1` («No se ha cargado ninguna incidencia»); no imprimir `OK` cuando el total esperado es 0; y cuando se omite la verificación, devolver un código distinto (por ejemplo `2`) con la causa real.
+
+### P-03 · No hay una convención de códigos de salida, y «carga con rechazos» no se distingue de un éxito limpio — **Baja**
+- **Dónde:** los cuatro scripts (`analyze.py` usa `0/1/2`; `seed_incidents.py` `0/1`; `seed.py` ninguno explícito; `create-user` `SystemExit(texto)`)
+- **Evidencia:** ✔ Verificado. Con el dataset real, `seed_incidents.py` carga 96 y rechaza 4, y termina con `0`, igual que si hubiera cargado las 100. Es lo esperado por diseño, pero un proceso automático no puede distinguirlo.
+- **Corrección breve:** documentar en cada README una tabla `0 = correcto`, `1 = error de uso o de datos`, `2 = verificación omitida`, `3 = carga parcial`, y un indicador `--strict` que trate los rechazos como error.
+
+## Evidencia nueva sobre hallazgos anteriores (mitad B)
+
+| Hallazgo | Qué muestra esta medición |
+|---|---|
+| T-01 | `KeyError: 'PENDING'` también tumba `seed_incidents.py`, no solo `analyze.py` y la API |
+| T-06 | La base corrupta y la entrada cerrada terminan con traceback en `seed.py` y `create-user` (código `1`) |
+| E-11 | Se confirman los cuatro fallos de `analyze.py` con código `1` y traceback |
+| S-10 | `Summary check skipped` también sale con `0` y, en este caso, con una causa falsa (P-02) |
+
 ## Qué corrige ya la rama `feature/incident-manager`
 
 Esa rama no está fusionada en `main`. Por sus commits y su código, corrige parte de lo anterior solo para las rutas `/api/incidents`:
@@ -758,6 +895,7 @@ Esa rama no está fusionada en `main`. Por sus commits y su código, corrige par
 | Resumen que tumba la lista | Corregido: `SummarySection` se carga aparte, con aviso de lentitud, tiempo máximo y reintento. |
 | E-02, E-03, E-04, E-06 a E-09, E-11 a E-20 | **No tocados** en la rama. |
 | T-02 (bases TinyDB) | **Parcial:** según su README, un fichero corrupto sigue siendo un `500`. |
+| A-01 a A-04, P-01 a P-03 (Parte 7) | **No comprobados en la rama.** `scripts/analyze.py` solo cambia un comentario; `scripts/seed_incidents.py` cambia 15 líneas (leer sus códigos de salida sería lo primero a revisar); `error.tsx` y `LoginPage` no cambian. |
 | U-03, U-04 (incidencias) | **Parcial** (según su código y README; no lo ejecuté): `SummarySection` carga el resumen aparte con aviso de lentitud a los 4 s, tiempo máximo a los 20 s y reintento, y valida la forma con `isSummary`. Añade «Reintentar» al aviso de la lista. No valida la forma de la lista, de las filas ni del historial. |
 | U-01 (sin tiempo máximo) | **Solo el resumen** (20 s). El resto de peticiones, la sesión y el login siguen sin límite. |
 | U-02, U-05 a U-11 | **No corregidos:** `SuppliersPage`, `ProfilePage`, `AuthContext`, la web pública y `StatusBadge` no cambian. `Layout.tsx` cambia 7 líneas y sigue sin proteger `profile` ni tener `global-error.tsx`. |

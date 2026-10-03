@@ -22,6 +22,7 @@
 12. [Cuarta pasada: errores en crudo](#12-cuarta-pasada-errores-en-crudo)
 13. [Quinta pasada: filtración de datos sensibles](#13-quinta-pasada-filtración-de-datos-sensibles)
 14. [Sexta pasada: interfaz sin estados de carga ni de error](#14-sexta-pasada-interfaz-sin-estados-de-carga-ni-de-error)
+15. [Séptima pasada: errores sin acción y scripts sin código de salida](#15-séptima-pasada-errores-sin-acción-y-scripts-sin-código-de-salida)
 
 ---
 
@@ -876,6 +877,146 @@ Seis de los siete rangos que cité de memoria estaban desplazados una o dos lín
 3. Explica con tus palabras por qué `Promise.all([lista, resumen])` es una mala idea si el resumen es secundario. ¿Qué usarías en su lugar? (Pista: `Promise.allSettled`, o cargar cada cosa en su propio `useEffect`.)
 4. Haz tú una prueba de caos con las **herramientas de desarrollo del navegador** (pestaña *Red* → "Sin conexión" o "Lento 3G"): abre las incidencias y mira qué ocurre.
 5. **Pregunta de reflexión:** un `error.tsx` que sustituye **toda** la pantalla es seguro, pero poco amable. ¿Cómo lo harías más pequeño para que un fallo afecte solo a un recuadro? (Pista: *error boundary* alrededor de cada tarjeta.)
+
+---
+
+## 15. Séptima pasada: errores sin acción y scripts sin código de salida
+
+El séptimo criterio tiene **dos mitades** que se ven muy distinto. El resultado está en la *Parte 7* del [informe](./docs/AUDITORIA-gestion-errores.md) (7 hallazgos nuevos: `A-xx` para la interfaz y `P-xx` para los scripts de Python).
+
+### 15.1 Mitad A: la llamada a la acción
+
+Un mensaje de error **informa**; una buena pantalla de error además **ayuda a salir**. Esa ayuda se llama *llamada a la acción* (en inglés, *call to action*, o CTA). Hay tres formas:
+
+| Forma | Ejemplo | Cuándo |
+|---|---|---|
+| **Botón de reintentar** | `[Reintentar]` | Fallos pasajeros: red, servidor ocupado |
+| **Enlace a inicio** | `Volver al inicio` | Cuando no hay nada más que hacer en esta pantalla |
+| **Instrucción clara** | "Sube un CSV con las columnas: fecha, estado…" | Cuando el problema lo puede arreglar la persona |
+
+Comparación de dos mensajes del proyecto:
+
+```
+❌ "Missing required columns: ticket_id, date, client_company, ..."
+   → En inglés, sin botón, sin decir qué hacer.
+
+✅ "Incidencia no encontrada. No existe ninguna incidencia con el identificador X."
+   + enlace [← Volver a incidencias]
+   → Dice qué pasó y ofrece una salida.
+```
+
+> 💡 **Regla práctica:** si en un mensaje de error aparece "inténtalo de nuevo", tiene que haber **al lado un botón que lo haga**. Un texto que te pide que reintentes sin darte cómo es una instrucción a medias.
+
+### 15.2 Cómo se midió
+
+En vez de mirar pantalla por pantalla "a ojo", se **automatizó la medición**:
+
+1. Se provocaron **19 situaciones de error** (API caída, 500, 404, datos rotos, fallos de la web pública…).
+2. En cada una, un script preguntó al navegador: *¿hay un botón cuyo texto sea "reintentar"? ¿hay un enlace a la página de inicio? ¿qué dice el aviso?*
+3. Los resultados se volcaron en una **tabla** de 19 filas, que es mucho más fácil de leer y de discutir que 19 párrafos.
+
+Resultado: **7 de las 19 situaciones están bien resueltas** y el resto necesita una acción. Los peores son los análisis de CSV (sin ninguna ayuda), la comprobación de sesión (sin nada) y la web pública sin JavaScript (en blanco).
+
+> 💡 **Aprendizaje:** una tabla de evidencias convierte "creo que faltan botones" en "faltan en estas 8 pantallas, y estas 7 están bien".
+
+### 15.3 Mitad B: el código de salida de un script
+
+Cada programa, cuando termina, deja un número en el sistema: el **código de salida** (*exit code*). Es la forma que tiene un programa de decir "todo fue bien" o "algo falló" a quien lo lanzó.
+
+| Código | Significado habitual |
+|---|---|
+| `0` | Todo ha ido bien |
+| `1` | Ha ocurrido un error |
+| `2` | Se usó mal el programa (argumentos incorrectos) |
+
+Puedes verlo en la terminal con `echo $?` justo después de ejecutar algo:
+
+```bash
+$ python scripts/analyze.py no-existe.csv
+Error: file not found: no-existe.csv
+$ echo $?
+1
+```
+
+¿Quién lee ese número? **Otros programas**: un CI (comprobación automática), un cron (tarea programada) o un script que encadena varios comandos con `&&`. Si un script **falla pero devuelve 0**, todos ellos creen que fue bien y siguen adelante.
+
+En Python hay dos formas de fijar el código:
+
+```python
+import sys
+sys.exit(1)                          # sale con código 1
+
+raise SystemExit("Mensaje de error") # imprime el mensaje en la pantalla de errores y sale con código 1
+```
+
+Y un patrón muy limpio, que ya usan dos scripts del proyecto:
+
+```python
+def main() -> int:
+    ...
+    return 1        # cuando algo falla
+    ...
+    return 0        # cuando todo va bien
+
+if __name__ == "__main__":
+    raise SystemExit(main())     # el valor de main() se convierte en el código de salida
+```
+
+### 15.4 Lo que se encontró
+
+Se ejecutaron **los 4 scripts** con entradas que fallan y se anotó el código real de cada uno.
+
+**P-01 — `analyze.py`: cuatro fallos que terminan "bien" (Media).** Con un CSV vacío, con solo la cabecera, con columnas equivocadas o con todas las filas inválidas, el script imprime un informe de ceros y termina con **código 0**. La API, con esas mismas entradas, responde con un error.
+
+**P-02 — `seed_incidents.py`: "Summary check OK" con 0 incidencias (Media).** Cuando todas las filas se rechazan, el script dice `inserted 0` y después `Summary check OK`, y sale con 0. Compara 0 con 0 y lo presenta como una comprobación superada. En otro caso decía *"other incidents exist"* cuando la base estaba **vacía**: un mensaje falso.
+
+> 💡 **Comprobar que "no hay diferencia" no es lo mismo que comprobar que "ha funcionado".** Si esperas 100 y encuentras 0, algo va mal; pero si esperas 0 y encuentras 0 porque todo se rechazó, también.
+
+**Lo que está bien:** `create-user` y `seed` devuelven siempre un código distinto de 0 cuando fallan. `create-user` usa `raise SystemExit("mensaje")`, que es el patrón que conviene copiar.
+
+### 15.5 Decisiones de esta pasada
+
+| Decisión | Por qué |
+|---|---|
+| **Ejecutar** los scripts con entradas que fallan, no leer su código | El código de salida se ve solo ejecutando; en el código es fácil equivocarse al leerlo |
+| Probar **siempre con una base de datos temporal** | Para no cargar datos de prueba en la base real del proyecto |
+| Separar "falla con código 0" (grave) de "falla con código 1 pero con traceback" (feo, pero detectable) | El primero engaña a la automatización; el segundo no |
+| Contar a `create-user` y `seed` como ejemplo **positivo** | Una auditoría debe decir también qué imitar |
+| No contar como fallo "carga con 4 filas rechazadas" | Es lo esperado del dataset, pero lo anoto como mejora (P-03): no se distingue de un éxito limpio |
+| Medir los avisos **dentro del contenido**, no en el menú lateral | Si no, el enlace "Inicio" del menú tapa el problema en todas las pantallas |
+
+### 15.6 Problemas que aparecieron en esta pasada
+
+#### 🔴 1. Mi primera prueba de "carpeta de solo lectura" apuntaba a un sitio que no existía
+**Síntoma:** el primer intento devolvió `file not found` en lugar de `PermissionError`.
+**Causa:** ejecuté la prueba **antes** de crear la carpeta. El orden de mis comandos estaba mal.
+**Solución:** repetirla después de crear la carpeta con permisos `555` (solo lectura), y en el informe usar **solo el resultado bueno**.
+**Aprendizaje:** una prueba que falla por una razón distinta a la que quieres comprobar no sirve. Fíjate en **qué mensaje** da, no solo en que falle.
+
+#### 🔴 2. Creí que mi fila de ejemplo era válida y no lo era
+**Síntoma:** con una fila "buena" el script dijo `inserted 0`.
+**Causa:** mi identificador de ejemplo era `T1`, pero el modelo exige el formato `NXV-000001`. La fila se rechazó (`schema:id`).
+**Solución:** ver por qué se rechazó, en vez de dar por buena mi suposición. Y de ahí salió el hallazgo real: el script **da una explicación falsa** ("other incidents exist") cuando la base estaba vacía.
+**Aprendizaje:** que un resultado te sorprenda es una buena señal de que **hay algo que mirar**. Aquí la sorpresa era el hallazgo.
+
+#### 🔴 3. Mi comando fue rechazado a mitad de la preparación
+**Síntoma:** al lanzar la medición de las 19 pantallas, se interrumpió antes de ejecutarse.
+**Solución:** comprobé primero que los tres servidores **seguían en marcha** (con un `curl` a cada uno) y repetí exactamente la misma medición.
+**Aprendizaje:** tras una interrupción, **comprueba el estado actual** antes de seguir; no supongas que quedó todo como lo dejaste.
+
+#### 🔴 4. Los servidores no se apagaron con el primer intento
+**Síntoma:** después de `kill $(cat servidor.pid)` seguían abiertos los puertos 5173 y 5174.
+**Causa:** el PID que guardé era el del comando que **lanza** el servidor, y el servidor real es un proceso **hijo** con otro número.
+**Solución:** preguntar al sistema **qué proceso ocupa cada puerto** (`ss -ltnp`) y detener ese. Luego comprobé que los tres puertos estaban libres y borré los ficheros generados.
+**Aprendizaje:** el PID de un comando no siempre es el del programa que arranca. Para cerrar un servidor por su puerto, usa `ss -ltnp` y no un nombre.
+
+### 15.7 Ejercicios de esta parte
+
+1. Ejecuta `python scripts/analyze.py datos.csv` con un CSV que solo tenga la cabecera y luego `echo $?`. ¿Qué número ves? ¿Qué debería ser?
+2. Escribe en pseudocódigo el cambio que harías en `analyze.py` para que devuelva `1` cuando falten columnas. ¿Qué función ya existente podrías reutilizar? (Pista: la usa la API.)
+3. Explica con tus palabras por qué un `cron` que lanza un script cada noche **necesita** que el script devuelva un código distinto de 0 cuando falla.
+4. Elige la pantalla de error que te parezca peor de la tabla (el análisis de CSV, por ejemplo) y escribe el mensaje, el botón y el enlace que le pondrías.
+5. **Pregunta de reflexión:** si una carga rechaza 4 filas de 100, ¿debería terminar con `0`, con `1` o con otro código? Argumenta tu respuesta pensando en quién lo va a leer.
 
 ---
 
