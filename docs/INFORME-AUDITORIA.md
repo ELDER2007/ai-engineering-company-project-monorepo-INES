@@ -1,7 +1,7 @@
 # Informe de auditoría — gestión de errores del monorepo Nexova
 
 **Alcance:** frontend Next.js/TypeScript (`uis/backoffice`, `uis/website`), backend FastAPI (`services/api`), scripts Python (`scripts/`, `services/api/seed.py`, `services/api/auth/cli.py`), paquete compartido (`packages/shared`) y código histórico (`src/`) y la carpeta `skills/`.  
-**Rama auditada:** `main` (commit `9e49b73`). No se ha modificado ningún código.  
+**Rama auditada:** `main` (commit `9e49b73`). El informe se redactó sin tocar código; las correcciones se aplicaron después en la misma rama (ver «Estado de corrección»).  
 **Evidencia:** los hallazgos marcados «Verificado» se reprodujeron ejecutando la API, los scripts o la interfaz en un navegador; el resto se deduce de la lectura del código.
 
 **Total: 82 hallazgos** — CRÍTICO 2 · ALTO 9 · MEDIO 32 · BAJO 39
@@ -10,6 +10,22 @@
 
 **Códigos:** `D` datos sensibles · `E` general · `T` try/catch ausente · `C` catch amplio · `S` fallos silenciosos · `R` errores en crudo · `U` estados de la interfaz · `A` llamada a la acción · `P` scripts y códigos de salida · `B` contrato de errores del backend.
 
+
+## Estado de corrección (rama `feature/error-handling-audit`)
+
+Las correcciones se hicieron en tres commits (backend y scripts, frontend, documentación), sin añadir funcionalidad nueva.
+
+**Aplicado**
+- **Backend y scripts:** manejador de 500 en JSON con referencia (`error_id`) y sin detalles internos; errores de validación sin eco de datos; 503 si un fichero de datos está dañado; escritura de datos más segura; enmascarado de datos personales según rol (D-02); la contraseña inicial ya no se escribe en el log de arranque (D-01); resultados de análisis por usuario; tamaño máximo de CSV (413); códigos de salida distintos de 0 en `seed.py`, `seed_incidents.py`, `scripts/analyze.py`, `auth/cli.py` y `pandas_clean.py`.
+- **Frontend (`uis/backoffice`):** capa común (`lib/api`, `lib/errors`, `lib/guards`, `lib/format`, `components/feedback`, `ErrorScreen`); tiempo máximo de espera en las peticiones; estados cargando / éxito / error en todas las pantallas, con «Reintentar» o enlace a inicio; mensajes en español sin códigos HTTP; `try/catch/finally` limitado a la llamada a la API; protección frente a `undefined`; límites de error globales, de ruta y por sección; sesión con estado «error» distinto de 401.
+- **Web pública (`uis/website`):** `ErrorBoundary` con salida clara y aviso `noscript`.
+
+**No aplicado (con motivo)**
+- **Aprobación de altas (D-02, parte de producto):** el registro público sigue creando cuentas activas; cambiarlo es una decisión de producto (ver «Propuestas fuera de alcance»). Lo que sí se corrigió es que un usuario no administrador ya no ve el email completo del cliente.
+- **E-04:** el formulario de talento de la web no envía los datos a ningún sitio. Conectarlo exige un endpoint nuevo (funcionalidad nueva), así que queda como limitación documentada; el mensaje de «recibido» sigue siendo simulado.
+- **Código histórico (`src/`), `skills/` salvo `pandas_clean.py`, y hallazgos BAJO de documentación/datos:** sin uso o sin riesgo real; no se tocan para no ampliar el alcance. No he revisado uno a uno cada uno de los 82 códigos contra el código final, así que esta lista es un resumen, no una conciliación completa.
+
+**Verificación:** 268 tests de la API existentes pasan; 9 de `packages/shared` pasan; `tsc` del backoffice y de la web sin errores; `next build` correcto. Los tests nuevos de `services/api/tests/test_error_handling.py` **no se han ejecutado todavía**.
 
 ## Resumen ejecutivo: qué corregir y en qué orden
 

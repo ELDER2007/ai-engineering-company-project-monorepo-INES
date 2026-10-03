@@ -1413,4 +1413,31 @@ El orden fue siempre el mismo: **trabajar en una rama → commit → push → pu
 
 ---
 
+## 20. De informe a código: aplicar las correcciones
+
+Pediste «el trabajo completo»: no solo el informe, también arreglar el código. Lo hice **en la misma rama y el mismo PR**, sin añadir funcionalidad nueva.
+
+### 20.1 Decisiones
+- **Tres commits por fases** (backend y scripts → frontend → documentación): si algo falla, se sabe en qué fase.
+- **Una capa común en el frontend** (`lib/errors`, `lib/guards`, `lib/format`, `components/feedback`): así todas las pantallas muestran cargando / éxito / error de la misma forma, en vez de arreglar 20 pantallas con 20 estilos distintos.
+- **El `try` solo rodea la llamada a la API.** Lo que pasa después (cerrar el formulario, avisar a la página) va fuera: si falla, no se debe decir «no se pudo guardar» cuando sí se guardó.
+- **Mensajes en español sin códigos** (nada de «500» o «422») y siempre una salida: «Reintentar» o «Volver al inicio».
+- **Lo que NO se arregló**: el formulario de talento de la web (E-04) sigue simulando el envío porque conectarlo sería una funcionalidad nueva.
+
+### 20.2 Problemas que aparecieron
+- `getLevelNamesMapping` solo existe en Python 3.11+ y el proyecto admite 3.10 → lo cambié por otra comprobación.
+- Un fichero de datos dañado no daba error al abrirlo (se lee «perezosamente») → forcé una lectura dentro del `try`.
+- Un test existente exigía que un aviso de `seed_incidents` devolviera 0 → respeté ese contrato; solo los fallos reales devuelven 1.
+- **Un test nuevo (`test_error_handling.py`) no pude ejecutarlo**: el sistema denegó el permiso. No lo rodeé por otra vía; queda escrito pero **sin ejecutar**. Tendrás que correr `pytest tests/test_error_handling.py` desde `services/api`.
+
+### 20.3 Cómo lo comprobé
+268 tests de la API existentes ✅ · 9 tests de `packages/shared` ✅ · `tsc` del backoffice y de la web ✅ · `next build` ✅. No he vuelto a pasar la batería de pruebas con navegador (Playwright) tras esta tanda.
+
+### 20.4 Ejercicios
+1. Abre `StatusActions.tsx`: ¿qué hay dentro del `try` y qué fuera? ¿Por qué?
+2. Provoca un error de red (apaga la API) y mira qué ve el usuario en Proveedores. ¿Hay salida?
+3. Ejecuta `python scripts/analyze.py` sin argumentos y mira el código de salida con `echo $?`.
+
+---
+
 > **Este documento es tuyo.** Una buena auditoría no consiste en encontrar muchos fallos, sino en **demostrarlos, explicarlos y ordenarlos** para que alguien los pueda arreglar. 🔍

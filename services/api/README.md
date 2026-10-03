@@ -183,3 +183,11 @@ uv run seed --reset      # wipe and reload the 15 initial suppliers
 - The suppliers directory is stored at `suppliers/db.json`, a TinyDB flat file that's regenerated (and reseeded) whenever it's missing — it's gitignored, not source. A second worker process would not see writes made by another one; fine for the current single-process scope, and the reason the project brief already earmarks a move to Postgres once the ORM is ready.
 - Login has no rate limiting or lockout yet, and a token stays valid until it expires or its account is deleted: changing a password does **not** revoke the tokens already issued (they carry no `iat`), and there is no refresh or logout endpoint, so keep `ACCESS_TOKEN_EXPIRE_MINUTES` short. Put the API behind a reverse proxy with rate limits until that is added.
 - `uis/backoffice` does not send a token yet, so its calls to `/api/suppliers` and `/api/incidents` now get `401` until a login screen is added.
+
+
+## Error handling
+
+- Every error answer is JSON: `{"detail": "..."}`. An unexpected failure is a `500` with a generic message and an `error_id` that is also in the server log; no stack trace, path or data goes to the client.
+- `422` (validation) lists the fields and what is wrong with them, without echoing the submitted values.
+- `413` an uploaded CSV is too big; `503` a data file is damaged (the message says so, the log has the details).
+- `customer_email` is returned masked unless the user is an administrator. Analysis results are kept per user.

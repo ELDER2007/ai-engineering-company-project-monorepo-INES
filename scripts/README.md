@@ -35,3 +35,8 @@ Loads the historical helpdesk export into the incident manager's database (`serv
   services/api/.venv/bin/python scripts/seed_incidents.py --csv other.csv --db /tmp/incidents.json
   ```
 - **Details and mapping table**: [`services/api/README.md`](../services/api/README.md#incident-manager). The CONTEXT does not define the maps; they live in [`packages/shared/incidents/contract.json`](../packages/shared/incidents/contract.json).
+
+
+## Exit codes
+
+`0` = it worked. `1` = it failed (missing or unreadable input, damaged data); `2` = wrong command-line usage (`analyze.py`). The message goes to stderr. A script never ends with `0` after failing.
