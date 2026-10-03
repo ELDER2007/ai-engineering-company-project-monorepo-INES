@@ -15,13 +15,13 @@
 
 ## Resumen
 
-| Severidad | Parte 1 (E-xx) | Parte 2 (T-xx / C-xx) | Parte 3 (S-xx) | Parte 4 (R-xx) | Total |
-|---|---|---|---|---|---|
-| Alta | 5 (E-01 a E-05) | 2 (T-01, T-02) | 0 | 0 | **7** |
-| Media | 8 (E-06 a E-13) | 3 (T-03, T-04, C-01) | 6 (S-01 a S-06) | 2 (R-01, R-02) | **19** |
-| Baja | 7 (E-14 a E-20) | 9 (T-05 a T-08, C-03 a C-07) | 4 (S-07 a S-10) | 2 (R-03, R-04) | **22** |
+| Severidad | Parte 1 (E-xx) | Parte 2 (T-xx / C-xx) | Parte 3 (S-xx) | Parte 4 (R-xx) | Parte 5 (D-xx) | Parte 6 (U-xx) | Total |
+|---|---|---|---|---|---|---|---|
+| Alta | 5 (E-01 a E-05) | 2 (T-01, T-02) | 0 | 0 | 2 (D-01, D-02) | 1 (U-01) | **10** |
+| Media | 8 (E-06 a E-13) | 3 (T-03, T-04, C-01) | 6 (S-01 a S-06) | 2 (R-01, R-02) | 1 (D-03) | 6 (U-02 a U-07) | **26** |
+| Baja | 7 (E-14 a E-20) | 9 (T-05 a T-08, C-03 a C-07) | 4 (S-07 a S-10) | 2 (R-03, R-04) | 4 (D-04 a D-07) | 4 (U-08 a U-11) | **30** |
 
-La **Parte 1** es la auditoría general (resiliencia, errores, mensajes y seguridad). La **Parte 2** es la revisión archivo por archivo con dos criterios concretos: `try/catch` ausente en operaciones que pueden fallar (`fetch`, llamadas a la API, `await`, lectura de ficheros, parseo de JSON) y `catch` demasiado amplio. La **Parte 3** busca fallos silenciosos: errores capturados pero ignorados (`catch {}` vacío, `except: pass`, logs sin acción). La **Parte 4** busca errores en crudo: mensajes técnicos que podrían llegar al usuario (trazas, códigos HTTP, errores de parseo, mensajes internos del servidor). Las partes 2, 3 y 4 están al final, antes de la tabla de la rama.
+La **Parte 1** es la auditoría general (resiliencia, errores, mensajes y seguridad). La **Parte 2** es la revisión archivo por archivo con dos criterios concretos: `try/catch` ausente en operaciones que pueden fallar (`fetch`, llamadas a la API, `await`, lectura de ficheros, parseo de JSON) y `catch` demasiado amplio. La **Parte 3** busca fallos silenciosos: errores capturados pero ignorados (`catch {}` vacío, `except: pass`, logs sin acción). La **Parte 4** busca errores en crudo: mensajes técnicos que podrían llegar al usuario (trazas, códigos HTTP, errores de parseo, mensajes internos del servidor). La **Parte 5** busca filtración de datos sensibles en errores y logs: claves secretas, cadenas de conexión, rutas internas y datos personales. La **Parte 6** revisa la interfaz: componentes sin estado de carga o de error, que se rompen sin avisar o que no tienen un plan B seguro. Las partes 2 a 6 están al final, antes de la tabla de la rama.
 
 **Lo más urgente:**
 1. Un error inesperado devuelve texto plano y sin cabeceras CORS, así que el navegador lo muestra como "sin conexión" (E-01).
@@ -528,6 +528,224 @@ Para no contarlos dos veces, estos hallazgos anteriores también son fallos sile
 | Pantallas que usan `instanceof ApiError` con texto de reserva | Los errores de JavaScript nunca se enseñan |
 | 422 de `/auth`, `/users`, `/api/incidents` | No devuelven el valor rechazado |
 
+---
+
+# Parte 5 — Filtración de datos sensibles
+
+**Criterio:** errores o logs que exponen claves secretas, cadenas de conexión, rutas internas o datos personales.
+
+**Método:**
+1. **Repositorio e historial completo** (todas las ramas): ficheros sensibles, patrones de secretos (`SECRET_KEY=`, claves privadas, tokens de GitHub, claves de nube, cadenas de conexión a bases de datos), credenciales de ejemplo y rutas internas.
+2. **Capturas de pantalla** subidas al repositorio: las miré una a una.
+3. **Servidor real:** arranqué la API con `uvicorn` sobre bases de datos temporales y provoqué fallos para leer lo que escribe en su log. También comprobé qué datos entrega cada endpoint a distintos tipos de cuenta.
+
+## Lo que NO se filtra (comprobado)
+
+| Qué se buscó | Resultado |
+|---|---|
+| **Secretos en el historial** (todas las ramas) | Ninguno. Lo único que coincide es el marcador `AUTH_INITIAL_PASSWORD='choose-a-password'` de un README antiguo |
+| **Cadenas de conexión** | No existen: la API usa ficheros TinyDB, sin URL de base de datos, usuario ni contraseña |
+| **Ficheros `.env` o bases de datos subidos** | Ninguno. Solo hay `.env.example` con los valores vacíos. `db.json` y `.env` están ignorados por Git |
+| **Hash de contraseña en las respuestas** | Ninguna. Comprobé `/auth/me`, `/users`, `/profiles`, `/users/directory`, `/api/incidents` y el detalle: no aparece `hashed_password` ni ningún `$2b$` |
+| **Rutas internas en las respuestas HTTP** | Ninguna en las 28 respuestas de error de la Parte 4 ni en un 500 real |
+| **Valor de `SECRET_KEY` en los errores** | No aparece: los mensajes de `get_jwt_secret` solo hablan de la longitud |
+| **Contenido del token** | Solo `user_id` y `exp` |
+| **Email del cliente en la lista** | Enmascarado (`e***@dominio`) y no se puede buscar por él |
+| **Capturas de pantalla** (`docs/screenshots/`) | Limpias: sin emails, nombres ni rutas. Solo se ve el prefijo `codespace:` |
+| **`scripts/seed_incidents.py` y `analyze.py`** | Nunca imprimen emails; al rechazar filas solo muestran línea, id y regla incumplida |
+| **Línea de comandos `create-user`** | Ya usa `include_input=False` para no mostrar la contraseña en sus errores |
+
+## Hallazgos
+
+### D-01 · La contraseña inicial del administrador se escribe en el log de arranque — **Alta**
+- **Dónde:** `bootstrap_first_user` en [users/service.py:234](../services/api/users/service.py#L234), llamada desde el arranque en [main.py](../services/api/main.py)
+- **Evidencia:** ✔ Verificado. Arranqué el servidor con `AUTH_INITIAL_PASSWORD='abc'` (demasiado corta) y el log contiene:
+  ```
+  pydantic_core._pydantic_core.ValidationError: 1 validation error for UserCreate
+  password
+    String should have at least 8 characters [type=string_too_short, input_value='abc', input_type=str]
+  ```
+  Pydantic imprime el valor rechazado y la API no captura el error.
+- **Impacto:** es la **única credencial real** del sistema y justo en el caso en que alguien la teclea mal (por ejemplo 7 caracteres, casi la correcta) queda en claro en los logs, que suelen enviarse a herramientas compartidas. Los valores cortos salen enteros. Los largos salen recortados por el centro, pero se siguen viendo unos 24 caracteres del principio y otros 24 del final (lo comprobé con una contraseña de 100 caracteres).
+- **Corrección breve:** capturar `ValidationError` en `bootstrap_first_user` y relanzar un `RuntimeError("AUTH_INITIAL_PASSWORD no es válida: …")` con `exc.errors(include_input=False)`. La CLI [auth/cli.py](../services/api/auth/cli.py) ya lo hace así. Es el mismo patrón que hay que respetar al implementar la corrección de E-01 (registrar el error de un 500): no escribir `str(exc)` de un error de validación sin quitar el `input`.
+
+### D-02 · Cualquiera que se registre puede leer los emails completos de clientes y empleados — **Alta**
+- **Dónde:** `POST /users` público ([users/router.py:47](../services/api/users/router.py#L47)), `GET /api/incidents/{id}` ([incident_router.py:100](../services/api/incidents/incident_router.py#L100)), `HistoryTimeline` en [HistoryTimeline.tsx:39](../uis/backoffice/src/components/incidents/HistoryTimeline.tsx#L39)
+- **Evidencia:** ✔ Verificado de extremo a extremo con un desconocido:
+  1. Se registra sin aprobación: `201 "Account created. You can sign in now."`, rol `user`, activa al instante.
+  2. Pide el detalle de una incidencia: `200`, con `customer_email: maria.garcia@cliente-real.com` **completo** y el historial con `actor: admin@nexova.com` (el email del empleado que la creó).
+  3. También recibe `200` en la lista de proveedores y el directorio con los nombres de todos los usuarios.
+  4. Solo se le niega lo que exige rol de administrador (`/users` → `403`).
+- **Impacto:** los datos personales de los clientes (nombre en el email, empresa) y los emails de los empleados quedan al alcance de **cualquier persona de internet** que cree una cuenta. La lista enmascara el email del cliente, pero esa protección se anula con una sola petición más. Ningún router de incidencias ni de proveedores comprueba el rol (el código lo admite: "there are no roles").
+- **Corrección breve:** mantener el email del cliente enmascarado también en el detalle salvo para administradores, no devolver el `actor` completo (usar el nombre o un identificador) y exigir aprobación (`is_active=False` hasta que un administrador lo active) para el registro. Es lo que ya prevé `create_user(is_active=...)`.
+
+### D-03 · El log de accesos registra los filtros de búsqueda, con nombres de clientes y texto libre — **Media**
+- **Dónde:** el log de accesos de `uvicorn`, y las rutas `GET /api/incidents?...` ([incident_router.py:74](../services/api/incidents/incident_router.py#L74))
+- **Evidencia:** ✔ Verificado. Una consulta de la pantalla de incidencias queda registrada completa:
+  ```
+  INFO: 127.0.0.1 - "GET /api/incidents?client_company=Acme+Corporation+Real+SL&q=maria.garcia&agent_id=AGT-07 HTTP/1.1" 200 OK
+  ```
+  El login fallido, en cambio, no deja el usuario (va en el cuerpo, no en la URL): bien resuelto.
+- **Impacto:** el texto que alguien escribe en el buscador (un nombre, parte de un email) y las empresas filtradas se guardan en los logs sin ningún control.
+- **Corrección breve:** configurar el log de accesos para omitir la parte de la URL a partir de `?` (con un filtro de `logging`), o registrar solo la ruta.
+
+### D-04 · El email del primer administrador se escribe en el log — **Baja**
+- **Dónde:** [users/service.py:235](../services/api/users/service.py#L235): `logger.info("Bootstrapped first user %s", user.email)`
+- **Evidencia:** ◐ Leído. Hoy no se ve porque el nivel INFO no está configurado (S-03), pero se activará al configurar el logging.
+- **Corrección breve:** registrar el `id` del usuario en lugar del email.
+
+### D-05 · Los ficheros con hashes y datos personales no tienen permisos restringidos — **Baja**
+- **Dónde:** `users/db.json`, `profiles/db.json`, `incidents/db.json` (TinyDB)
+- **Evidencia:** ◐ Leído. No hay ningún `chmod` en el código. TinyDB crea los ficheros con la máscara del proceso, que normalmente deja el fichero legible por otros usuarios del equipo (`644`). Sí están ignorados por Git.
+- **Impacto:** en un servidor compartido, otro usuario del sistema podría leer los hashes de contraseña y los datos personales.
+- **Corrección breve:** crear los ficheros con permisos `600` (por ejemplo `os.umask(0o077)` al arrancar).
+
+### D-06 · CSV con 100 emails de clientes de apariencia real, duplicado en dos carpetas — **Baja**
+- **Dónde:** [data/raw/incidents-nexova.csv](../data/raw/incidents-nexova.csv) y [scripts/incidents-nexova.csv](../scripts/incidents-nexova.csv)
+- **Evidencia:** ✔ Verificado. Las dos copias son idénticas y contienen 100 filas con `customer_email` de dominios reales (`icloud.com`, `gmail.com`, `outlook.com`, `hotmail.com`, `protonmail.com`). Son, con toda probabilidad, datos de ejemplo del curso, pero nada en el repositorio lo indica.
+- **Impacto:** si algún día fueran datos reales, estarían en el historial de Git de forma permanente y sería muy difícil retirarlos. El seed los copia después a la base en claro.
+- **Corrección breve:** indicar en el README que son datos ficticios (o sustituir los dominios por `example.com`) y conservar una sola copia.
+
+### D-07 · Credencial de ejemplo `admin123` en la documentación — **Baja**
+- **Dónde:** [aprendiendo con la ia.md:734](../aprendiendo%20con%20la%20ia.md#L734) (`username=admin@nexova.com&password=admin123`) y línea 405
+- **Evidencia:** ✔ Verificado. El código afirma que "no hay ninguna contraseña por defecto en ningún sitio", pero la documentación enseña una concreta.
+- **Impacto:** quien copie el ejemplo puede crear un administrador con una contraseña adivinable.
+- **Corrección breve:** sustituirla por un marcador (`<tu-contraseña>`).
+
+## Relación con hallazgos anteriores
+
+| Hallazgo | Dato sensible implicado |
+|---|---|
+| E-07 | El registro revela qué emails existen |
+| E-17 | `GET /users/directory` expone nombres e identificadores de todos los usuarios activos |
+| E-18 | El token de sesión vive en `localStorage` |
+| E-19 | Los 422 de `/profiles` y `/suppliers` devuelven el `input` (nombre, teléfono y dirección de la persona) |
+| S-06 | No se registran los intentos de acceso sospechosos |
+
+---
+
+# Parte 6 — Interfaz sin estados de carga o de error
+
+**Criterio:** componentes que no muestran carga, no muestran error, se rompen sin avisar o no tienen un plan B seguro.
+
+**Método:** esta es la parte donde más sirve ejecutar, así que probé la interfaz **en un navegador real**.
+1. Inventario de todos los componentes con operaciones asíncronas y de qué indicadores de carga y error dispone cada uno.
+2. Arranqué la API (con 25 incidencias y 15 proveedores de prueba) y el backoffice en modo desarrollo, y la web pública.
+3. Con Playwright y Chromium **provoqué ~35 situaciones** interceptando las llamadas: API lenta, API que no responde nunca, error 500, red caída, respuestas `200` con un JSON incompleto o con HTML, datos con valores raros. En cada una anoté lo que ve la persona (texto, indicadores de carga, avisos, botones) y guardé capturas.
+
+Todo lo de esta parte está **verificado en el navegador**, salvo lo marcado con ◐. Los servidores de prueba se pararon al terminar y no se dejó ningún fichero en el repositorio.
+
+## Lo que está bien resuelto (comprobado)
+
+| Situación probada | Qué ve la persona |
+|---|---|
+| Proveedores o incidencias con la API lenta | Indicador de carga (spinner) ✔ |
+| Incidencias o análisis con un error 500 | Aviso en español sin tecnicismos (`El servidor ha tenido un problema…`) ✔ |
+| Red caída en incidencias | `No se pudo conectar con el servidor…` ✔ |
+| Detalle de incidencia con un 500 | Aviso **y botón «Reintentar»** ✔ |
+| Crear incidencia con un 500 | Aviso y **el texto escrito se conserva** ✔ |
+| Cambiar el estado de una incidencia con un 500 | Aviso en español ✔ |
+| Respuesta `200` con HTML en lugar de JSON | `No se pudieron cargar las incidencias.` ✔ |
+| Formularios mientras guardan | Botón desactivado y spinner ✔ |
+| Pantalla de error general | Existe y evita la pantalla en blanco en la mayoría de fallos ✔ |
+| Temporizador del contador de la web | Se limpia al desmontar ✔ |
+
+## Hallazgos
+
+### U-01 · Ninguna petición tiene tiempo máximo: si la API no responde, la pantalla se queda cargando para siempre — **Alta**
+- **Dónde:** todo `uis/backoffice/src/lib/api.ts` (`fetch` sin `AbortController` ni `timeout`; hay 0 usos en el código de `main`)
+- **Evidencia:** ✔ Verificado. Con la API sin responder:
+
+| Pantalla | Lo que se ve tras esperar |
+|---|---|
+| Proveedores | Spinner girando, sin límite (15 s) |
+| Recargar cualquier página | `Comprobando la sesión…` **sin spinner y sin ningún botón** (15 s). La persona **no puede ni cerrar sesión** |
+| Análisis de CSV | `Analizando archivo...` con la zona de subida desactivada y sin forma de cancelar (12 s) |
+| Login | Spinner en el botón (10 s) |
+| Crear incidencia | Botón desactivado con spinner (10 s) y el formulario bloqueado |
+
+- **Impacto:** un servidor lento o bloqueado deja a la persona atrapada sin una salida. El caso de la sesión es el peor: es la pantalla de entrada de toda la aplicación.
+- **Corrección breve:** que `apiFetch` use `AbortSignal.timeout(20000)` y que el error resultante se trate como "sin respuesta"; en `RequireAuth`, mostrar un botón «Reintentar» y «Cerrar sesión» pasados unos segundos.
+
+### U-02 · Proveedores: ante un error enseña también un "no hay datos" falso, sin reintento — **Media**
+- **Dónde:** [SuppliersPage.tsx:21-27](../uis/backoffice/src/views/SuppliersPage.tsx#L21-L27) y su tabla
+- **Evidencia:** ✔ Verificado (captura `C-proveedores-500.png`). Con la API devolviendo 500 se ve a la vez: el aviso rojo `Internal Server Error`, el contador `0 proveedores` y, dentro de la tabla, `No hay proveedores con esos filtros.` No hay botón de reintento.
+- **Impacto:** la persona lee "no hay proveedores" cuando el problema es un fallo, y puede concluir que se han borrado.
+- **Corrección breve:** si hay error de carga, no pintar la tabla vacía; mostrar solo el aviso con un botón «Reintentar».
+
+### U-03 · Incidencias: un solo fallo deja la página sin contenido, sin reintento — **Media**
+- **Dónde:** `Promise.all` en [IncidentsPage.tsx:65-75](../uis/backoffice/src/views/IncidentsPage.tsx#L65-L75)
+- **Evidencia:** ✔ Verificado (captura `E-solo-resumen-falla.png`).
+  - Si falla la lista: solo se ve el aviso y los filtros. No hay tabla, ni estado vacío ni botón «Reintentar».
+  - Si falla **solo el resumen** (la lista estaba bien): **la lista también desaparece**, porque las dos peticiones se esperan juntas.
+- **Impacto:** un fallo secundario (el resumen) impide trabajar con lo principal. La única salida es recargar a mano o tocar un filtro.
+- **Corrección breve:** cargar el resumen aparte de la lista (lo hace `SummarySection` en la rama) y añadir un botón «Reintentar» junto al aviso.
+
+### U-04 · Una respuesta incompleta rompe la pantalla entera — **Media**
+- **Dónde:** `IncidentsPage`, `IncidentSummaryPanel`, `IncidentTable`, `HistoryTimeline`: pintan los datos sin comprobar su forma
+- **Evidencia:** ✔ Verificado. En cada caso toda la pantalla pasa a `Algo ha salido mal… Reintentar`:
+
+| Respuesta del servidor | Resultado |
+|---|---|
+| Lista con otra forma (`{foo: 1}`) | Pantalla completa de error |
+| Resumen incompleto (`{total: 3}`) con la lista correcta | Pantalla completa de error: **se pierde también la lista** |
+| Una fila de la lista con `created_at: null` | Pantalla completa de error |
+| Un evento `edited` del historial sin `fields` | Pantalla completa de error: **se pierde el detalle entero** |
+
+- **Impacto:** un dato defectuoso en una sola fila o evento (una migración antigua, un cambio en la API) deja inutilizable la pantalla. El plan B existe y es seguro, pero tira todo.
+- **Corrección breve:** comprobar la forma de la respuesta antes de pintar (como hace `isSummary` en la rama) y envolver el resumen y el historial en su propio *error boundary*, para que un fallo afecte solo a su recuadro.
+
+### U-05 · El `Layout` da por hecho que existe `profile`, y su fallo no está cubierto: sale la página de error de Next en inglés — **Media**
+- **Dónde:** `user?.profile.name` en [Layout.tsx:49](../uis/backoffice/src/components/Layout.tsx#L49) y [app/(app)/error.tsx](../uis/backoffice/src/app/(app)/error.tsx)
+- **Evidencia:** ✔ Verificado. Con `/auth/me` devolviendo el usuario **sin** el campo `profile`, la consola muestra `Cannot read properties of undefined (reading 'name')` y la persona ve la página por defecto de Next: **`This page couldn't load · Reload to try again, or go back. · Reload · Back`**, en inglés y sin nuestra marca. El `error.tsx` de `(app)` no la recoge porque un `error.tsx` no cubre el `layout.tsx` de su mismo segmento.
+- **Impacto:** el fallo del propio esqueleto de la aplicación (menú lateral y guarda de sesión) da la peor pantalla posible. Confirma E-09, que se había marcado solo por el listado de ficheros.
+- **Corrección breve:** usar `user?.profile?.name ?? user?.email` y añadir `app/global-error.tsx` (con el mismo mensaje en español).
+
+### U-06 · Cuando una acción falla, el aviso puede quedar fuera de pantalla — **Media**
+- **Dónde:** `setError` de [SuppliersPage.tsx:31-50](../uis/backoffice/src/views/SuppliersPage.tsx#L31-L50): el aviso va **arriba de la página**, lejos de la fila donde se hizo clic
+- **Evidencia:** ✔ Verificado. Con el cambio de estado fallando en la última fila de la tabla, el aviso aparece a `-907` píxeles del borde superior de la ventana (la página está desplazada 1107 píxeles): **no se ve**.
+- **Impacto:** la persona pulsa el botón, el spinner desaparece y no pasa nada visible. Cree que se hizo, o que el botón no funciona.
+- **Corrección breve:** mostrar el error junto a la fila, o desplazar la vista al aviso al aparecer (`scrollIntoView`).
+
+### U-07 · Tras un fallo se siguen enseñando los resultados anteriores, como si fueran los de la nueva búsqueda — **Media**
+- **Dónde:** [IncidentsPage.tsx:151-175](../uis/backoffice/src/views/IncidentsPage.tsx#L151-L175)
+- **Evidencia:** ✔ Verificado (captura `S2-datos-antiguos.png`). La tabla muestra 15 incidencias. Se escribe `zzzz-no-existe` en el buscador y la API falla: **la tabla sigue con las mismas 15 filas** (a plena opacidad) y arriba aparece el aviso rojo.
+- **Impacto:** las filas visibles no corresponden al filtro actual y nada lo indica en la propia tabla.
+- **Corrección breve:** al fallar, atenuar la tabla y añadir un texto («Mostrando el resultado anterior»), o no enseñarla.
+
+### U-08 · Perfil: si falla la carga, queda un callejón sin salida — **Baja**
+- **Dónde:** `loadError` en [ProfilePage.tsx:42-61](../uis/backoffice/src/views/ProfilePage.tsx#L42-L61)
+- **Evidencia:** ✔ Verificado. Con `/auth/me` en 500 al abrir `Mi perfil`, solo se ve `No se pudo cargar tu perfil. Recarga la página para intentarlo de nuevo.` No hay formulario ni botón.
+- **Impacto:** la persona tiene que recargar a mano; además, al recargar con ese mismo fallo, `AuthContext` la saca a `/login` (E-08, **también verificado** en el navegador).
+- **Corrección breve:** añadir un botón «Reintentar» que vuelva a llamar a `refreshUser`.
+
+### U-09 · Valores inesperados salen en blanco o como `Invalid Date` — **Baja**
+- **Dónde:** `CATEGORY_LABELS[...]`, `ORIGIN_LABELS[...]`, `StatusBadge` ([StatusBadge.tsx](../uis/backoffice/src/components/incidents/StatusBadge.tsx)) y `new Date(...).toLocaleString` en `IncidentDetailPage`/`HistoryTimeline`
+- **Evidencia:** ✔ Verificado.
+  - Una fila con categoría, origen y estado desconocidos pinta **tres celdas vacías** (`["NXV-000777","Fila…","","","central","","2024-01-01"]`), sin avisar.
+  - Una fecha no válida muestra `Invalid Date`, y `updated_at: null` muestra `1/1/1970, 0:00:00`.
+- **Corrección breve:** texto de reserva (`«Desconocido»`, `«—»`) y una función de formato de fecha que devuelva `«—»` si no es válida.
+
+### U-10 · La web pública se queda en blanco si falla el JavaScript — **Baja**
+- **Dónde:** [uis/website/index.html](../uis/website/index.html) (`<div id="root"></div>` vacío, sin `<noscript>`) y [main.tsx](../uis/website/src/main.tsx) (sin *error boundary*)
+- **Evidencia:** ✔ Verificado. Sin JavaScript, o con el script principal sin descargar, el texto visible es `""` y `#root` no tiene ningún nodo. No hay `ErrorBoundary` en el código (0 coincidencias).
+- **Impacto:** quien llegue por buscadores, con un bloqueador o con una conexión inestable, ve una página vacía sin ninguna explicación. Es la cara pública de la empresa.
+- **Corrección breve:** añadir un `<noscript>` con el contacto y un *error boundary* alrededor de `<App />`.
+
+### U-11 · Login con una respuesta inesperada dice "contraseña incorrecta" — **Baja**
+- **Dónde:** `login()` en [api.ts:69-80](../uis/backoffice/src/lib/api.ts#L69-L80) y [LoginPage.tsx](../uis/backoffice/src/views/LoginPage.tsx)
+- **Evidencia:** ✔ Verificado. Con el servidor respondiendo `200` sin `access_token`, la persona ve `Email o contraseña incorrectos, o la cuenta está desactivada.` aunque los datos eran correctos. (Concreta T-03 y T-04 con una prueba real.)
+- **Corrección breve:** comprobar que `access_token` es un texto no vacío y, si no, mostrar `No se pudo iniciar sesión. Inténtalo de nuevo.`
+
+## Evidencia nueva sobre hallazgos anteriores
+
+| Hallazgo | Qué se comprobó en el navegador |
+|---|---|
+| E-04 | Con el formulario de la web completo y válido aparece `¡Gracias por tu interés en Nexova! Hemos recibido tu información…` y **no se hace ninguna petición de red** |
+| E-08 | Recargar con `/auth/me` en 500 lleva a la pantalla de login: **se cierra la sesión** |
+| E-09 | Un fallo del `Layout` muestra la página de error por defecto de Next (U-05) |
+| R-01 | El análisis de un CSV con un estado desconocido (500 real) muestra `Internal Server Error` en inglés |
+
 ## Qué corrige ya la rama `feature/incident-manager`
 
 Esa rama no está fusionada en `main`. Por sus commits y su código, corrige parte de lo anterior solo para las rutas `/api/incidents`:
@@ -540,6 +758,10 @@ Esa rama no está fusionada en `main`. Por sus commits y su código, corrige par
 | Resumen que tumba la lista | Corregido: `SummarySection` se carga aparte, con aviso de lentitud, tiempo máximo y reintento. |
 | E-02, E-03, E-04, E-06 a E-09, E-11 a E-20 | **No tocados** en la rama. |
 | T-02 (bases TinyDB) | **Parcial:** según su README, un fichero corrupto sigue siendo un `500`. |
+| U-03, U-04 (incidencias) | **Parcial** (según su código y README; no lo ejecuté): `SummarySection` carga el resumen aparte con aviso de lentitud a los 4 s, tiempo máximo a los 20 s y reintento, y valida la forma con `isSummary`. Añade «Reintentar» al aviso de la lista. No valida la forma de la lista, de las filas ni del historial. |
+| U-01 (sin tiempo máximo) | **Solo el resumen** (20 s). El resto de peticiones, la sesión y el login siguen sin límite. |
+| U-02, U-05 a U-11 | **No corregidos:** `SuppliersPage`, `ProfilePage`, `AuthContext`, la web pública y `StatusBadge` no cambian. `Layout.tsx` cambia 7 líneas y sigue sin proteger `profile` ni tener `global-error.tsx`. |
+| D-01 a D-07 (Parte 5) | **No corregidos.** El arranque con `create_user(UserCreate(...))` es idéntico, el router de incidencias no comprueba roles y sigue usando `actor=user.email`. La rama añade además `logger.exception` en los 500, que debe cuidar lo dicho en D-01. |
 | R-02 (mensajes de Pydantic) | **Parcial:** `friendlyFieldError` traduce los errores de campo en el formulario de incidencias. El registro, proveedores y el análisis de CSV no lo usan. |
 | R-01 (`err.message`) | **No corregido** en proveedores ni en el análisis. El 500 de la rama dice `Internal server error. Please try again later.` (en inglés, pero sin `error_id` visible para el usuario en esas pantallas). |
 | R-03, R-04 | **No corregidos:** la documentación sigue pública y los routers siguen usando `str(exc)`. |

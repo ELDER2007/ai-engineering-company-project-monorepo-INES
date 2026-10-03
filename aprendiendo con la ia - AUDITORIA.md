@@ -20,6 +20,8 @@
 10. [Segunda pasada: `try/catch` ausente y `catch` demasiado amplio](#10-segunda-pasada-trycatch-ausente-y-catch-demasiado-amplio)
 11. [Tercera pasada: fallos silenciosos](#11-tercera-pasada-fallos-silenciosos)
 12. [Cuarta pasada: errores en crudo](#12-cuarta-pasada-errores-en-crudo)
+13. [Quinta pasada: filtración de datos sensibles](#13-quinta-pasada-filtración-de-datos-sensibles)
+14. [Sexta pasada: interfaz sin estados de carga ni de error](#14-sexta-pasada-interfaz-sin-estados-de-carga-ni-de-error)
 
 ---
 
@@ -638,6 +640,242 @@ Este informe es justo con lo que está bien hecho:
 3. Arranca la API y abre `http://localhost:8000/docs`. ¿Qué información puedes ver sin iniciar sesión? ¿Cuál te parece más sensible?
 4. Clasifica: ¿**trazas**, **código HTTP**, **parseo** o **mensaje interno**? (a) `Method Not Allowed`; (b) `KeyError: 'PENDING'`; (c) `1: JSON decode error`; (d) `Supplier 9999 not found`.
 5. **Pregunta de reflexión:** el servidor podría mandar un código estable (`email_taken`) además del texto. ¿Qué ventaja tiene para el frontend frente a leer el texto en inglés?
+
+---
+
+## 13. Quinta pasada: filtración de datos sensibles
+
+El quinto criterio pregunta: **¿qué información que debería ser secreta acaba escrita o enviada donde no debe?** El resultado está en la *Parte 5* del [informe](./docs/AUDITORIA-gestion-errores.md) (7 hallazgos nuevos, códigos `D-xx`, dos de ellos **altos**).
+
+### 13.1 Los cuatro tipos de dato sensible
+
+| Tipo | Ejemplo | Dónde suele colarse |
+|---|---|---|
+| **Claves secretas** | `SECRET_KEY`, contraseñas | Logs, mensajes de error, el propio repositorio |
+| **Cadenas de conexión** | `postgres://usuario:clave@servidor/db` | Código, ficheros de configuración, errores de conexión |
+| **Rutas internas** | `/home/servidor/app/services/api/main.py` | Tracebacks, mensajes de error |
+| **Datos personales** | emails, nombres, teléfonos | Logs de acceso, respuestas de la API, ficheros de datos |
+
+> 💡 **Qué es un "log":** el diario que escribe el servidor (qué peticiones recibe, qué errores tiene). Lo leen personas del equipo y, a menudo, herramientas externas de monitorización. **Todo lo que se escribe en un log hay que tratarlo como "lo puede leer más gente de la que crees".**
+
+### 13.2 Cómo se hizo
+
+1. **Repositorio e historial completo:** se buscaron patrones de secretos (claves privadas, tokens de GitHub, claves de la nube, cadenas de conexión) en **todas las ramas y commits**, no solo en lo actual. Un secreto borrado hoy sigue estando en el historial.
+2. **Ficheros peligrosos:** se comprobó que `.env` y las bases de datos (`db.json`) están ignorados por Git y que solo hay `.env.example` vacío.
+3. **Imágenes:** se abrieron las capturas de `docs/screenshots/` para ver si mostraban emails o rutas.
+4. **Servidor de verdad:** se arrancó la API con `uvicorn` sobre bases de datos temporales y se **provocaron fallos para leer qué escribe el log**.
+5. **Probar como un desconocido:** se creó una cuenta nueva sin ningún permiso especial y se miró a qué datos podía acceder.
+
+### 13.3 Lo que se encontró
+
+**D-01 — La contraseña del administrador, escrita en el log (Alta).** Se arrancó la API con `AUTH_INITIAL_PASSWORD='abc'` (demasiado corta). El log mostró:
+
+```
+String should have at least 8 characters [type=string_too_short, input_value='abc', input_type=str]
+```
+
+La librería de validación (Pydantic) **imprime el valor que ha rechazado**, y el código no captura ese error. Si alguien escribe una contraseña casi correcta, queda en claro en el log.
+
+> 💡 **Un dato curioso:** la herramienta de línea de comandos `create-user` **ya evitaba esto** (`include_input=False`). El mismo problema estaba resuelto en un sitio y olvidado en otro. Cuando hay una buena solución, hay que **aplicarla en todas partes**.
+
+**D-02 — Cualquiera podía leer los emails de los clientes (Alta).** La cadena completa, comprobada paso a paso:
+
+1. Un desconocido se registra en `/users` (es público): `201`, cuenta activa **al instante**, sin aprobación.
+2. Pide el detalle de una incidencia: `200`, con el **email completo del cliente** (`maria.garcia@cliente-real.com`) y el email del empleado que la creó.
+3. La lista sí enmascaraba el email (`m***@…`), pero **esa protección se anulaba con una sola petición más**.
+
+> 💡 **Aprendizaje:** una protección vale lo que vale su **punto más débil**. Enmascarar el dato en la lista no sirve si el detalle lo da entero. Y "estar autenticado" no es lo mismo que "tener permiso": cualquiera puede crear una cuenta.
+
+**D-03 — El log de accesos guarda lo que buscas (Media).** Cada petición queda registrada con su dirección completa, incluida la parte de después del `?`:
+
+```
+GET /api/incidents?client_company=Acme+Corporation+Real+SL&q=maria.garcia&agent_id=AGT-07
+```
+
+Lo que alguien escribe en un buscador (un nombre, parte de un email) acaba en el log sin control. En cambio, el **login fallido no deja el usuario** porque viaja en el cuerpo de la petición y no en la dirección: eso estaba bien.
+
+### 13.4 Lo que se comprobó que está bien
+
+Un informe justo cuenta también esto:
+- **Ningún secreto real en todo el historial.** Solo un marcador `choose-a-password`.
+- **No hay cadenas de conexión**: la API usa ficheros, no un servidor de base de datos.
+- **El hash de la contraseña nunca sale** en ninguna respuesta (se comprobaron seis endpoints).
+- **Las rutas internas no salen** en las respuestas de error.
+- **Las capturas de pantalla están limpias.**
+- **El token solo lleva `user_id` y la caducidad.**
+
+### 13.5 Decisiones de esta pasada
+
+| Decisión | Por qué |
+|---|---|
+| Dos hallazgos **Altos**, solo para lo demostrado de extremo a extremo | D-01 y D-02 se probaron con ejecuciones reales; los demás, que solo se deducen del código, se quedan en Baja |
+| Incluir la tabla **"Lo que NO se filtra"** al principio | El tech lead ve qué se revisó y está bien, y no vuelve a buscarlo |
+| Marcar D-05 (permisos de ficheros) como **leído** y no como verificado | Mi entorno de pruebas tenía una configuración de permisos distinta; no podía asegurar el resultado real |
+| Explicar el **límite** de la protección de Pydantic | Recorta los valores largos pero deja ver unos 24 caracteres del principio y del final: no es una garantía |
+| Avisar de que la corrección de E-01 debe cuidar esto | Al registrar los errores 500 con `logger.exception` se podría repetir el mismo problema |
+
+### 13.6 Problemas que aparecieron en esta pasada
+
+#### 🔴 1. Esperaba una filtración y el log estaba limpio
+**Síntoma:** corrompí un usuario y una incidencia para ver si el log mostraba el hash de la contraseña o un email. Esperaba encontrarlos.
+**Causa:** Pydantic **recorta** los diccionarios largos por el centro (`input_value={'id': '2f32…Z'}`), así que el hash y el email quedaron fuera de la parte visible. Y en la incidencia el fallo era otro (un campo que faltaba, sin datos personales).
+**Solución:** **no reportarlo** como filtración. Sí reporté el caso real (D-01, la contraseña corta, que no se recorta) y expliqué en el informe por qué.
+**Aprendizaje:** una sospecha que la prueba no confirma **se descarta**. Un informe lleno de "podría pasar" pierde credibilidad.
+
+#### 🔴 2. Mi comando devolvió "Exit code 143"
+**Síntoma:** la prueba del desconocido terminó con un error de salida, aunque imprimió todos los resultados.
+**Causa:** al final apago el servidor con `kill` y luego espero a que termine (`wait`); un proceso terminado así devuelve el código 143, que es normal.
+**Solución:** comprobar que los resultados impresos estaban completos y tratar el 143 como una señal inocua.
+**Aprendizaje:** **un código de salida distinto de 0 no siempre es un error del programa**; hay que mirar qué lo provocó.
+
+#### 🔴 3. El cálculo de los permisos de los ficheros no era fiable
+**Síntoma:** los ficheros de datos aparecían con permisos `rw-r--rw-` (escribibles por todos), algo que el código no hace.
+**Causa:** mi entorno de pruebas aplicaba otra máscara de permisos que la configuración habitual.
+**Solución:** en lugar de reportar un dato que no podía garantizar, lo marqué como **"leído"** (no hay ningún `chmod`) y dije que normalmente quedarían en `644`.
+**Aprendizaje:** **conoce los límites de tu entorno de pruebas** y no presentes como un hecho lo que solo ocurre en él.
+
+#### 🔴 4. Casi cito mal tres líneas de código
+**Síntoma:** puse `users/router.py:46`, `incident_router.py:101` y `:62-77`.
+**Solución:** las comprobé con `grep -n`: eran 47, 100 y 74. (Es la tercera pasada en la que corrijo líneas, así que ya lo hago siempre antes de cerrar.)
+
+### 13.7 Ejercicios de esta parte
+
+1. Arranca la API con `AUTH_INITIAL_PASSWORD=abc` y mira el log. ¿Dónde aparece `abc`? Ahora escribe cómo cambiarías `bootstrap_first_user` para que aparezca un mensaje útil **sin** la contraseña.
+2. Regístrate con una cuenta nueva y abre una incidencia por `GET /api/incidents/NXV-000001`. ¿Qué datos personales ves? ¿Cuál tendría que ver solo un administrador?
+3. Explica con tus palabras por qué la contraseña viaja en el **cuerpo** de la petición del login y no en la dirección (`/auth/login?password=…`). ¿Qué pasaría en el log de accesos?
+4. Busca en el repositorio un dato que **parezca real pero sea de ejemplo** (pista: `data/raw/`). ¿Cómo dejarías claro a quien lo vea que es ficticio?
+5. **Pregunta de reflexión:** en un log de errores, ¿qué es más útil para encontrar el fallo: el valor que falló o el *nombre del campo* y la *regla incumplida*? ¿Por qué la segunda opción es más segura?
+
+---
+
+## 14. Sexta pasada: interfaz sin estados de carga ni de error
+
+El sexto criterio mira lo que ve la persona **mientras algo tarda o cuando algo falla**. El resultado está en la *Parte 6* del [informe](./docs/AUDITORIA-gestion-errores.md) (11 hallazgos nuevos, códigos `U-xx`, uno de ellos **alto**).
+
+### 14.1 Los estados de una pantalla
+
+Una pantalla que pide datos a una API no tiene un solo aspecto, tiene **cuatro**. Si falta alguno, la persona se pierde:
+
+| Estado | Qué debe ver la persona | Si falta… |
+|---|---|---|
+| **Cargando** | Un indicador (spinner, "Cargando…") | Cree que la pantalla está rota o vacía |
+| **Con datos** | La información | — |
+| **Vacío** | "Todavía no hay incidencias" | Ve una tabla vacía sin explicación |
+| **Error** | Un aviso claro y un botón **"Reintentar"** | Se queda sin salida |
+
+> 💡 **Error ≠ vacío.** Una de las cosas que se encontraron es justo mezclar los dos: mostrar "No hay proveedores" cuando en realidad la API había fallado.
+
+Y hay un **quinto** concepto, el **plan B seguro** (*fallback*): qué se enseña si llegan datos raros o si el propio código de la pantalla falla.
+
+### 14.2 Cómo se hizo (lo más completo hasta ahora)
+
+Esta vez **no se leyó el código y se supuso: se usó la aplicación de verdad.**
+
+1. **Inventario:** una tabla de qué componente hace peticiones y qué indicadores de carga y error tiene.
+2. **Arrancar todo:** la API con datos de prueba (25 incidencias, 15 proveedores), el backoffice y la web pública.
+3. **Un navegador automático** (Playwright con Chromium) que abre las pantallas y **sabotea las peticiones a propósito**:
+   - API lenta (3-4 segundos),
+   - API que **no responde nunca**,
+   - error 500,
+   - red caída,
+   - respuesta `200` pero con un JSON incompleto o con HTML.
+4. **Anotar lo que se ve** en cada caso: texto, spinners, avisos y botones, y guardar capturas de pantalla.
+5. **Apagar todo y dejar el repositorio limpio.**
+
+> 💡 **Aprendizaje:** esto se llama *prueba de caos* a pequeña escala: en lugar de esperar a que el fallo ocurra, **lo provocas tú en un entorno de prueba** y miras qué pasa. Así descubres problemas que nunca verías con la aplicación funcionando bien.
+
+### 14.3 Lo que se encontró
+
+**U-01 — Sin tiempo máximo (Alta).** Ninguna petición tiene un límite de espera. Si la API no responde, la pantalla **se queda cargando para siempre**. El caso más serio: al recargar la página con la API colgada, la persona ve solo `Comprobando la sesión…`, **sin spinner y sin ningún botón**. Ni siquiera puede cerrar sesión.
+
+```ts
+// Hoy
+const response = await fetch(url);                       // espera lo que haga falta, sin límite
+
+// Con un tiempo máximo (la corrección breve)
+const response = await fetch(url, { signal: AbortSignal.timeout(20000) });   // se rinde a los 20 s
+```
+
+**U-02 — "No hay proveedores" cuando en realidad hay un error (Media).** La captura lo muestra: arriba el aviso rojo `Internal Server Error`, y debajo, en la tabla, *"No hay proveedores con esos filtros"*. La persona puede creer que se han borrado.
+
+**U-03 — Un fallo secundario oculta lo principal (Media).** La pantalla de incidencias pide a la vez la lista y el resumen con `Promise.all`. Si falla **solo el resumen**, **la lista también desaparece**, aunque estuviera bien.
+
+> 💡 `Promise.all` es "todo o nada": si una promesa falla, falla el conjunto. Lo que es secundario debe cargarse aparte para que su fallo no se lleve por delante lo importante.
+
+**U-06 — El aviso estaba fuera de pantalla (Media).** En la tabla de proveedores se pulsa el botón de una fila lejana; la acción falla y el aviso se pinta **arriba de la página, a 907 píxeles de lo que se está viendo**. La persona no ve nada y concluye que el botón no funciona.
+
+**U-07 — Resultados antiguos disfrazados de nuevos (Media).** Se busca algo, la API falla, y la tabla **sigue mostrando las 15 filas de antes**. El aviso rojo está arriba, pero las filas parecen la respuesta a lo buscado.
+
+**U-04 y U-05 — El plan B es seguro, pero demasiado grande.** Un dato defectuoso en una sola fila (por ejemplo `created_at: null`) hace que **toda la pantalla** se sustituya por "Algo ha salido mal". Y un fallo en el `Layout` (el menú y la guarda de sesión) no lo recoge ese plan B: aparece la pantalla por defecto de Next, **en inglés**.
+
+**U-10 — La web pública, en blanco (Baja).** Sin JavaScript (o si el script no se descarga) el texto visible es `""` y la página queda vacía, sin ningún `<noscript>`.
+
+### 14.4 Lo que se comprobó que está bien
+
+Un informe justo cuenta esto también:
+- **Carga:** proveedores e incidencias muestran spinner con la API lenta.
+- **Errores en español** y sin tecnicismos en incidencias.
+- **Detalle de una incidencia:** aviso y botón "Reintentar".
+- **Crear una incidencia** con un 500: aviso, y **lo escrito se conserva**.
+- **Respuesta `200` con HTML** en lugar de JSON: mensaje correcto.
+- **Existe una pantalla de error general**, que evita la pantalla en blanco en la mayoría de los fallos.
+
+### 14.5 Decisiones de esta pasada
+
+| Decisión | Por qué |
+|---|---|
+| **Ejecutar** la interfaz en un navegador en lugar de solo leer el código | Un estado de carga o de error es algo que se **ve**; leer `if (loading)` no te dice si se ve bien |
+| Probar siempre **dos extremos**: "lento" y "nunca responde" | Son fallos distintos: uno necesita un spinner, el otro necesita un **tiempo máximo** |
+| Marcar todo como **verificado**, salvo lo que no se ejecutó | Cada hallazgo de esta parte se vio con los ojos de la persona usuaria |
+| Una tabla de **"evidencia nueva sobre hallazgos anteriores"** | Cuatro hallazgos (E-04, E-08, E-09, R-01) pasaron de "leído" a **comprobado en el navegador** |
+| No instalar nada en el sistema **sin permiso** | Había `sudo` disponible, pero no lo usé: bajé las librerías que faltaban a una carpeta temporal |
+| Dejar el repositorio **tal como estaba** | Borré los ficheros que genera el servidor de desarrollo (`.next`, cachés) y comprobé con `git status` |
+
+### 14.6 Problemas que aparecieron en esta pasada
+
+#### 🔴 1. Chromium no arrancaba (el mismo problema que en AUTH-02)
+**Síntoma:** `error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file`.
+**Causa:** el navegador necesita librerías del sistema (accesibilidad, gráficos, sonido) que este entorno no trae.
+**Solución sin permisos de administrador:**
+1. Preparar un **índice de `apt` en una carpeta temporal** (`-o Dir::State=…`), sin tocar el del sistema.
+2. **Descargar** (no instalar) los 12 paquetes `.deb` que faltaban.
+3. **Extraerlos** con `dpkg -x` en otra carpeta temporal.
+4. Indicar su ubicación con `LD_LIBRARY_PATH`.
+
+**Aprendizaje:** un mensaje de error de "librería no encontrada" se resuelve pidiéndole al sistema **la lista exacta de lo que falta** (`ldd …| grep "not found"`) y no instalando cosas al azar. Y **hay vías que no requieren ser administrador**.
+
+#### 🔴 2. Mis primeras pruebas no probaban lo que yo creía
+**Síntoma:** varios escenarios devolvían resultados que no tenían sentido: sin avisos, o el mensaje de éxito sin aparecer.
+**Causas (tres distintas):**
+- En la web pública **faltaba marcar una opción obligatoria**, así que el formulario nunca se enviaba. Mi conclusión inicial ("no hace peticiones") era **inválida** porque la prueba no había enviado nada.
+- En el formulario de incidencias **olvidé rellenar el campo "Sucursal"**; la validación lo impedía.
+- El modo desarrollo de React **ejecuta los efectos dos veces**, de modo que mi regla "falla la segunda llamada" rompía la primera carga.
+
+**Solución:** descubrir los campos reales de cada formulario con un script, rellenar todo lo obligatorio, y cambiar la regla por un **interruptor** (`failing = true` solo cuando la pantalla ya está cargada).
+**Aprendizaje:** **antes de fiarte de un "no pasa nada", comprueba que tu prueba llegó a hacer lo que querías** (¿se envió el formulario? ¿había datos en la tabla?). Una prueba que falla por su propio diseño no demuestra nada.
+
+#### 🔴 3. Mi comando se mató a sí mismo (otra vez)
+**Síntoma:** `Exit code 144` al intentar apagar los servidores.
+**Causa:** usé `ps | grep … | xargs kill` con patrones como `next dev`; el propio comando de mi terminal contenía esas palabras, así que **se encontró y se mató a sí mismo**. Ya me había pasado con `pkill -f`.
+**Solución:** apagar por **número de proceso guardado** (`kill $(cat servidor.pid)`) y comprobar los puertos con `ss -ltn`, en comandos separados.
+**Aprendizaje:** al matar procesos por nombre, **tu propio comando contiene ese nombre**. Guarda el PID al arrancarlos.
+
+#### 🔴 4. Un hallazgo salió con un matiz distinto del que esperaba
+**Síntoma:** esperaba que el login con respuesta sin `access_token` dejara guardado el texto `"undefined"` en el almacenamiento del navegador.
+**Realidad:** no quedó guardado (la siguiente llamada, con un `401`, lo borró). Lo que sí se comprobó es que **el mensaje que ve la persona es "contraseña incorrecta"**, que es falso.
+**Solución:** reportar **solo lo que se vio**: el mensaje engañoso. No el almacenamiento.
+**Aprendizaje:** una hipótesis puede cambiar de forma al probarla. Lo que cuenta es lo observado.
+
+#### 🔴 5. Los números de línea (por cuarta vez)
+Seis de los siete rangos que cité de memoria estaban desplazados una o dos líneas; los comprobé con `grep -n`. Es ya un hábito: **nunca entrego referencias sin verificarlas.**
+
+### 14.7 Ejercicios de esta parte
+
+1. En `SuppliersPage.tsx`, ¿qué debería mostrar la tabla cuando `error` tiene un valor? Escribe el cambio en pseudocódigo (sin tocar el fichero).
+2. Escribe la función `fetchWithTimeout(url, ms)` usando `AbortSignal.timeout`. ¿Qué mensaje en español le darías a la persona cuando salta el tiempo máximo?
+3. Explica con tus palabras por qué `Promise.all([lista, resumen])` es una mala idea si el resumen es secundario. ¿Qué usarías en su lugar? (Pista: `Promise.allSettled`, o cargar cada cosa en su propio `useEffect`.)
+4. Haz tú una prueba de caos con las **herramientas de desarrollo del navegador** (pestaña *Red* → "Sin conexión" o "Lento 3G"): abre las incidencias y mira qué ocurre.
+5. **Pregunta de reflexión:** un `error.tsx` que sustituye **toda** la pantalla es seguro, pero poco amable. ¿Cómo lo harías más pequeño para que un fallo afecte solo a un recuadro? (Pista: *error boundary* alrededor de cada tarjeta.)
 
 ---
 
