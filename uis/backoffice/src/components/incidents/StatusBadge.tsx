@@ -1,4 +1,5 @@
 import { STATUS_LABELS, type IncidentStatus } from "@repo/shared-types";
+import { labelOf } from "../../lib/format";
 
 const STYLES: Record<IncidentStatus, string> = {
   open: "border-amber-400/40 bg-amber-400/10 text-amber-300",
@@ -6,11 +7,12 @@ const STYLES: Record<IncidentStatus, string> = {
   resolved: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
   discarded: "border-slate-600 bg-slate-700/30 text-slate-300",
 };
+const UNKNOWN_STYLE = "border-slate-600 bg-slate-700/30 text-slate-300";
 
 export default function StatusBadge({ status }: { status: IncidentStatus }) {
   return (
-    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${STYLES[status]}`}>
-      {STATUS_LABELS[status]}
+    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${STYLES[status] ?? UNKNOWN_STYLE}`}>
+      {labelOf(STATUS_LABELS, status)}
     </span>
   );
 }

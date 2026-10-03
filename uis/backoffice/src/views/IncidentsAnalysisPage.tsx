@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
+import { ErrorNotice, LoadingNote, SectionBoundary } from "../components/feedback";
 import CsvUploader from "../components/incidents/CsvUploader";
 import MetricsSummary from "../components/incidents/MetricsSummary";
-import { analyzeIncidentsFile, downloadResultsCsv, ApiError } from "../lib/api";
+import { analyzeIncidentsFile, downloadResultsCsv } from "../lib/api";
+import { describeUploadError } from "../lib/errors";
 import type { AnalyzeResponse } from "../types/incidents";
 
 export default function IncidentsAnalysisPage() {
@@ -12,10 +14,12 @@ export default function IncidentsAnalysisPage() {
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileSelected = async (file: File) => {
     setFileName(file.name);
+    setFile(file);
     setError(null);
     setResult(null);
     setIsAnalyzing(true);
@@ -23,7 +27,7 @@ export default function IncidentsAnalysisPage() {
       const response = await analyzeIncidentsFile(file);
       setResult(response);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo analizar el archivo.");
+      setError(describeUploadError(err, "No se pudo analizar el archivo. Comprueba que es el CSV del helpdesk e inténtalo de nuevo."));
     } finally {
       setIsAnalyzing(false);
     }
@@ -35,7 +39,7 @@ export default function IncidentsAnalysisPage() {
     try {
       await downloadResultsCsv();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo descargar el archivo.");
+      setError(describeUploadError(err, "No se pudo descargar el archivo. Inténtalo de nuevo."));
     } finally {
       setIsExporting(false);
     }
@@ -61,15 +65,16 @@ export default function IncidentsAnalysisPage() {
       </div>
 
       {isAnalyzing && (
-        <div className="mt-8 flex items-center gap-3 text-slate-300">
-          <Loader2 className="animate-spin" size={20} />
-          Analizando archivo...
+        <div className="mt-8">
+          <LoadingNote label="Analizando archivo…" />
         </div>
       )}
 
       {error && (
-        <div role="alert" className="mt-8 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
+        <div className="mt-8">
+          <ErrorNotice message={error} onRetry={file ? () => void handleFileSelected(file) : undefined} retryLabel="Volver a analizar">
+            Puedes elegir otro archivo arrastrándolo o haciendo clic en el cuadro de arriba.
+          </ErrorNotice>
         </div>
       )}
 
@@ -87,7 +92,9 @@ export default function IncidentsAnalysisPage() {
             </button>
           </div>
           <div className="mt-6">
-            <MetricsSummary result={result} />
+            <SectionBoundary name="los resultados del análisis">
+              <MetricsSummary result={result} />
+            </SectionBoundary>
           </div>
         </div>
       )}

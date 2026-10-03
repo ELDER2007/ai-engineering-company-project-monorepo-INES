@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { ApiError, createSupplier } from "../../lib/api";
+import { createSupplier } from "../../lib/api";
+import { describeError } from "../../lib/errors";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -47,8 +48,10 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
       return;
     }
     setSaving(true);
+    // Only the call to the API is inside the try: onCreated belongs to the page.
+    let created: Supplier;
     try {
-      const created = await createSupplier({
+      created = await createSupplier({
         name: name.trim(),
         country,
         categories,
@@ -59,12 +62,13 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
         contact_email: email.trim() || null,
         notes: notes.trim() || null,
       });
-      onCreated(created);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo crear el proveedor.");
+      setError(describeError(err, "No se pudo crear el proveedor. Revisa los datos e inténtalo de nuevo."));
+      return;
     } finally {
       setSaving(false);
     }
+    onCreated(created);
   };
 
   return (

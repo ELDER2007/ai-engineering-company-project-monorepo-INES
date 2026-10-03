@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ErrorNotice } from "../feedback";
 
 export const inputClass =
   "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none aria-[invalid=true]:border-rose-400";
@@ -33,10 +34,7 @@ export function Field({
   );
 }
 
-export function ErrorBanner({ message }: { message: string }) {
-  return (
-    <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-      {message}
-    </div>
-  );
+/** An error with, when it can help, a button to try again (see `ErrorNotice`). */
+export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return <ErrorNotice message={message} onRetry={onRetry} />;
 }

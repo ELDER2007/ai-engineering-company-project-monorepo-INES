@@ -32,12 +32,13 @@ export interface AnalyzeResponse {
   satisfaction: Satisfaction;
 }
 
-export const INVALID_RULE_LABELS: Record<keyof InvalidBreakdown, string> = {
-  missing_client_company: "Missing client_company",
-  invalid_or_missing_category: "Invalid or missing category",
-  invalid_description: "Invalid or missing description",
-  invalid_or_missing_agent_id: "Invalid or missing agent_id",
-  invalid_or_missing_email: "Invalid or missing email",
-  closed_without_score: "Closed ticket, no score",
-  score_out_of_range: "Satisfaction score out of range",
+export const INVALID_RULE_LABELS: Record<string, string> = {
+  missing_client_company: "Falta la empresa cliente",
+  invalid_or_missing_category: "Categoría no válida o ausente",
+  invalid_description: "Descripción no válida o ausente",
+  invalid_or_missing_agent_id: "Agente no válido o ausente",
+  invalid_or_missing_email: "Email no válido o ausente",
+  closed_without_score: "Ticket cerrado sin puntuación",
+  score_out_of_range: "Puntuación de satisfacción fuera de rango",
+  unrecognised_status: "Estado no reconocido",
 };

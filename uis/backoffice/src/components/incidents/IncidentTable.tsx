@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { CATEGORY_LABELS, ORIGIN_LABELS, type IncidentListItem } from "@repo/shared-types";
 import type { SortField, SortOrder } from "../../lib/api";
+import { formatDay, labelOf, MISSING } from "../../lib/format";
 import StatusBadge from "./StatusBadge";
 
 interface Props {
@@ -42,12 +43,12 @@ export default function IncidentTable({ items, sort, order, onSort }: Props) {
                   {i.id}
                 </Link>
               </td>
-              <td className="max-w-sm truncate px-4 py-3" title={i.title}>{i.title}</td>
-              <td className="whitespace-nowrap px-4 py-3">{CATEGORY_LABELS[i.category]}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{ORIGIN_LABELS[i.origin]}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{i.branch}</td>
+              <td className="max-w-sm truncate px-4 py-3" title={i.title}>{i.title || MISSING}</td>
+              <td className="whitespace-nowrap px-4 py-3">{labelOf(CATEGORY_LABELS, i.category)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{labelOf(ORIGIN_LABELS, i.origin)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{i.branch || MISSING}</td>
               <td className="px-4 py-3"><StatusBadge status={i.status} /></td>
-              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{i.created_at.slice(0, 10)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{formatDay(i.created_at)}</td>
             </tr>
           ))}
         </tbody>

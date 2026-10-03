@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { ErrorNotice, LoadingNote } from "../components/feedback";
 import SupplierForm from "../components/suppliers/SupplierForm";
 import SupplierRow from "../components/suppliers/SupplierRow";
-import { ApiError, listSuppliers, setSupplierStatus, updateSupplierRate } from "../lib/api";
+import { listSuppliers, setSupplierStatus, updateSupplierRate } from "../lib/api";
+import { describeError } from "../lib/errors";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Country, type Supplier } from "../types/suppliers";
 
 const selectClass =
@@ -13,17 +15,27 @@ const selectClass =
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [country, setCountry] = useState<Country | "">("");
   const [category, setCategory] = useState<Category | "">("");
 
-  useEffect(() => {
-    listSuppliers()
-      .then(setSuppliers)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "No se pudo cargar el directorio."))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      setSuppliers(await listSuppliers());
+    } catch (err) {
+      setLoadError(describeError(err, "No se pudo cargar el directorio de proveedores."));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const replace = (updated: Supplier) =>
     setSuppliers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
@@ -33,7 +45,7 @@ export default function SuppliersPage() {
     try {
       replace(await updateSupplierRate(id, rate));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo actualizar la tarifa.");
+      setError(describeError(err, "No se pudo actualizar la tarifa. Revisa el importe e inténtalo de nuevo."));
       throw err;
     }
   };
@@ -43,7 +55,8 @@ export default function SuppliersPage() {
     try {
       replace(await setSupplierStatus(supplier.id, supplier.status === "active" ? "suspended" : "active"));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el estado.");
+      setError(describeError(err, "No se pudo cambiar el estado del proveedor. Inténtalo de nuevo."));
+      throw err;
     }
   };
 
@@ -101,15 +114,18 @@ export default function SuppliersPage() {
       </div>
 
       {error && (
-        <div role="alert" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
+        <div className="mt-6">
+          <ErrorNotice message={error} />
         </div>
       )}
 
       {loading ? (
-        <div className="mt-8 flex items-center gap-3 text-slate-300">
-          <Loader2 className="animate-spin" size={20} />
-          Cargando...
+        <div className="mt-8">
+          <LoadingNote label="Cargando proveedores…" />
+        </div>
+      ) : loadError ? (
+        <div className="mt-8">
+          <ErrorNotice message={loadError} onRetry={() => void load()} home />
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">

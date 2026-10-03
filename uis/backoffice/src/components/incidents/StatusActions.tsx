@@ -10,7 +10,8 @@ import {
   type IncidentStatus,
 } from "@repo/shared-types";
 import { ApiError, changeIncidentStatus } from "../../lib/api";
-import { describeError, isConflict } from "../../lib/errors";
+import { describeError, friendlyFieldErrors, isConflict } from "../../lib/errors";
+import { labelOf } from "../../lib/format";
 import { ErrorBanner, inputClass } from "./Field";
 
 interface Props {
@@ -41,7 +42,8 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
     setError(null);
   };
 
-  if (incident.allowed_transitions.length === 0) return null;
+  const transitions = incident.allowed_transitions ?? [];
+  if (transitions.length === 0) return null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,35 +58,38 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
     setError(found.status ?? null);
     if (Object.keys(found).length > 0) return;
     setSaving(true);
+    // Only the call to the API is inside the try: what happens after a good answer must not be reported as a failed save.
+    let updated: Incident;
     try {
-      const updated = await changeIncidentStatus(incident.id, {
+      updated = await changeIncidentStatus(incident.id, {
         status: target,
         ...(change.satisfaction_score != null && { satisfaction_score: change.satisfaction_score }),
         ...(change.discard_reason && { discard_reason: change.discard_reason }),
       });
-      reset();
-      onChanged(updated);
     } catch (err) {
       if (isConflict(err)) {
         reset();
         onConflict();
         return;
       }
-      if (err instanceof ApiError) setErrors(err.fieldErrors);
-      setError(describeError(err, "No se pudo cambiar el estado."));
+      if (err instanceof ApiError) setErrors(friendlyFieldErrors(err) as FieldErrors<"status" | "satisfaction_score" | "discard_reason">);
+      setError(describeError(err, "No se pudo cambiar el estado. Revisa los datos e inténtalo de nuevo."));
+      return;
     } finally {
       setSaving(false);
     }
+    reset();
+    onChanged(updated);
   };
 
   return (
     <section aria-label="Cambiar estado" className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
       <h2 className="text-lg font-semibold text-white">Ciclo de vida</h2>
       <p className="mt-1 text-sm text-slate-400">
-        Estado actual: <strong className="text-slate-200">{STATUS_LABELS[incident.status]}</strong>
+        Estado actual: <strong className="text-slate-200">{labelOf(STATUS_LABELS, incident.status)}</strong>
       </p>
       <div className="mt-4 flex flex-wrap gap-3">
-        {incident.allowed_transitions.map((status) => (
+        {transitions.map((status) => (
           <button
             key={status}
             type="button"

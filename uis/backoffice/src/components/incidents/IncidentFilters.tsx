@@ -59,7 +59,7 @@ export default function IncidentFiltersBar({ filters, facets, onChange }: Props)
         </select>
         <select aria-label="Filtrar por sucursal" value={filters.branch} onChange={(e) => set("branch", e.target.value)} className={selectClass}>
           <option value="">Todas las sucursales</option>
-          {facets.branches.map((b) => (
+          {(facets?.branches ?? []).map((b) => (
             <option key={b} value={b}>
               {b}
             </option>
@@ -67,7 +67,7 @@ export default function IncidentFiltersBar({ filters, facets, onChange }: Props)
         </select>
         <select aria-label="Filtrar por cliente" value={filters.client_company} onChange={(e) => set("client_company", e.target.value)} className={selectClass}>
           <option value="">Todos los clientes</option>
-          {facets.clients.map((c) => (
+          {(facets?.clients ?? []).map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -75,7 +75,7 @@ export default function IncidentFiltersBar({ filters, facets, onChange }: Props)
         </select>
         <select aria-label="Filtrar por agente" value={filters.agent_id} onChange={(e) => set("agent_id", e.target.value)} className={selectClass}>
           <option value="">Todos los agentes</option>
-          {facets.agents.map((a) => (
+          {(facets?.agents ?? []).map((a) => (
             <option key={a} value={a}>
               {a}
             </option>

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Check, Pencil, Power, X } from "lucide-react";
 import { CATEGORY_LABELS, type Supplier } from "../../types/suppliers";
+import { formatDateTime, formatMoney, labelOf, MISSING } from "../../lib/format";
 
 interface Props {
   supplier: Supplier;
@@ -27,8 +28,6 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
   const renewalSoon = days !== null && days >= 0 && days <= RENEWAL_WARNING_DAYS;
   const renewalOverdue = days !== null && days < 0;
 
-  const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: supplier.currency });
-
   const submitRate = async (event: FormEvent) => {
     event.preventDefault();
     const value = Number(draft);
@@ -38,7 +37,7 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
       await onRateChange(supplier.id, value);
       setEditing(false);
     } catch {
-      // The page already shows the API error; keep the editor open so the value can be fixed.
+      // The page already shows the error (with its message): the editor stays open so the value can be fixed.
     } finally {
       setBusy(false);
     }
@@ -48,6 +47,8 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
     setBusy(true);
     try {
       await onToggleStatus(supplier);
+    } catch {
+      // The page shows the error; the button only has to come back to life.
     } finally {
       setBusy(false);
     }
@@ -56,16 +57,16 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
   return (
     <tr className={`border-t border-slate-800 ${suspended ? "opacity-60" : ""} ${renewalSoon ? "bg-amber-400/5" : ""}`}>
       <td className="px-4 py-3">
-        <p className="font-medium text-white">{supplier.name}</p>
+        <p className="font-medium text-white">{supplier.name || MISSING}</p>
         {supplier.contact_email && <p className="mt-0.5 text-xs text-slate-400">{supplier.contact_email}</p>}
         {supplier.notes && <p className="mt-0.5 max-w-xs text-xs text-slate-500">{supplier.notes}</p>}
       </td>
-      <td className="px-4 py-3 text-sm text-slate-300">{supplier.country}</td>
+      <td className="px-4 py-3 text-sm text-slate-300">{supplier.country || MISSING}</td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-1">
           {supplier.categories.map((c) => (
             <span key={c} className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
-              {CATEGORY_LABELS[c]}
+              {labelOf(CATEGORY_LABELS, c)}
             </span>
           ))}
         </div>
@@ -92,7 +93,7 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
           </form>
         ) : (
           <div className="flex items-center gap-2">
-            {money.format(supplier.monthly_rate)}
+            {formatMoney(supplier.monthly_rate, supplier.currency)}
             <button
               onClick={() => {
                 setDraft(String(supplier.monthly_rate));
@@ -106,7 +107,7 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
           </div>
         )}
         <p className="mt-0.5 text-xs text-slate-500">
-          Actualizada {new Date(supplier.updated_at).toLocaleString("es-ES")}
+          Actualizada {formatDateTime(supplier.updated_at)}
         </p>
       </td>
       <td className="px-4 py-3 text-sm">

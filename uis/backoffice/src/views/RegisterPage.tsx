@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../lib/api";
+import { describeError, friendlyFieldErrors } from "../lib/errors";
 import { validateProfileFields } from "../lib/profileFields";
 import type { SignUpPayload } from "../types/auth";
 
@@ -43,13 +44,13 @@ function validate(form: Form): FieldErrors {
 /** Translates the API's rejection into per-field messages where possible, plus a general one. */
 function fromApiError(err: unknown): { fields: FieldErrors; general: string | null } {
   if (!(err instanceof ApiError)) {
-    return { fields: {}, general: "No se pudo crear la cuenta. Comprueba tu conexión e inténtalo de nuevo." };
+    return { fields: {}, general: describeError(err, "No se pudo crear la cuenta. Inténtalo de nuevo.") };
   }
   if (err.status === 409) return { fields: { email: "Ya existe una cuenta con ese email." }, general: null };
   if (err.status === 422) {
     const fields: FieldErrors = {};
     const unknown: string[] = [];
-    for (const [field, message] of Object.entries(err.fieldErrors)) {
+    for (const [field, message] of Object.entries(friendlyFieldErrors(err))) {
       if (field in emptyForm) fields[field as Field] = message;
       else unknown.push(message);
     }
@@ -57,7 +58,7 @@ function fromApiError(err: unknown): { fields: FieldErrors; general: string | nu
       unknown.length || !Object.keys(fields).length ? `Revisa los datos del formulario. ${unknown.join(" ")}`.trim() : null;
     return { fields, general };
   }
-  return { fields: {}, general: "No se pudo crear la cuenta. Inténtalo de nuevo." };
+  return { fields: {}, general: describeError(err, "No se pudo crear la cuenta. Inténtalo de nuevo.") };
 }
 
 export default function RegisterPage() {

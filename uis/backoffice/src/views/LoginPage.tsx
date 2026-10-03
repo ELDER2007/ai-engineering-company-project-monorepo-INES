@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../lib/api";
+import { describeError } from "../lib/errors";
 import { currentReturnTo } from "../lib/returnTo";
 
 const inputClass =
@@ -42,7 +43,7 @@ export default function LoginPage() {
       setError(
         err instanceof ApiError && err.status === 401
           ? "Email o contraseña incorrectos, o la cuenta está desactivada."
-          : "No se pudo iniciar sesión. Inténtalo de nuevo.",
+          : describeError(err, "No se pudo iniciar sesión. Inténtalo de nuevo."),
       );
     } finally {
       setSubmitting(false);
