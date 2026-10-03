@@ -23,6 +23,7 @@
 13. [Quinta pasada: filtración de datos sensibles](#13-quinta-pasada-filtración-de-datos-sensibles)
 14. [Sexta pasada: interfaz sin estados de carga ni de error](#14-sexta-pasada-interfaz-sin-estados-de-carga-ni-de-error)
 15. [Séptima pasada: errores sin acción y scripts sin código de salida](#15-séptima-pasada-errores-sin-acción-y-scripts-sin-código-de-salida)
+16. [Octava pasada: ¿cumple la auditoría los criterios del tech lead?](#16-octava-pasada-cumple-la-auditoría-los-criterios-del-tech-lead)
 
 ---
 
@@ -1017,6 +1018,109 @@ Se ejecutaron **los 4 scripts** con entradas que fallan y se anotó el código r
 3. Explica con tus palabras por qué un `cron` que lanza un script cada noche **necesita** que el script devuelva un código distinto de 0 cuando falla.
 4. Elige la pantalla de error que te parezca peor de la tabla (el análisis de CSV, por ejemplo) y escribe el mensaje, el botón y el enlace que le pondrías.
 5. **Pregunta de reflexión:** si una carga rechaza 4 filas de 100, ¿debería terminar con `0`, con `1` o con otro código? Argumenta tu respuesta pensando en quién lo va a leer.
+
+---
+
+## 16. Octava pasada: ¿cumple la auditoría los criterios del tech lead?
+
+Esta vez no se buscó un tipo nuevo de fallo. El tech lead dio **ocho criterios que la auditoría debe garantizar** y la pregunta fue: *¿lo hemos garantizado de verdad, o solo lo hemos dado por hecho?* El resultado está al final del [informe](./docs/INFORME-AUDITORIA.md#cobertura-de-los-criterios-del-tech-lead).
+
+### 16.1 Qué es una matriz de cumplimiento
+
+Es una tabla donde cada fila es **un requisito** y se anota: *¿se cumple?, ¿cómo lo hemos comprobado?, ¿qué prueba hay?* Sirve para que alguien que no ha visto tu trabajo pueda decidir si fiarse de él.
+
+| Criterio | Estado |
+|---|---|
+| Ningún error rompe la aplicación | ✘ No conforme |
+| Toda operación asíncrona tiene cargando / éxito / error | ~ Parcial |
+| Mensajes legibles y no técnicos | ✘ No conforme |
+| Los errores ofrecen una salida clara | ✘ No conforme |
+| Excepciones capturadas en el ámbito correcto | ~ Parcial |
+| No se filtra información sensible | ✘ No conforme |
+| Scripts con códigos de salida apropiados | ~ Parcial |
+| No se introduce funcionalidad nueva | ✔ Conforme |
+
+> 💡 **Aprendizaje:** "no conforme" no significa que tu trabajo sea malo. Significa que **el proyecto auditado** no cumple el criterio. Que la auditoría lo diga con pruebas es justo lo que se pedía.
+
+### 16.2 Dónde estaba la cobertura más débil y cómo se reforzó
+
+Al revisar los criterios contra lo ya hecho, había tres puntos flojos. Para cada uno se hizo una prueba nueva:
+
+**1. "Ningún error rompe la aplicación"** → dos pruebas de estrés:
+- **Fuzzing de la API:** se leyó el esquema de la API (su `openapi.json`) y se generó automáticamente **1.046 peticiones hostiles**: números enormes, `NaN`, textos de 5.000 caracteres, caracteres nulos, JSON roto, ficheros extraños. Resultado: **solo dos causas de 500**. Es una buena noticia sobre el backend, y un dato valioso.
+- **Matriz de la interfaz:** 5 pantallas × sus peticiones × 11 formas de fallar = **121 combinaciones**, cada una clasificada según lo que ve la persona.
+
+**2. "Cargando / éxito / error"** → hasta ahora se había medido "cargando" y "error", pero no **"éxito"**. Se ejecutaron 7 operaciones correctas en el navegador para ver qué confirmación recibe la persona (otras 2 se comprobaron leyendo el código, porque mi guion no llegó a completarlas).
+
+**3. "No se introduce funcionalidad nueva"** → se revisaron **las propias recomendaciones** del informe. Ver el apartado 16.4.
+
+> 💡 **Fuzzing** (*prueba de fuzz*) es mandar a un programa entradas absurdas o aleatorias para ver si se rompe. Es como probar una puerta tirando del pomo en todas direcciones, no solo girándolo.
+
+### 16.3 Lo que se descubrió
+
+**Un hallazgo que se ensanchó.** El `NaN` en un JSON no rompía solo la tarifa de un proveedor: rompía **cinco** endpoints. Se vio al hacer fuzzing, no al leer el código. Un ejemplo de por qué probar con muchas entradas encuentra cosas que la lectura no ve.
+
+**Un hallazgo que subió de gravedad.** Antes, "una caída de `/auth/me` te cierra la sesión" parecía un problema medio. La matriz mostró que **30 de las 121 combinaciones** (la cuarta parte) terminan así: cualquier fallo, que no sea "token caducado", te echa al login. Con esa evidencia pasó a **ALTO**.
+
+**Un hallazgo que no se había visto.** La pantalla de análisis muestra etiquetas como `Missing client_company` y códigos como `TECHNICAL` o `OPEN`, en inglés. Se vio **al revisar de forma deliberada el criterio 3**, no por el código de los errores.
+
+### 16.4 La parte más importante: revisar tus propias recomendaciones
+
+El criterio 8 dice *"no se introduce ninguna funcionalidad nueva"*. Hay que leerlo con cuidado: el informe **recomienda correcciones**, y algunas de ellas, sin querer, eran funcionalidad nueva. Ejemplos que había escrito:
+
+| Mi recomendación | Por qué era funcionalidad nueva |
+|---|---|
+| "Que las altas queden pendientes de aprobación" | Crea un flujo de aprobación que no existe |
+| "Límite de intentos de login" | Es una pieza nueva de infraestructura |
+| "Añadir un campo `code` a los errores de la API" | Cambia el contrato de la API |
+| "Opción `--strict` en los scripts" | Es una opción nueva de línea de comandos |
+| "Botón «Elegir otro archivo»" | Es un control de interfaz nuevo |
+
+La solución fue **reducir cada recomendación a corregir el defecto** (por ejemplo, para el email expuesto: "enmascararlo salvo para administradores", que usa el rol que ya existe) y mover las ideas a una sección aparte, **"Propuestas fuera de alcance"**, a la espera de que producto decida.
+
+> 💡 **Aprendizaje:** una auditoría **corrige lo que está mal**, no **diseña lo que falta**. Cuando notes que una sugerencia añadiría algo que antes no existía, sepárala: "esto lo arreglaría tal cual" frente a "esto sería una decisión de producto".
+
+### 16.5 Decisiones de esta pasada
+
+| Decisión | Por qué |
+|---|---|
+| Hacer una **matriz de 8 filas** con estado y evidencia | El tech lead lee un criterio y ve enseguida si se cumple y por qué |
+| Probar con **fuzzing y con una matriz**, no leyendo más código | Para los criterios de "nunca se rompe" hace falta provocar, no suponer |
+| **Subir la gravedad** de E-08 cuando la evidencia lo justificó | La severidad es un juicio sobre la evidencia, y la evidencia cambió |
+| Poner la **tabla de 19 operaciones** (cargando/éxito/error) | Convierte "toda operación tiene los tres estados" en algo comprobable fila por fila |
+| **No tocar código** y demostrarlo con `git diff main..HEAD` | Cumplir el criterio 8 con una prueba, no con una promesa |
+| Sacar a otra sección lo que sea **funcionalidad nueva** | Para no incumplir el criterio que se está auditando |
+
+### 16.6 Problemas que aparecieron en esta pasada
+
+#### 🔴 1. Mi primera prueba de estrés decía "0 problemas"
+**Síntoma:** 972 peticiones enviadas y **cero** resultados problemáticos.
+**Causa:** me resultó sospechoso, porque ya sabía que había varios 500. Mi prueba tenía **huecos**: enviaba los cuerpos sin la cabecera `Content-Type: application/json`, no incluía `NaN` de verdad (solo la palabra "NaN") ni un CSV con un estado raro.
+**Solución:** corregir esos huecos y comprobar que la prueba **ya detectaba los fallos conocidos** antes de fiarme de sus resultados.
+**Aprendizaje:** una prueba que no encuentra nada puede estar rota. **Antes de creer un "todo bien", verifica que tu prueba sabe encontrar un fallo que ya conoces.**
+
+#### 🔴 2. Unos `ReadError` que parecían un fallo nuevo
+**Síntoma:** varios errores `ReadError` en mi cliente, que parecían servidores que se caen.
+**Causa:** tras un 500, el servidor cierra la conexión y la **siguiente** petición que la reutiliza falla. Era un efecto de mis pruebas, no un fallo del servidor. Lo comprobé mirando el log del servidor: solo 6 excepciones reales.
+**Aprendizaje:** antes de reportar un fallo, contrasta **los dos lados**: lo que ve el cliente y lo que cuenta el servidor.
+
+#### 🔴 3. El entorno se reinició a mitad de trabajo
+**Síntoma:** mi guion de pruebas y los servidores habían desaparecido (`MODULE_NOT_FOUND`, puertos cerrados).
+**Solución:** comprobar el estado real (rama, commits, ficheros) antes de seguir; **no volver a levantar todo**, sino terminar las dos medidas que faltaban leyendo el código y marcarlas como tales.
+**Aprendizaje:** si el entorno cambia, **comprueba primero qué se ha perdido** y decide cuánto vale la pena reconstruir.
+
+#### 🔴 4. Tres cifras mal contadas en mi propia tabla
+**Síntoma:** al releer la matriz que acababa de escribir, vi que decía "71 acaban mal" (eran 60: otras 11 son un 401 correcto), "9 operaciones completas" (eran 6) y "2 con carencias graves" (eran 5).
+**Solución:** recontar con el código en lugar de a ojo, y corregirlo antes de entregar.
+**Aprendizaje:** **relee y recuenta tus propias tablas**, sobre todo las que resumen. Es donde más fácil es equivocarse y donde más se confía.
+
+### 16.7 Ejercicios de esta parte
+
+1. Elige un criterio de la matriz y escribe, con tus palabras, **qué prueba harías** para comprobarlo (no cómo arreglarlo).
+2. Explica qué es el *fuzzing* y por qué una prueba que da "0 problemas" puede ser mala señal.
+3. Mira la tabla de 19 operaciones. ¿Cuál te parece la **más grave**? Justifica la elección.
+4. Para cada una de estas ideas, di si es **corregir un defecto** o **funcionalidad nueva**: (a) añadir un tiempo máximo a las peticiones; (b) permitir exportar el informe a PDF; (c) mostrar «Cambios guardados» tras editar; (d) enviar un correo cuando falla un script.
+5. **Pregunta de reflexión:** ¿por qué subió de gravedad un hallazgo sin que el código cambiara? ¿Qué papel juega la evidencia al decidir una severidad?
 
 ---
 

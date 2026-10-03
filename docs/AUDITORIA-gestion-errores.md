@@ -921,3 +921,42 @@ Esa rama no está fusionada en `main`. Por sus commits y su código, corrige par
 - No se han leído los tests ni se han ejecutado las pruebas e2e del navegador.
 - No se ha probado el despliegue ni la configuración de producción, que no están en el repositorio.
 - Los hallazgos marcados como "Leído" se deducen del código y conviene confirmarlos antes de corregir.
+
+---
+
+# Parte 8 — Verificación de los criterios del tech lead
+
+El tech lead fijó ocho criterios que la auditoría debe garantizar. Esta parte los contrasta uno a uno y completa con pruebas los puntos donde la cobertura era más débil. El detalle, con la matriz de cumplimiento y la tabla de operaciones asíncronas, está en [INFORME-AUDITORIA.md](./INFORME-AUDITORIA.md#cobertura-de-los-criterios-del-tech-lead).
+
+## Resultado
+
+| # | Criterio | Estado |
+|---|---|---|
+| 1 | Ningún error rompe la aplicación | No conforme |
+| 2 | Toda operación asíncrona tiene cargando / éxito / error | Parcial |
+| 3 | Los mensajes al usuario son legibles y no técnicos | No conforme |
+| 4 | Los errores siempre ofrecen una salida clara | No conforme |
+| 5 | Las excepciones se capturan en el ámbito correcto | Parcial |
+| 6 | No se filtra información sensible | No conforme |
+| 7 | Los scripts fallan con códigos de salida apropiados | Parcial |
+| 8 | No se introduce ninguna funcionalidad nueva | Conforme |
+
+## Pruebas nuevas
+
+- **Estrés de la API:** 1.046 peticiones hostiles generadas desde su esquema OpenAPI. Solo hay **dos causas de 500**: el estado desconocido del CSV (T-01) y `NaN`/`Infinity` en un cuerpo JSON. Este último **no afecta solo a `monthly_rate`**: rompe el manejador de validación en 5 endpoints (`POST /suppliers`, `PATCH /suppliers/{id}`, `/rate`, `/status` y `PUT /profiles/me`). Se amplía E-12.
+- **Matriz de la interfaz:** 5 pantallas protegidas × sus peticiones × 11 modos de fallo = **121 combinaciones**. Resultado: 26 correctas, 24 con un aviso, 11 son un 401 que cierra la sesión como debe y **60 acaban mal**:
+  - 30 expulsan al usuario al login por un fallo de `/auth/me` que no es 401 (amplía E-08, que sube de media a alta);
+  - 11 sustituyen toda la pantalla por «Algo ha salido mal», también cuando falla un dato secundario como los desplegables (amplía U-04);
+  - 10 muestran la página de error de Next en inglés porque `/auth/me` llega con otra forma (amplía U-05);
+  - 9 se quedan cargando para siempre (amplía U-01).
+- **Estado de éxito:** 7 operaciones correctas ejecutadas en el navegador y 2 (crear proveedor, guardar el perfil) comprobadas leyendo el código. Incidencias y perfil confirman con un mensaje; proveedores y análisis solo cambian la pantalla (nuevo U-12).
+- **Etiquetas en pantalla:** la pantalla de análisis muestra `Missing client_company`, `Invalid or missing agent_id`, `TECHNICAL`, `OPEN`… (nuevo R-05).
+- **Scripts de JavaScript:** los 6 e2e terminan con `process.exit(fails === 0 ? 0 : 1)`: correctos.
+
+## Revisión del alcance (criterio 8)
+
+`git diff main..HEAD` confirma que **ningún fichero de código ha cambiado**. Además se revisaron las correcciones sugeridas: ocho de ellas implicaban funcionalidad nueva (aprobación de altas, límite de intentos, campo `code` en los errores, opción `--strict`, estado `degradado` en `/health`, botón «Elegir otro archivo», cabeceras CSP y recuperación de contraseña). Se redujeron a la corrección del defecto y las ideas quedan en la sección «Propuestas fuera de alcance» del informe, a la espera de una decisión de producto.
+
+## Cambios en el recuento
+
+Con esta parte el informe consolidado pasa a **76 hallazgos**: 2 críticos, 9 altos, 30 medios y 35 bajos. Cambian tres cosas respecto al recuento anterior: E-08 sube de severidad con la evidencia nueva, se añaden R-05 y U-12, y C-02 se cuenta por separado.
