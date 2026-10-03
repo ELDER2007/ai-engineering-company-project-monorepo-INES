@@ -1428,10 +1428,10 @@ Pediste «el trabajo completo»: no solo el informe, también arreglar el códig
 - `getLevelNamesMapping` solo existe en Python 3.11+ y el proyecto admite 3.10 → lo cambié por otra comprobación.
 - Un fichero de datos dañado no daba error al abrirlo (se lee «perezosamente») → forcé una lectura dentro del `try`.
 - Un test existente exigía que un aviso de `seed_incidents` devolviera 0 → respeté ese contrato; solo los fallos reales devuelven 1.
-- **Un test nuevo (`test_error_handling.py`) no pude ejecutarlo**: el sistema denegó el permiso. No lo rodeé por otra vía; queda escrito pero **sin ejecutar**. Tendrás que correr `pytest tests/test_error_handling.py` desde `services/api`.
+- **El test nuevo (`test_error_handling.py`) se ejecutó al final y encontró un fallo real:** enviar `Infinity` como tarifa de un proveedor devolvía 200 y dejaba la tarifa en `null`. Lo arreglé con `allow_inf_nan=False` en el esquema. Los otros dos fallos eran errores del propio test (columnas del CSV en otro orden y una comprobación demasiado estricta del log). **Aprendizaje:** un test sin ejecutar no demuestra nada; al correrlo apareció un error que yo no había visto.
 
 ### 20.3 Cómo lo comprobé
-268 tests de la API existentes ✅ · 9 tests de `packages/shared` ✅ · `tsc` del backoffice y de la web ✅ · `next build` ✅. No he vuelto a pasar la batería de pruebas con navegador (Playwright) tras esta tanda.
+302 tests de la API (268 existentes + 34 nuevos) ✅ · 9 tests de `packages/shared` ✅ · `tsc` del backoffice y de la web ✅ · `next build` ✅. No he vuelto a pasar la batería de pruebas con navegador (Playwright) tras esta tanda.
 
 ### 20.4 Ejercicios
 1. Abre `StatusActions.tsx`: ¿qué hay dentro del `try` y qué fuera? ¿Por qué?

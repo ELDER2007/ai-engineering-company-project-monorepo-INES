@@ -25,7 +25,7 @@ Las correcciones se hicieron en tres commits (backend y scripts, frontend, docum
 - **E-04:** el formulario de talento de la web no envía los datos a ningún sitio. Conectarlo exige un endpoint nuevo (funcionalidad nueva), así que queda como limitación documentada; el mensaje de «recibido» sigue siendo simulado.
 - **Código histórico (`src/`), `skills/` salvo `pandas_clean.py`, y hallazgos BAJO de documentación/datos:** sin uso o sin riesgo real; no se tocan para no ampliar el alcance. No he revisado uno a uno cada uno de los 82 códigos contra el código final, así que esta lista es un resumen, no una conciliación completa.
 
-**Verificación:** 268 tests de la API existentes pasan; 9 de `packages/shared` pasan; `tsc` del backoffice y de la web sin errores; `next build` correcto. Los tests nuevos de `services/api/tests/test_error_handling.py` **no se han ejecutado todavía**.
+**Verificación:** 302 tests de la API pasan (268 existentes + 34 nuevos de `test_error_handling.py`); 9 de `packages/shared` pasan; `tsc` del backoffice y de la web sin errores; `next build` correcto.
 
 ## Resumen ejecutivo: qué corregir y en qué orden
 
