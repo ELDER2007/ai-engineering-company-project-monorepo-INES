@@ -16,7 +16,9 @@ from profiles.schemas import Profile
 from users import service as users_service
 from users.schemas import UserCreate
 
-PROFILE_FIELDS = {"id", "user_id", "name", "contact_email", "phone", "address"}
+ME_FIELDS = {"name", "contact_email", "phone", "address"}  # /profiles/me: the editable data only
+STORED_FIELDS = {"id", "user_id", "name", "contact_email", "phone", "address"}  # the TinyDB document
+PROFILE_FIELDS = ME_FIELDS | {"user_id"}  # by id / list: plus whose it is. Never the storage "id"
 NEW_USER = {"email": "nuevo.usuario@example.com", "password": "s3cret-pass!"}
 
 
@@ -29,10 +31,12 @@ def client() -> TestClient:
 
 
 def test_creating_a_user_creates_exactly_one_profile_with_a_default_name(client, profiles_db):
-    created = client.post("/users", json=NEW_USER, headers=headers_for(ALICE)).json()
+    response = client.post("/users", json=NEW_USER, headers=headers_for(ALICE))
+    created = {"id": str(users_service.get_user_by_email(NEW_USER["email"]).id)}
+    assert response.json() == {"message": "Account created. You can sign in now."}
     stored = [d for d in profiles_db.all() if d["user_id"] == created["id"]]
     assert len(profiles_db) == 4 and len(stored) == 1
-    assert set(stored[0]) == PROFILE_FIELDS
+    assert set(stored[0]) == STORED_FIELDS
     assert UUID(stored[0]["id"]) != UUID(created["id"])  # its own id, not the user's
     assert {k: stored[0][k] for k in ("user_id", "name", "contact_email", "phone", "address")} == {
         "user_id": created["id"], "name": "nuevo.usuario", "contact_email": None, "phone": None, "address": None,
@@ -41,7 +45,8 @@ def test_creating_a_user_creates_exactly_one_profile_with_a_default_name(client,
 
 
 def test_deleting_a_user_deletes_their_profile(client, profiles_db):
-    created = client.post("/users", json=NEW_USER, headers=headers_for(ALICE)).json()
+    client.post("/users", json=NEW_USER, headers=headers_for(ALICE))
+    created = {"id": str(users_service.get_user_by_email(NEW_USER["email"]).id)}
     own = {"Authorization": f"Bearer {create_access_token(created['id'])}"}
     assert len(profiles_db) == 4
     assert client.delete(f"/users/{created['id']}", headers=own).status_code == 204
@@ -77,7 +82,7 @@ def test_legacy_profile_documents_are_migrated_once(users_db, profiles_db):
     users_service.sync_profiles()  # must not duplicate the migrated profile
     assert len(profiles_db) == 3
     migrated = next(d for d in profiles_db.all() if d["user_id"] == str(uuid_of(ALICE)))
-    assert set(migrated) == PROFILE_FIELDS
+    assert set(migrated) == STORED_FIELDS
     assert (migrated["name"], migrated["phone"], migrated["address"]) == ("Alice", "+34 600 000 000", None)
     snapshot = profiles_db.all()
     profiles_service.migrate_legacy_profiles()  # idempotent
@@ -116,7 +121,8 @@ def test_profile_and_user_are_linked_by_user_id_but_do_not_share_data(client, us
     assert "hashed_password" not in profile and "email" not in profile
     public = {"id", "email", "is_active", "role", "created_at"}  # ... and none in the User API either
     assert client.get(f"/users/{uuid_of(ALICE)}", headers=headers_for(ALICE)).json().keys() == public
-    assert client.get("/auth/me", headers=headers_for(ALICE)).json().keys() == public | {"profile"}
+    me = client.get("/auth/me", headers=headers_for(ALICE)).json()
+    assert me.keys() == public | {"profile"} and set(me["profile"]) == ME_FIELDS
 
 
 # --- read -------------------------------------------------------------------------
@@ -125,13 +131,17 @@ def test_profile_and_user_are_linked_by_user_id_but_do_not_share_data(client, us
 def test_read_own_profile_and_admins_read_others(client):
     h = headers_for(BOB)
     me = client.get("/profiles/me", headers=h).json()
-    assert set(me) == PROFILE_FIELDS and me["user_id"] == str(uuid_of(BOB))
+    assert set(me) == ME_FIELDS
     assert (me["name"], me["contact_email"], me["phone"], me["address"]) == ("bob", None, None, None)
     assert client.get("/profiles/me", headers=h).json() == me
-    assert client.get(f"/profiles/{uuid_of(BOB)}", headers=h).json() == me  # by id, own
+    by_id = client.get(f"/profiles/{uuid_of(BOB)}", headers=h).json()  # by id, own
+    assert set(by_id) == PROFILE_FIELDS and by_id["user_id"] == str(uuid_of(BOB))
+    assert {k: v for k, v in by_id.items() if k != "user_id"} == me
     admin = headers_for(ALICE)  # admins can read any profile and list them all
-    assert client.get(f"/profiles/{uuid_of(BOB)}", headers=admin).json() == me
-    assert {"alice", "bob", "carol"} <= {p["name"] for p in client.get("/profiles", headers=admin).json()}
+    assert client.get(f"/profiles/{uuid_of(BOB)}", headers=admin).json() == by_id
+    listing = client.get("/profiles", headers=admin).json()
+    assert {"alice", "bob", "carol"} <= {p["name"] for p in listing}
+    assert all(set(p) == PROFILE_FIELDS for p in listing)
     assert client.get(f"/profiles/{uuid4()}", headers=admin).status_code == 404
     assert client.get("/profiles/1", headers=admin).status_code == 422
 
@@ -153,15 +163,15 @@ def test_owner_edits_name_phone_address_and_contact_email(client):
                                            "phone": "+34 600 123 456", "address": " C/ Mayor 1, Madrid "}, headers=h)
     assert res.status_code == 200
     body = res.json()
-    assert {k: v for k, v in body.items() if k != "id"} == {
-        "user_id": str(uuid_of(ALICE)), "name": "Alice Álvarez", "contact_email": "alice.work@example.com",
+    assert body == {
+        "name": "Alice Álvarez", "contact_email": "alice.work@example.com",
         "phone": "+34 600 123 456", "address": "C/ Mayor 1, Madrid"}
-    assert client.get(f"/profiles/{uuid_of(ALICE)}", headers=h).json() == body
+    assert client.get(f"/profiles/{uuid_of(ALICE)}", headers=h).json() == {"user_id": str(uuid_of(ALICE)), **body}
     assert client.get(f"/profiles/{uuid_of(ALICE)}", headers=headers_for(BOB)).status_code == 403  # not Bob's business
     assert client.get("/profiles/me", headers=h).json() == body
-    # the id and the link to the user never change
+    # the link to the user never changes
     again = client.put("/profiles/me", json={"name": "Alice"}, headers=h).json()
-    assert (again["id"], again["user_id"]) == (body["id"], body["user_id"])
+    assert client.get(f"/profiles/{uuid_of(ALICE)}", headers=h).json()["user_id"] == str(uuid_of(ALICE))
     # partial update leaves the rest alone; explicit null clears an optional field
     assert again["phone"] == "+34 600 123 456" and again["address"] == "C/ Mayor 1, Madrid"
     cleared = client.put("/profiles/me", json={"phone": None, "address": None}, headers=h).json()

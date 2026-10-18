@@ -50,7 +50,7 @@ async def create_user(payload: UserCreate) -> SignUpOut:
     active: it can sign in straight away."""
     try:
         user = service.create_user(payload)
-        return SignUpOut(**user.model_dump(), message=SIGN_UP_MESSAGE)
+        return SignUpOut(message=SIGN_UP_MESSAGE)
     except service.EmailTakenError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 

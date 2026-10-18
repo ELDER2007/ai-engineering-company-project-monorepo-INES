@@ -15,6 +15,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from core.config import get_access_token_expire_minutes
 from profiles import service as profiles_service
+from profiles.schemas import ProfileMe
 
 from . import service
 from .dependencies import CurrentUser
@@ -43,4 +44,11 @@ async def login(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
 @router.get("/me", response_model=MeOut)
 async def read_me(user: CurrentUser) -> MeOut:
     profile = profiles_service.ensure_profile(user.id, user.email)  # self-heals a missing profile
-    return MeOut(**user.model_dump(), profile=profile)
+    return MeOut(
+        id=user.id,
+        email=user.email,
+        is_active=user.is_active,
+        role=user.role,
+        created_at=user.created_at,
+        profile=ProfileMe.from_profile(profile),
+    )
