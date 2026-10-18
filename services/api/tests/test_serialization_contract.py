@@ -139,3 +139,20 @@ def test_health_has_a_declared_shape():
 
     assert TestClient(app).get("/health").json() == {"status": "ok"}  # no lifespan: no databases touched
     assert "HealthOut" in SCHEMA["components"]["schemas"]
+
+
+def test_every_route_decorator_states_its_response_model():
+    """The decorator itself says what the route answers: a model, or ``response_model=None`` for the
+    routes with no JSON body (204 and the CSV file). Reads the source, so a new route cannot skip it."""
+    import re
+    from pathlib import Path
+
+    api = Path(__file__).resolve().parents[1]
+    decorator = re.compile(r"@(?:router|public_router|app)\.(?:get|post|put|patch|delete)\((.*?)\)\n(?:async )?def (\w+)", re.S)
+    missing = []
+    for path in ("main.py", "auth/router.py", "users/router.py", "profiles/router.py", "suppliers/router.py",
+                 "incidents/router.py", "incidents/incident_router.py", "routers/inventory.py"):
+        for args, name in decorator.findall((api / path).read_text()):
+            if "response_model" not in args:
+                missing.append(f"{path}:{name}")
+    assert missing == []

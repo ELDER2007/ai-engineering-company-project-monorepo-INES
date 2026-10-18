@@ -28,7 +28,7 @@ Stored in TinyDB (`incidents/db.json`, gitignored), keyed by `id` (`NXV-000101`,
 | `origin` | required: `customer`, `branch`, `internal` |
 | `branch` | required, ≤ 60 chars; **`central` when it does not apply** (case-insensitive, stored as `central`). If `origin` is `branch` it must name a real branch, not `central` |
 | `created_at`, `updated_at` | auto (UTC); `updated_at` moves on every edit or status change |
-| `client_company`, `agent_id` (`AGT-07`), `customer_email` | optional extras from the helpdesk CSV (the email is sensitive: masked in lists, never searchable, never echoed in errors) |
+| `client_company`, `agent_id` (`AGT-07`), `customer_email` | optional extras from the helpdesk CSV (the email is sensitive: only in the detail, never in the list rows, never searchable, never echoed in errors) |
 | `satisfaction_score` | 1-5, optional, only on `resolved` |
 | `discard_reason` | 5-300 chars, required to discard, only on `discarded` |
 | `history` | audit trail: created / imported / status_changed / edited (edits log the *names* of the fields, never values) |
@@ -185,7 +185,7 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `GET` | `/inventory/products/{id}` | One asset with its current stock. `404` if missing. |
 | `POST` | `/inventory/orders/inbound` | Register a delivery (`AssetEntry`: `asset_id`, `quantity` > 0, `supplier`, `office`); adds stock (`201`). `404` unknown asset. |
 | `POST` | `/inventory/orders/outbound` | Register an allocation or consumption (`AssetExit`: `asset_id`, `quantity` > 0, `exit_type`, `assigned_to`, `office`); removes stock (`201`). `400` if it exceeds the stock, `422` if `assigned_to` does not match `exit_type`, `404` unknown asset. |
-| `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order with its asset, newest first. |
+| `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order, newest first. The asset is flat (`asset_id`, `asset_name`, `asset_sku`); `user_uuid` is the author, to be resolved with `GET /users/directory`. |
 | `GET` | `/health` | Public liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running; use *Authorize* there with your email (in the *username* box) and password to try the protected routes.

@@ -234,13 +234,15 @@ Son cambios de comportamiento o de contrato más amplios, que conviene decidir a
 ## 8. Verificación
 
 **Tests.**
-- Backend (`services/api`): 818 passed, 7 xfailed (los 7 xfail ya existían).
-- Frontend (`uis/backoffice`): `npm run typecheck` sin errores, 550 tests de `jest` en verde.
+- Backend (`services/api`): 820 passed, 7 xfailed (los 7 xfail ya existían).
+- Frontend (`uis/backoffice`): `npm run typecheck` sin errores, 550 tests de `jest` en verde. Paquete compartido (`npm run test:shared`): 9 en verde.
 - `tests/test_serialization_contract.py` lee el OpenAPI que publica la app y comprueba, para cada endpoint: que declara un
   esquema de respuesta (o 204, o el CSV explícito); que ningún esquema de respuesta alcanza `hashed_password`, `password` ni
   `current_password`; que el alta y el login no alcanzan ningún `email`; que los perfiles no exponen su `id`; que todo cuerpo
   `*Create`/`*Update`/`*Change` tiene `additionalProperties: false`; que el listado de incidencias es un subconjunto estricto del
-  detalle; y que el alias oculto `/api/suppliers` tiene `response_model` en cada ruta.
+  detalle; que el alias oculto `/api/suppliers` tiene `response_model` en cada ruta; y que **todo decorador de ruta** declara
+  `response_model` en el código fuente. Las rutas sin cuerpo JSON (los tres `DELETE` con 204 y el CSV de exportación) lo declaran como
+  `response_model=None`, una decisión explícita en vez de una omisión.
 - Se actualizaron los tests existentes a los contratos nuevos (perfiles, `/auth/me`, alta, órdenes, listado de incidencias, cuerpos
   de inventario rechazados con 422).
 

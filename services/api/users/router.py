@@ -82,7 +82,9 @@ async def update_user(user_id: UUID, payload: UserUpdate, current: CurrentUser) 
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(owner_or_admin)])
+@router.delete(
+    "/{user_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(owner_or_admin)]
+)
 async def delete_user(user_id: UUID) -> None:
     """Also deletes the user's linked profile."""
     try:

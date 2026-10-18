@@ -42,6 +42,7 @@ async def analyze_incidents(file: UploadFile) -> AnalyzeResponse:
 
 @router.get(
     "/results/export",
+    response_model=None,  # a file, not JSON: the contract is the text/csv response below
     response_class=Response,
     responses={
         200: {
