@@ -94,11 +94,26 @@ class SupplierStatusUpdate(BaseModel):
 
 
 class Supplier(SupplierCreate):
-    """Full supplier record: the validated input plus the system-generated
-    ``updated_at`` (stamped whenever ``monthly_rate`` changes)."""
+    """The record stored in TinyDB: the validated input plus the system-generated
+    ``updated_at`` (stamped whenever ``monthly_rate`` changes). Not a response shape."""
 
     updated_at: datetime
 
 
-class SupplierOut(Supplier):
+class SupplierOut(BaseModel):
+    """What every supplier endpoint returns (list, search, detail and the writes). Declared
+    field by field, not inherited from the input: a field added to ``SupplierCreate`` must be
+    added here on purpose to reach a client. The backoffice row shows all of these, so list and
+    detail share one shape."""
+
     id: int
+    name: str
+    country: Country
+    categories: list[SupplierCategory]
+    monthly_rate: float
+    currency: Currency
+    status: SupplierStatus
+    contract_renewal_date: date | None
+    contact_email: str | None
+    notes: str | None
+    updated_at: datetime
