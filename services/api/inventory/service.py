@@ -17,7 +17,6 @@ from sqlmodel import Session, col, func, select
 
 from .models import Asset, AssetEntry, AssetExit
 from .schemas import (
-    AssetBrief,
     AssetCreate,
     AssetEntryCreate,
     AssetExitCreate,
@@ -108,15 +107,13 @@ def create_asset(session: Session, payload: AssetCreate) -> AssetOut:
     return _asset_out(asset, 0)
 
 
-def _brief(asset: Asset) -> AssetBrief:
-    return AssetBrief(id=asset.id, name=asset.name, sku=asset.sku, category=asset.category, office=asset.office)
-
-
 def _inbound_out(entry: AssetEntry, asset: Asset) -> OrderOut:
     return OrderOut(
         type="inbound",
         id=entry.id,
-        asset=_brief(asset),
+        asset_id=asset.id,
+        asset_name=asset.name,
+        asset_sku=asset.sku,
         quantity=entry.quantity,
         office=entry.office,
         created_at=entry.created_at,
@@ -129,7 +126,9 @@ def _outbound_out(exit_: AssetExit, asset: Asset) -> OrderOut:
     return OrderOut(
         type="outbound",
         id=exit_.id,
-        asset=_brief(asset),
+        asset_id=asset.id,
+        asset_name=asset.name,
+        asset_sku=asset.sku,
         quantity=exit_.quantity,
         office=exit_.office,
         created_at=exit_.created_at,
