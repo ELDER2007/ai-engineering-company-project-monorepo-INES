@@ -27,7 +27,7 @@ const ME: Me = {
   role: "user",
   is_active: true,
   created_at: "2026-01-01T00:00:00Z",
-  profile: { id: "p1", user_id: "u1", name: "Ana", contact_email: null, phone: null, address: null },
+  profile: { name: "Ana", contact_email: null, phone: null, address: null },
 };
 
 // If the guard ever renders this, the protected view was shown. Even one render counts.

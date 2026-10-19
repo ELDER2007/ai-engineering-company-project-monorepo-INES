@@ -28,7 +28,7 @@ Stored in TinyDB (`incidents/db.json`, gitignored), keyed by `id` (`NXV-000101`,
 | `origin` | required: `customer`, `branch`, `internal` |
 | `branch` | required, ≤ 60 chars; **`central` when it does not apply** (case-insensitive, stored as `central`). If `origin` is `branch` it must name a real branch, not `central` |
 | `created_at`, `updated_at` | auto (UTC); `updated_at` moves on every edit or status change |
-| `client_company`, `agent_id` (`AGT-07`), `customer_email` | optional extras from the helpdesk CSV (the email is sensitive: masked in lists, never searchable, never echoed in errors) |
+| `client_company`, `agent_id` (`AGT-07`), `customer_email` | optional extras from the helpdesk CSV (the email is sensitive: only in the detail, never in the list rows, never searchable, never echoed in errors) |
 | `satisfaction_score` | 1-5, optional, only on `resolved` |
 | `discard_reason` | 5-300 chars, required to discard, only on `discarded` |
 | `history` | audit trail: created / imported / status_changed / edited (edits log the *names* of the fields, never values) |
@@ -160,11 +160,11 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `GET` | `/auth/me` | The user of the current session (`id`, `email`, `is_active`, `role`, `created_at`) plus its linked `profile` (`name`, `contact_email`, `phone`, `address`, …). Never the hash. |
 | `GET` | `/users` | **Admins only** (`403`). List users (`id`, `email`, `is_active`, `role`, `created_at`; never the hash). |
 | `GET` | `/users/directory` | Any session. Who is who: `[{user_id, name}]` of the **active** users, sorted by name. Nothing else (no email, role or contact data), so it is the way to show names without listing accounts. |
-| `POST` | `/users` | Register a user: `{"email", "password"}` (password 8-72 bytes) plus optional initial profile `name`, `phone`, `address`. The password is hashed before storing and the linked Profile is created in the same operation (`201`). The new user is always a `user`. **Public** (no session needed): it is the sign-up. The account is **active** straight away (`is_active=true`): it can sign in at once with `POST /auth/login`. The `201` answer carries a `message` saying so. `409` if the email exists, `422` on invalid data (nothing is created). |
+| `POST` | `/users` | Register a user: `{"email", "password"}` (password 8-72 bytes) plus optional initial profile `name`, `phone`, `address`. The password is hashed before storing and the linked Profile is created in the same operation (`201`). The new user is always a `user`. **Public** (no session needed): it is the sign-up. The account is **active** straight away (`is_active=true`): it can sign in at once with `POST /auth/login`. The `201` answer is only `{"message": ...}`: the email, id and role are not echoed back by this unauthenticated flow. `409` if the email exists, `422` on invalid data (nothing is created). |
 | `GET` | `/users/{user_id}` | One user: the owner or an admin (`403` otherwise). `404` if missing (admins only ever see that). |
 | `PUT` | `/users/{user_id}` | Partial update (omitted fields are kept) of `email`, `password` and, for admins only, `role` and `is_active` (this is how an account is switched off, or back on). Allowed to the owner or an admin (`403` otherwise). The owner needs `current_password` to change their email or password (`422` if missing, `400` if wrong); an admin editing someone else does not, but cannot change their password (`403`). `409` if the email is taken or it would demote, deactivate or remove the last active admin. |
 | `DELETE` | `/users/{user_id}` | Delete a user and its linked profile (`204`). Allowed to the owner or an admin (`403` otherwise); `404` if missing; `409` if it is the last user or the last active admin. |
-| `GET` | `/profiles` | **Admins only** (`403`). List all profiles (`id`, `user_id`, `name`, `contact_email`, `phone`, `address`). |
+| `GET` | `/profiles` | **Admins only** (`403`). List all profiles (`user_id`, `name`, `contact_email`, `phone`, `address`; the profile's own storage `id` is never returned). |
 | `GET` | `/profiles/me` | Your own profile. |
 | `GET` | `/profiles/{user_id}` | One user's profile: the owner or an admin (`403` otherwise). `404` if missing. |
 | `PUT` | `/profiles/me` | Partial update of your own `name`, `phone`, `address` (and `contact_email`); omitted fields are kept and an explicit `null` clears `phone`, `address` or `contact_email` (not `name`). `id` and `user_id` can't be sent (`422`). `422` on invalid data. |
@@ -185,7 +185,7 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `GET` | `/inventory/products/{id}` | One asset with its current stock. `404` if missing. |
 | `POST` | `/inventory/orders/inbound` | Register a delivery (`AssetEntry`: `asset_id`, `quantity` > 0, `supplier`, `office`); adds stock (`201`). `404` unknown asset. |
 | `POST` | `/inventory/orders/outbound` | Register an allocation or consumption (`AssetExit`: `asset_id`, `quantity` > 0, `exit_type`, `assigned_to`, `office`); removes stock (`201`). `400` if it exceeds the stock, `422` if `assigned_to` does not match `exit_type`, `404` unknown asset. |
-| `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order with its asset, newest first. |
+| `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order, newest first. The asset is flat (`asset_id`, `asset_name`, `asset_sku`); `user_uuid` is the author, to be resolved with `GET /users/directory`. |
 | `GET` | `/health` | Public liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running; use *Authorize* there with your email (in the *username* box) and password to try the protected routes.

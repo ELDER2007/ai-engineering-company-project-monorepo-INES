@@ -63,7 +63,7 @@ export default function InboundOrderPage({ initialAssetId = "" }: { initialAsset
       const updated = await refresh();
       void reload();
       setSuccess(
-        `Entrada registrada: ${unitsLabel(order.quantity)} de «${order.asset.name}» (${order.office}).` +
+        `Entrada registrada: ${unitsLabel(order.quantity)} de «${order.asset_name}» (${order.office}).` +
           (updated ? ` Stock actual: ${updated.current_stock}.` : ""),
       );
       setForm(EMPTY);

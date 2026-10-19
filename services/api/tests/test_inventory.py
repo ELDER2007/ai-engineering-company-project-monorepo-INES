@@ -103,7 +103,7 @@ def test_the_seed_has_the_orders_the_context_asks_for(seeded):
     orders = seeded.get("/inventory/orders").json()
     inbound_orders = [o for o in orders if o["type"] == "inbound"]
     outbound_orders = [o for o in orders if o["type"] == "outbound"]
-    assert len([o for o in inbound_orders if o["asset"]["sku"] == "NXV-IT-001"]) >= 2
+    assert len([o for o in inbound_orders if o["asset_sku"] == "NXV-IT-001"]) >= 2
     assert len(inbound_orders) >= 4 and len(outbound_orders) >= 3
     assert any(o["exit_type"] == "allocation" and o["assigned_to"] for o in outbound_orders)
     assert any(o["exit_type"] == "consumption" and o["assigned_to"] is None for o in outbound_orders)
@@ -149,12 +149,14 @@ def test_products_can_be_filtered_by_office_and_category(seeded):
 
 # --- the stock cannot be set, only moved by orders ----------------------------------------------
 
-def test_stock_in_a_request_body_is_ignored(client):
-    asset = client.post(
+def test_stock_in_a_request_body_is_refused(client):
+    response = client.post(
         "/inventory/products",
         json={"name": "Ratón", "sku": "NXV-S-1", "category": "peripherals", "office": "Miami", "current_stock": 500},
-    ).json()
-    assert asset["current_stock"] == 0
+    )
+    assert response.status_code == 422
+    assert any(error["loc"][-1] == "current_stock" for error in response.json()["detail"])
+    assert client.get("/inventory/products").json() == []
 
 
 def test_there_is_no_route_to_edit_an_asset_or_an_order(client):
@@ -301,8 +303,10 @@ def test_every_order_carries_the_id_of_the_user_who_made_it(client):
 
 def test_a_user_uuid_in_the_body_cannot_impersonate_somebody_else(client):
     asset = new_asset(client)
-    order = inbound(client, asset["id"], 5, user_uuid=str(uuid_of(BOB))).json()
-    assert order["user_uuid"] == str(uuid_of(ALICE))
+    response = inbound(client, asset["id"], 5, user_uuid=str(uuid_of(BOB)))
+    assert response.status_code == 422  # not accepted at all, rather than silently ignored
+    assert client.get("/inventory/orders").json() == []
+    assert inbound(client, asset["id"], 5).json()["user_uuid"] == str(uuid_of(ALICE))
 
 
 # --- listing orders -----------------------------------------------------------------------------
@@ -311,7 +315,10 @@ def test_orders_list_inbound_and_outbound_with_their_asset(seeded):
     orders = seeded.get("/inventory/orders").json()
     assert len(orders) == 11
     first = next(o for o in orders if o["type"] == "outbound" and o["exit_type"] == "allocation")
-    assert set(first["asset"]) == {"id", "name", "sku", "category", "office"}
+    assert set(first) == {
+        "type", "id", "asset_id", "asset_name", "asset_sku", "quantity", "office", "created_at",
+        "user_uuid", "supplier", "exit_type", "assigned_to",
+    }  # the asset is flat: no nested object, no category or office repeated
     assert first["created_at"] and first["office"] in {"Valencia", "Miami"}
     assert [o["created_at"] for o in orders] == sorted((o["created_at"] for o in orders), reverse=True)
 

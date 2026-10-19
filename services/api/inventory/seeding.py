@@ -77,11 +77,11 @@ def seed_inventory(session: Session, *, user_uuid: str, reset: bool = False) -> 
 
     by_sku = {data["sku"]: service.create_asset(session, AssetCreate(**data)) for data in ASSETS}
     for data in ENTRIES:
-        asset_id = by_sku[data["sku"]].id
-        service.register_inbound(session, AssetEntryCreate(**{**data, "asset_id": asset_id}), user_uuid)
+        order = {key: value for key, value in data.items() if key != "sku"}
+        service.register_inbound(session, AssetEntryCreate(**order, asset_id=by_sku[data["sku"]].id), user_uuid)
     for data in EXITS:
-        asset_id = by_sku[data["sku"]].id
-        service.register_outbound(session, AssetExitCreate(**{**data, "asset_id": asset_id}), user_uuid)
+        order = {key: value for key, value in data.items() if key != "sku"}
+        service.register_outbound(session, AssetExitCreate(**order, asset_id=by_sku[data["sku"]].id), user_uuid)
     return len(ASSETS), len(ENTRIES), len(EXITS)
 
 

@@ -79,9 +79,19 @@ interface IncidentBase {
   editable: boolean;
 }
 
-/** A row of the list: the customer's address comes masked. */
-export interface IncidentListItem extends IncidentBase {
-  customer_email_masked: string | null;
+/**
+ * A row of the list: only what the table shows and sorts by. No description, lifecycle data,
+ * customer address or audit trail; the detail (`Incident`) has them.
+ */
+export interface IncidentListItem {
+  id: string;
+  title: string;
+  category: IncidentCategory;
+  status: IncidentStatus;
+  origin: IncidentOrigin;
+  branch: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Incident extends IncidentBase {

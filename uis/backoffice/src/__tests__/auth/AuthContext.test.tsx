@@ -24,7 +24,7 @@ const meOf = (email: string, name = "Ana"): Me => ({
   role: "user",
   is_active: true,
   created_at: "2026-01-01T00:00:00Z",
-  profile: { id: "p1", user_id: `id-of-${email}`, name, contact_email: null, phone: null, address: null },
+  profile: { name, contact_email: null, phone: null, address: null },
 });
 
 let auth: ReturnType<typeof useAuth>;

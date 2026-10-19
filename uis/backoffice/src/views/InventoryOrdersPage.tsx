@@ -155,8 +155,8 @@ export default function InventoryOrdersPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-medium text-white">{o.asset.name}</span>
-                        <span className="ml-2 whitespace-nowrap font-mono text-xs text-slate-400">{o.asset.sku}</span>
+                        <span className="font-medium text-white">{o.asset_name}</span>
+                        <span className="ml-2 whitespace-nowrap font-mono text-xs text-slate-400">{o.asset_sku}</span>
                       </td>
                       <td className="px-4 py-3 text-right font-bold tabular-nums">
                         {o.type === "inbound" ? "+" : "−"}
