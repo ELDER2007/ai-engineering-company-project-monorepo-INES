@@ -247,8 +247,8 @@ Son cambios de comportamiento o de contrato más amplios, que conviene decidir a
   de inventario rechazados con 422).
 
 **Prueba manual contra el servidor real.** Se arrancó una copia aislada de la API con `uvicorn` (datos nuevos, fuera del repo) y se
-llamó a los endpoints con `curl`, comparando la respuesta con el esquema. Es el mismo OpenAPI que sirve `/docs` (responde 200), pero se
-consultó por línea de comandos, no desde la interfaz del navegador.
+llamó a los endpoints con `curl`, comparando la respuesta con el esquema. Después se repitió la prueba a mano en la interfaz
+interactiva `/docs` de FastAPI (capturas más abajo).
 
 | Petición | Resultado observado |
 |---|---|
@@ -264,3 +264,17 @@ consultó por línea de comandos, no desde la interfaz del navegador.
 
 Limitación: la instancia de prueba no tenía incidencias cargadas, así que el listado de incidencias se verificó con los tests
 (`test_list_is_paginated_and_sorted`, `test_list_rows_carry_no_email_description_or_audit_trail`), no a mano.
+
+### Evidencia: pruebas en `/docs`
+
+Capturas hechas en la interfaz interactiva de FastAPI (`/docs`) contra la API en marcha. Cada captura va en dos partes: la petición
+(`a`) y la respuesta del servidor (`b`). Los datos personales (email, nombre) y el `access_token` están tapados; el alta usa una cuenta de prueba.
+
+| # | Endpoint | Petición | Respuesta | Qué demuestra |
+|---|---|---|---|---|
+| 1 | `POST /users` | ![petición](screenshots/serialization-audit/01a-post-users-peticion.png) | ![201](screenshots/serialization-audit/01b-post-users-201.png) | El alta responde `201` solo con `message`: ni email, ni id, ni rol. |
+| 2 | `POST /auth/login` | ![petición](screenshots/serialization-audit/02a-post-auth-login-peticion.png) | ![200](screenshots/serialization-audit/02b-post-auth-login-200.png) | El login devuelve solo `access_token`, `token_type` y `expires_in`. |
+| 3 | `GET /auth/me` | ![petición](screenshots/serialization-audit/03a-get-auth-me-peticion.png) | ![200](screenshots/serialization-audit/03b-get-auth-me-200.png) | `profile` trae solo `name`, `contact_email`, `phone` y `address`; sin `id` ni `user_id`. |
+| 4 | `GET /inventory/orders` | ![petición](screenshots/serialization-audit/04a-get-inventory-orders-peticion.png) | ![200](screenshots/serialization-audit/04b-get-inventory-orders-200.png) | El activo va aplanado (`asset_id`, `asset_name`, `asset_sku`), sin objeto `asset` anidado. |
+| 5 | `POST /inventory/products` con `current_stock` | ![petición](screenshots/serialization-audit/05a-post-inventory-products-peticion.png) | ![422](screenshots/serialization-audit/05b-post-inventory-products-422.png) | Un campo que no es de entrada se rechaza con `422 extra_forbidden` en vez de ignorarse. |
+| 6 | Todos los endpoints | ![lista de endpoints](screenshots/serialization-audit/06-docs-endpoints.png) | | Los 38 endpoints aparecen documentados en OpenAPI, y los públicos (`/auth/login`, `POST /users`, `/health`) no llevan candado. |
