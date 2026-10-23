@@ -42,6 +42,20 @@ Se ha corregido una incoherencia encontrada durante la revision: el schema de pr
 
 Resultado de esta revision: diez criterios con evidencia localizada, cinco obligatorios coincidentes con briefing, 40 variantes y allowlists verificadas, 50 claves documentadas, reparto 16 stream/24 batch y ocho ejemplos validos. La bateria actual rechaza 639 casos invalidos: 637 de claves obligatorias/extra y dos de tipo de cambio incorrecto en alta. No incluye pruebas funcionales del backend ni implica aprobacion docente.
 
+## Entrega Publicada y Conservacion
+
+PR de entrega: [#24 - docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24), desde `docs/telemetry-design-plan` hacia `main` en el repositorio de ELDER2007. Se ha creado como PR normal, no borrador. El commit inicial publicado es `a9ed403`; el historial posterior de esta rama contiene las notas de publicacion. Abrir la PR no significa que sus cambios ya esten en main ni que el docente los haya aprobado.
+
+Politica de conservacion: mantener la rama, no reescribir historial ni forzar push, y hacer merge solo despues de revision/aprobacion. Los README anteriores permanecen conservados en un desplegable historico. Ningun servicio remoto garantiza disponibilidad perpetua; una segunda copia independiente reduce el riesgo de perdida de acceso.
+
+La copia Git se genera con `git bundle create ... --all` y se comprueba con `git bundle verify ...`. Contiene archivos y commits versionados, no el contenido de GitHub (comentarios/aprobaciones de PR, issues o configuracion), archivos ignorados ni cambios sin commit. No debe incluir secretos locales. Se guarda fuera del repositorio para no subir un duplicado binario en la PR. Mientras permanezca dentro de Codespaces no es una copia externa independiente: hay que descargarla a un equipo o almacenamiento propio.
+
+Para recuperar una copia descargada, sustituye la ruta por la de tu archivo:
+
+```bash
+git clone -b docs/telemetry-design-plan /ruta/a/la-copia.bundle nexova-recuperado
+```
+
 ## Que Te Corresponde y Que Queda Preparado
 
 ### Trabajo Tecnico Preparado Con Copilot
@@ -58,7 +72,7 @@ Validacion final ejecutada sobre el catalogo actual: 40 fixtures de evento valid
 
 1. Lee el resumen de este README y recorre el plan. Prepara la explicacion de cinco conceptos: por que el stock solo cambia mediante ordenes, diferencia evento/metrica, funcion del envelope/requestId, allowlist y privacidad, y cuando elegir stream o batch.
 2. Confirma con tu docente el mecanismo de entrega (enlace de repositorio o PR) y la fecha concreta. El enunciado dice viernes, pero no identifica por si solo una convocatoria. Si exige draft-07 especificamente, avisalo: el contrato actual usa Draft 2020-12 y no debe cambiarse solo el identificador del draft.
-3. La publicacion de estos seis documentos ya esta autorizada: rama de entrega, commit, push a origin y PR contra main con titulo `docs: telemetry design plan`. Consulta el enlace de PR registrado al completar la publicacion; la autorizacion no incluye hacer merge ni instrumentar la aplicacion.
+3. La publicacion de estos seis documentos ya esta realizada mediante la PR #24 enlazada arriba. Puedes usar ese enlace para entregar; no necesitas ejecutar comandos Git. Para mantener otra copia independiente, descarga el bundle generado fuera de Codespaces.
 4. Una vez publicada, envia el enlace por el canal del curso, responde al feedback del docente y solicita revision. El merge corresponde solo despues de aprobacion y checks; no se da por autorizado por tener documentos locales.
 
 ### Decisiones Que Requieren Revision, No Trabajo Manual Tuyo

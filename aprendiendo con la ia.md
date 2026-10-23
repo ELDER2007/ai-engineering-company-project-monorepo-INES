@@ -152,6 +152,14 @@ Comprobacion previa: main local y origin/main coinciden en e09d564, con cero com
 
 La descripcion de PR presentara 40 eventos: cinco obligatorios y 35 oportunidades; diez categorias; envelope, allowlists, privacidad, batch/stream, riesgos y comprobaciones. La decision mas dificil se resume como separar hechos confirmados en backend de senales de navegador potencialmente incompletas sin perder trazabilidad ni exponer datos personales. Se han actualizado las notas de autorizacion/publicacion actuales, conservando las anotaciones anteriores como historial.
 
+### Publicacion Real de la PR y Conservacion del Historial
+
+Tras la duda sobre como conservar el trabajo, la estudiante ha pedido ejecutar la recomendacion. Se ha comprobado que el commit a9ed403 sigue en origin/docs/telemetry-design-plan, que main remoto sigue en e09d564 y que no habia otra PR de esta rama contra main. El primer intento de crear la PR se habia cancelado sin borrar los commits ni la rama; esta vez la creacion se ha completado.
+
+Entrega publicada: [PR #24 - docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24), normal, abierta y dirigida a main del repositorio ELDER2007/ai-engineering-company-project-monorepo-INES. Incluye el total de 40 eventos, cinco obligatorios/35 oportunidades, diez categorias y una frase sobre la decision mas dificil. No se ha hecho merge ni eliminado la rama; la aprobacion y revision docente siguen pendientes.
+
+Se registra la publicacion en README y cuaderno mediante un commit adicional de la misma PR, sin reescribir el commit inicial. Para conservacion se prepara un git bundle con todo el historial versionado y verificacion de integridad fuera del repositorio. El bundle no es un backup de comentarios/PR/configuracion de GitHub ni de archivos ignorados, y mientras permanezca en Codespaces sigue dependiendo de ese entorno. Para disponer de copia independiente debe descargarse a un equipo o almacenamiento propio. No se promete permanencia absoluta de GitHub ni del contenedor.
+
 ### Conceptos aprendidos
 
 - Evento: hecho de negocio ocurrido; metrica: calculo agregado sobre esos hechos.
