@@ -1,4 +1,134 @@
-# AI Engineering Company Project — Student Template
+# Nexova | Full-Stack Operations Platform
+
+**A portfolio project by Ines, developed through the 4Geeks Academy AI Engineering programme.**
+
+[English](README.md) | [Español](README.es.md)
+
+Nexova is an HR consultancy case study used to build a public website and an internal operations platform. The repository brings together authenticated workflows, traceable inventory movements, supplier management, support incidents, and a business-driven telemetry design.
+
+**Core stack:** Python · FastAPI · SQLModel · PostgreSQL / Supabase · React · Next.js · TypeScript · Tailwind CSS.
+
+This is a learning and portfolio project developed from a course template with AI assistance. Implementation status, design proposals, and reproducible measurements are documented separately below.
+
+## Project Highlights
+
+| Area | What the repository demonstrates | Evidence |
+| --- | --- | --- |
+| Inventory | Stock derived from inbound/outbound orders; authenticated authors; insufficient-stock rejection; PostgreSQL row locking for concurrent withdrawals. | [Business logic](services/api/inventory/service.py) |
+| Authentication | JWT bearer authentication, bcrypt password hashing, account/profile separation, permissions, and protected backoffice navigation. | [API documentation](services/api/README.md), [backoffice](uis/backoffice/README.md) |
+| Operations | Supplier workflows, incident lifecycle/history, and CSV analysis using shared validation logic. | [Shared package](packages/shared/README.md), [API domains](services/api/README.md) |
+| Performance | Documented before/after measurements, root-cause analysis, and experiments that were reverted when evidence did not support them. | [Audit](AUDIT.md), [results](REPORT.md), [raw evidence](docs/performance/) |
+| Telemetry design | 40 event contracts: five mandatory and 35 identified opportunities; 12 inventory instrumentation points, privacy rules, correlation, and batch/stream decisions. Not instrumented yet. | [Telemetry plan](docs/telemetry/telemetry-plan.md), [JSON Schema](docs/telemetry/event-schemas.json) |
+
+## Engineering Case Studies
+
+### Traceable Inventory Instead of Editable Stock
+
+Stock is calculated from orders rather than stored as an editable balance. The API records the authenticated author, enforces office consistency, and refuses withdrawals above available stock. PostgreSQL locks the asset row while checking and registering a withdrawal. These choices keep business rules in the backend rather than relying on the browser's displayed balance.
+
+### Performance Improvements With Evidence
+
+The recorded Lighthouse audit shows Performance increasing from **87 to 100** on incidents and **83 to 100** on suppliers. CLS fell from **0.255 to 0.014** and **0.351 to 0**, respectively. These are historical laboratory results for the audited production builds, not live production monitoring, current-run results, or guarantees for every device. See the [measurement method and limitations](REPORT.md).
+
+### Turning Business Questions Into Event Contracts
+
+The [telemetry deliverable](docs/telemetry/README.md) translates an operations RFI into event hypotheses, concrete decisions, owners, priorities, schemas, and acceptance scenarios. Its 40 allowlists are matched against a 50-key typed data dictionary, with per-event privacy treatment and a business rationale for 16 stream and 24 batch events. Frequency controls, risks, and deliberately excluded data are documented. It separates committed orders from clicks, local validation from API rejection, and a locally confirmed talent form from an application actually received by a server. Capture, outbox, ingestion, and dashboards remain future implementation work.
+
+The [evaluation matrix](docs/telemetry/telemetry-plan.md#matriz-de-la-rubrica-de-evaluacion) maps the ten assignment criteria to concrete design evidence and distinguishes local validation from instructor approval and future implementation.
+
+## Architecture and Trade-Offs
+
+```text
+Public website: React + Vite          Internal backoffice: Next.js
+			     FastAPI API
+		Inventory: SQLModel + PostgreSQL / Supabase
+	Accounts, profiles, suppliers, incidents: TinyDB
+```
+
+- **Modular monolith:** one API with domain routers and service-layer business logic, rather than premature microservices.
+- **Two persistence layers:** relational inventory plus existing TinyDB domains. TinyDB limits multi-worker operation and is not presented as a scalable production database.
+- **Shared contracts:** incident rules are reused across the API, CLI, and backoffice to reduce validation drift.
+- **Explicit security boundary:** browser guards improve navigation; API authentication and authorization enforce access.
+
+See the [architecture proposal](docs/ARCHITECTURE_PROPOSAL.md) and [backend documentation](services/api/README.md) for implementation details and constraints.
+
+## Run Locally
+
+Prerequisites: Node.js 22.12+ with npm, Python 3.10+, and uv. Run these commands from a local clone; do not commit credentials.
+
+Backend, starting from the repository root:
+
+```bash
+cd services/api
+uv sync
+cp -n .env.example .env
+```
+
+Before starting, configure `SECRET_KEY` and first-run `AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` locally, following the [API configuration guide](services/api/README.md#configuration). Set `DATABASE_URL` for Supabase; without it, inventory uses the development-only SQLite fallback. Keep TinyDB-backed domains on a single API worker.
+
+```bash
+uv run uvicorn main:app --reload --port 8000
+```
+
+In a second terminal at the repository root:
+
+```bash
+npm install
+npm run dev:backoffice
+```
+
+In a third terminal at the repository root:
+
+```bash
+npm run dev
+```
+
+Default local URLs: website `http://localhost:5173`, backoffice `http://localhost:5174`, API documentation `http://localhost:8000/docs`. Proxy configuration and end-to-end prerequisites are explained in the [backoffice guide](uis/backoffice/README.md).
+
+## Validation and Reproducibility
+
+Available checks from the repository root:
+
+```bash
+npm run typecheck
+npm run typecheck:backoffice
+npm run test:shared
+npm run test:backoffice
+```
+
+For backend tests, run `uv run pytest` from the API directory. This README lists available checks, not a claim that every suite currently passes. Setup, fixtures, coverage scope, and end-to-end requirements are documented in [TESTING.md](TESTING.md) and the [testing plan](docs/testing-plan.md). Telemetry schema validation is documented in its [README](docs/telemetry/README.md).
+
+## Scope and Next Steps
+
+Implemented: public website, authenticated backoffice, API domains, relational inventory, shared incident rules, and test suites. Documented: performance evidence and telemetry design. Pending: telemetry instrumentation and storage, production hardening, and future AI integrations. The current talent form only confirms locally; it does not persist applications to the API. Do not infer deployed RAG, agents, or automated workflows from template directories.
+
+## Explore the Work
+
+- [Business briefing](nexova-BRIEFING.es.md) and [architecture](docs/ARCHITECTURE_PROPOSAL.md).
+- [Learning journal](aprendiendo%20con%20la%20ia.md): decisions, mistakes, solutions, and the role of AI assistance.
+- [Authentication case study](aprendiendo%20con%20la%20ia%20-%20AUTH-02.md) and [performance case study](aprendiendo%20con%20la%20ia%20-%20PERF-AUDIT.md).
+- [Public website source](uis/website/) and [backoffice source](uis/backoffice/).
+
+## Credits
+
+Developed as part of the 4Geeks Academy AI Engineering programme, from its company-project template. Original template attribution and historical guidance are preserved below. The learning journal documents implementation decisions, verification, and AI-assisted work.
+
+<details>
+<summary>Historical Course Template and Earlier Milestone Notes</summary>
+
+The following material is preserved for provenance. Its template-only status statements and earlier milestone snapshots do not describe the current project.
+
+# Nexova — AI Engineering Company Project
+
+## Current Project: Inventory Telemetry Design
+
+Nexova's monorepo contains the public website (`uis/website`), internal backoffice (`uis/backoffice`), centralized FastAPI API (`services/api`), shared packages, scripts, and cross-cutting documentation. The inventory API already derives stock from inbound/outbound orders; this milestone designs telemetry for training materials, certifications, and onboarding equipment without changing the running applications.
+
+Start with the [telemetry project README](docs/telemetry/README.md), the [telemetry plan](docs/telemetry/telemetry-plan.md), and the [event schemas and examples](docs/telemetry/event-schemas.json). Requirements come from the [Nexova briefing](nexova-BRIEFING.es.md). Decisions, findings, and verification are recorded in the [learning journal](aprendiendo%20con%20la%20ia.md#telemetria-plan-de-diseno).
+
+The expanded management RFI covers 40 event types: five explicitly classified as mandatory and 35 identified opportunities across inventory, authentication, navigation, flow abandonment, suppliers, incidents, website interactions, technical health, and internal processes. Phase 1 maps the complete inventory workflow with 12 instrumentation points, including rejected direct stock edits, failed validations, and minimum-stock crossings. The plan assigns hypotheses, decisions, owners, priorities, and batch/stream processing; it also covers section loading and client-side validation failures. Schema 2.0.0 adopts the requested session/correlation envelope and includes eight examples.
+
+This milestone delivers design documentation only. No new server, collector, database, or dashboard has been deployed. No PR has been created or merged. The original template guide and previous milestones remain below as historical/reference material; its template-only status does not describe the current implemented applications.
 
 [![4Geeks Academy](https://img.shields.io/badge/4Geeks-Academy-blue)](https://4geeksacademy.com)
 [![AI Engineering](https://img.shields.io/badge/track-AI%20Engineering-green)](https://4geeksacademy.com/es/programas-de-carrera/ingenieria-ia)
@@ -322,3 +452,5 @@ This template was built as part of the 4Geeks Academy AI Engineering Career Prog
 You can find other templates and resources like this at the [4Geeks Academy GitHub page](https://github.com/4geeksacademy).
 
 _This template is maintained by 4Geeks Academy for the AI Engineering track. For exclusive use in the programme._
+
+</details>
