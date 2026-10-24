@@ -27,15 +27,17 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 def create_access_token(user_uuid: UUID | str) -> str:
     """Signed JWT (HS256, python-jose) with the minimum claims: ``user_id`` (the
-    user's ``id`` stored in TinyDB) and ``exp``. Who the user is and
+    user's ``id`` stored in TinyDB), ``exp`` and ``iat`` (when it was issued: it is what lets a
+    password change cut off the tokens issued before it). Who the user is and
     whether they still exist is read from the store on every request, so
     deleting an account takes effect immediately instead of when the token
     expires. The uuid never changes, so editing the email keeps the session.
 
     Lifetime: ``ACCESS_TOKEN_EXPIRE_MINUTES`` (see ``core.config``).
     """
-    expires = datetime.now(timezone.utc) + timedelta(minutes=get_access_token_expire_minutes())
-    claims = {"user_id": str(user_uuid), "exp": expires}
+    issued = datetime.now(timezone.utc)
+    expires = issued + timedelta(minutes=get_access_token_expire_minutes())
+    claims = {"user_id": str(user_uuid), "exp": expires, "iat": issued}
     return jwt.encode(claims, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
@@ -43,6 +45,13 @@ def decode_access_token(token: str) -> UUID | None:
     """The ``user_id`` in a valid, unexpired, correctly signed token, or ``None``
     for anything else (bad signature, expired, wrong algorithm, no ``exp`` or an
     ``exp`` that is not a number, ``user_id`` missing or not a uuid)."""
+    decoded = decode_access_claims(token)
+    return decoded[0] if decoded else None
+
+
+def decode_access_claims(token: str) -> tuple[UUID, int | None] | None:
+    """Like ``decode_access_token`` but also returns ``iat`` (epoch seconds), or ``None`` for a token
+    that carries none (issued before ``iat`` existed)."""
     try:
         claims = jwt.decode(
             token,
@@ -51,6 +60,9 @@ def decode_access_token(token: str) -> UUID | None:
             options={"require_exp": True},
         )
         raw = claims["user_id"]
-        return UUID(raw) if isinstance(raw, str) else None
+        if not isinstance(raw, str):
+            return None
+        issued_at = claims.get("iat")
+        return UUID(raw), (int(issued_at) if issued_at is not None else None)
     except (JWTError, KeyError, ValueError, TypeError):  # TypeError: python-jose on an ``exp`` of null or a list
         return None

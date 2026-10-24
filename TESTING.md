@@ -7,7 +7,7 @@ Cómo ejecutar la batería de pruebas de la API de autenticación (ticket AUTH�
 ### Backend (pytest) — desde `services/api`
 
 ```bash
-uv run pytest                      # toda la suite (674 tests, ~1 min por bcrypt)
+uv run pytest                      # toda la suite (763 pasan, 7 xfailed, ~1,5 min)
 uv run pytest --cov                # además mide la cobertura de autenticación y falla por debajo del 70 %
 uv run pytest tests/test_login.py  # un fichero
 uv run pytest -k "expir"           # por palabra clave
@@ -21,7 +21,7 @@ No necesita la API, ni navegador, ni red (salvo para instalar). Basta con Node.
 ```bash
 npm ci                                     # una vez, desde la RAÍZ del repositorio (monorepo con workspaces)
 cd uis/backoffice
-npm test                                   # toda la suite (424 tests, ~5 s)
+npm test                                   # toda la suite (550 tests, ~7 s)
 npx jest --coverage                        # con cobertura; falla si un módulo baja del 90 %
 npx jest src/__tests__/lib/format.test.ts  # un fichero
 npx jest -t "daysUntil"                    # por nombre
