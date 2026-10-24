@@ -72,6 +72,8 @@ await page.locator("textarea").fill("Hola");
 await page.getByRole("button", { name: /Enviar mi perfil/ }).click();
 await page.getByText("No hemos podido enviar tu perfil").waitFor();
 ok(await page.getByText("¡Gracias por tu interés en Nexova!").count() === 0, "API caído: avisa del error y no confirma el envío");
+// el 500 lo provocamos nosotros: el navegador lo registra en consola y no debe contar como error de la página
+for (let i = problems.length - 1; i >= 0; i--) if (problems[i].includes("status of 500")) problems.splice(i, 1);
 await page.getByRole("button", { name: /Enviar mi perfil/ }).click();
 await page.getByText("¡Gracias por tu interés en Nexova!").waitFor();
 ok(true, "datos válidos: se muestra el mensaje de agradecimiento tras reintentar");
