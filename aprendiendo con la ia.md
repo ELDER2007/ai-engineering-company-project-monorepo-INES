@@ -183,9 +183,28 @@ Se revisaron las tareas pendientes, el estado de la rama y la entrega. La PR #24
 
 Validacion ejecutada en este checkout: API, 724 tests aprobados y 7 `xfail`; backoffice, 550 tests aprobados; paquete compartido, 9 tests aprobados; ambos typechecks de frontend y el fixture de telemetria pasan. El backend conserva una advertencia de deprecacion de Starlette/httpx. Los `xfail` estan documentados como decisiones pendientes, no como fallos de la suite.
 
-Pendientes de producto para una fase posterior: implementar captura, migracion y backfill de los campos de inventario, outbox, almacenamiento/consumidor y pruebas de integracion para telemetria; conectar el formulario de talento a un API y persistir candidaturas; y decidir el endurecimiento necesario antes de produccion (entre otros, persistencia multiworker y controles de abuso de login). Las integraciones de IA siguen siendo alcance futuro, no una funcionalidad ya desplegada.
+Durante esta revision se actualizaron en `TESTING.md` los conteos de las suites con los resultados actuales.
 
-Durante esta revision se corrigio en la guia del API la nota obsoleta sobre el envio de JWT desde el backoffice y se actualizaron en `TESTING.md` los conteos de las suites con los resultados actuales.
+### Estado final de la entrega (24-10-2026)
+
+El trabajo se reparte en tres PR independientes hacia `main`; ninguna depende de otra para funcionar y se pueden fusionar en cualquier orden (se comprobo con una fusion de prueba entre las tres ramas, sin conflictos).
+
+| PR | Contenido | Estado |
+|---|---|---|
+| [#24 docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24) | Diseno de telemetria (fases 1, 2 y 3): `docs/telemetry/telemetry-plan.md`, `event-schemas.json`, 40 eventos (5 obligatorios y 35 oportunidades) en 10 categorias. Es la entrega pedida. | Abierta, pendiente de revision docente |
+| [#25 feat(talent): persist website talent applications](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/25) | El formulario de talento ya envia y guarda las candidaturas: `POST /talent-applications` publico, `GET` solo admin, validacion igual a la del formulario y el cuerpo del envio probado con e2e (26 de 26). | Abierta, pendiente de revision |
+| [#26 feat(api): lock out repeated failed logins, revoke tokens on password change](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/26) | Bloqueo de intentos de login fallidos (`429`), limite en el formulario publico y revocacion de tokens al cambiar la contrasena (`iat` + `password_changed_at`). Apilada sobre #25. | Abierta, pendiente de revision |
+
+Verificacion de la rama con todo integrado: API, 763 tests aprobados y 7 `xfail`; backoffice, 550 tests; typecheck y build de la web correctos; e2e de la web, 26 de 26.
+
+Lo que queda fuera, a proposito y por escrito:
+
+- **Implementar la telemetria** (captura, migracion y backfill del inventario, outbox, consumidor y pruebas de integracion). La entrega pedida es el diseno; el propio plan lo declara fase posterior, con prerrequisitos y aprobaciones (por ejemplo, retencion de datos con el responsable de privacidad) que no dependen de este repositorio.
+- **Persistencia multiproceso.** TinyDB y los contadores de abuso son de un solo proceso; con varios workers hace falta PostgreSQL o un almacen compartido. Esta documentado en las limitaciones del API.
+- **Captcha**, refresh/logout de sesion, borrado de candidaturas y su politica de retencion.
+- **Las siete decisiones pendientes** marcadas con `xfail(strict=True)` en las pruebas (normalizacion Unicode de contrasenas, emails con alfabetos mezclados, etc.): son decisiones de producto del equipo, no tareas.
+- **Integraciones de IA** (RAG, agentes y workflows): alcance futuro, no una funcionalidad desplegada.
+- **Copia independiente.** El bundle Git sigue dentro de Codespaces; descargarlo a otro almacenamiento depende de la persona, no del proyecto.
 
 ---
 
