@@ -7,7 +7,7 @@ Cómo ejecutar la batería de pruebas de la API de autenticación (ticket AUTH�
 ### Backend (pytest) — desde `services/api`
 
 ```bash
-uv run pytest                      # toda la suite (724 pasan, 7 xfailed, ~1 min)
+uv run pytest                      # toda la suite (763 pasan, 7 xfailed, ~1,5 min)
 uv run pytest --cov                # además mide la cobertura de autenticación y falla por debajo del 70 %
 uv run pytest tests/test_login.py  # un fichero
 uv run pytest -k "expir"           # por palabra clave

@@ -181,19 +181,19 @@ Se registra la publicacion en README y cuaderno mediante un commit adicional de 
 
 Se revisaron las tareas pendientes, el estado de la rama y la entrega. La PR #24 sigue abierta hacia `main`, sin checks configurados ni decision de revision. La rama de telemetria aun no esta integrada en `main`.
 
-Validacion ejecutada en este checkout: API, 724 tests aprobados y 7 `xfail`; backoffice, 550 tests aprobados; paquete compartido, 9 tests aprobados; ambos typechecks de frontend y el fixture de telemetria pasan. El backend conserva una advertencia de deprecacion de Starlette/httpx. Los `xfail` estan documentados como decisiones pendientes, no como fallos de la suite.
+Validacion ejecutada en este checkout, antes de integrar las candidaturas y el endurecimiento: API, 724 tests aprobados y 7 `xfail`; backoffice, 550 tests aprobados; paquete compartido, 9 tests aprobados; ambos typechecks de frontend y el fixture de telemetria pasan. El backend conserva una advertencia de deprecacion de Starlette/httpx. Los `xfail` estan documentados como decisiones pendientes, no como fallos de la suite.
 
 Durante esta revision se actualizaron en `TESTING.md` los conteos de las suites con los resultados actuales.
 
 ### Estado final de la entrega (24-10-2026)
 
-El trabajo se reparte en tres PR independientes hacia `main`; ninguna depende de otra para funcionar y se pueden fusionar en cualquier orden (se comprobo con una fusion de prueba entre las tres ramas, sin conflictos).
+Todo el trabajo se entrega en **una sola PR: [#24 docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24)**. Su rama contiene el diseno de telemetria (la entrega pedida) y, ademas, las candidaturas persistidas y el endurecimiento del API. Las PR #25 y #26 contienen esos dos bloques por separado (la #26 apilada sobre la #25) y quedan como referencia; no hace falta revisarlas aparte. Se comprobo con fusiones de prueba que las tres ramas se integran sin conflictos.
 
-| PR | Contenido | Estado |
-|---|---|---|
-| [#24 docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24) | Diseno de telemetria (fases 1, 2 y 3): `docs/telemetry/telemetry-plan.md`, `event-schemas.json`, 40 eventos (5 obligatorios y 35 oportunidades) en 10 categorias. Es la entrega pedida. | Abierta, pendiente de revision docente |
-| [#25 feat(talent): persist website talent applications](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/25) | El formulario de talento ya envia y guarda las candidaturas: `POST /talent-applications` publico, `GET` solo admin, validacion igual a la del formulario y el cuerpo del envio probado con e2e (26 de 26). | Abierta, pendiente de revision |
-| [#26 feat(api): lock out repeated failed logins, revoke tokens on password change](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/26) | Bloqueo de intentos de login fallidos (`429`), limite en el formulario publico y revocacion de tokens al cambiar la contrasena (`iat` + `password_changed_at`). Apilada sobre #25. | Abierta, pendiente de revision |
+| Bloque | Contenido |
+|---|---|
+| Diseno de telemetria (fases 1, 2 y 3) | `docs/telemetry/telemetry-plan.md`, `event-schemas.json`, 40 eventos (5 obligatorios y 35 oportunidades) en 10 categorias. Solo diseno: no se instrumenta la aplicacion. |
+| Candidaturas de talento (#25) | El formulario de talento ya envia y guarda las candidaturas: `POST /talent-applications` publico, `GET` solo admin, validacion igual a la del formulario y cuerpo del envio probado con e2e (26 de 26). |
+| Endurecimiento del API (#26) | Bloqueo de intentos de login fallidos (`429`), limite en el formulario publico y revocacion de tokens al cambiar la contrasena (`iat` + `password_changed_at`). |
 
 Verificacion de la rama con todo integrado: API, 763 tests aprobados y 7 `xfail`; backoffice, 550 tests; typecheck y build de la web correctos; e2e de la web, 26 de 26.
 

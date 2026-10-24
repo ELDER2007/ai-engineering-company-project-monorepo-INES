@@ -111,7 +111,7 @@ Suite de regresion del API actual (desde `services/api`):
 uv run --group dev pytest
 ```
 
-Comprobada el 24-10-2026: 724 pruebas pasaron y 7 quedaron `xfail`; se conserva una advertencia de deprecacion de `starlette.testclient` con `httpx`. Esta suite cubre el API existente, no instrumentacion futura de telemetria.
+Comprobada el 24-10-2026 con todo el trabajo integrado (candidaturas y endurecimiento del API incluidos): 763 pruebas pasaron y 7 quedaron `xfail`; se conserva una advertencia de deprecacion de `starlette.testclient` con `httpx`. Esta suite cubre el API existente, no instrumentacion futura de telemetria.
 
 Si el entorno dispone de `jsonschema`, comprobar el contrato y sus ocho ejemplos:
 
