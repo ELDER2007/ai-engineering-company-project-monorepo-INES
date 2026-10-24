@@ -91,7 +91,7 @@ Se han revisado [models.py](../../services/api/inventory/models.py) y [service.p
 | `register_inbound` y `register_outbound` hacen commit directamente | Incorporar posteriormente una outbox en su misma transaccion; no publicar antes del commit ni depender de una llamada externa despues del commit. |
 | No hay PUT/PATCH de productos ni ordenes | Detectar campos de stock prohibidos en las rutas de escritura existentes; un 405 por metodo inexistente solo cuenta como peticion HTTP, no prueba una edicion de stock. `product_updated` requiere una futura funcion de edicion de metadatos, nunca de stock. |
 
-Estas carencias son prerrequisitos de una fase futura, no cambios implementados ni errores corregidos en esta entrega.
+Estas carencias son prerrequisitos de una fase futura, no cambios implementados ni errores corregidos en esta entrega. El arranque actual solo llama a `SQLModel.metadata.create_all()`: crea tablas nuevas, pero no migra las existentes. Para agregar programa, categoria de negocio, minimo, coste y proveedor-ID hace falta una migracion versionada y un backfill revisado; no se deben inferir esos valores automaticamente desde las categorias legacy.
 
 ## 4. Envelope y propiedades comunes
 
@@ -241,7 +241,7 @@ Validar con JSON Schema Draft 2020-12 y verificacion de `format` activada. El JS
 | Miami con EUR; campo `email`; cantidad negativa; tipo desconocido | Rechazo de schema; no contaminar metricas. |
 | Mismo evento entregado dos veces; evento tardio | Una fila logica; recalcular el periodo de negocio correspondiente. |
 
-Dataset futuro (no generado en esta entrega): ocho productos cubriendo las tres categorias, al menos tres programas, 15 entradas y 15 salidas entre ambas oficinas, dos cruces de minimo y una variacion. Reservar seis de las entradas al mismo producto/proveedor/oficina/moneda para poder demostrar baseline de cinco mas la orden anomala. Los ejemplos JSON no sustituyen este dataset ni afirman que se hayan creado ordenes reales.
+Fixture sintetico de aceptacion: [seed-data.json](seed-data.json) contiene ocho productos en las tres categorias, tres programas, 15 entradas y 15 salidas entre Valencia y Miami. Incluye tres cruces de minimo y una variacion de coste del 20% sobre cinco entradas comparables. No contiene nombres ni datos de personas. Es un fixture de diseno para validar las reglas de telemetria, no datos insertados en la base ni un seed ejecutable por el API actual: los modelos existentes no tienen programa, moneda, coste unitario ni minimo de stock. Los ejemplos de eventos JSON tampoco representan ordenes reales.
 
 ## 10. Catalogo ampliado: razon, contrato y prioridad
 

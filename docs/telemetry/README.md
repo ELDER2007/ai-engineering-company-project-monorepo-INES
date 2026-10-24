@@ -8,6 +8,7 @@ Respuesta al RFI de gestion: diseno de telemetria de inventario, autenticacion, 
 | --- | --- |
 | [telemetry-plan.md](telemetry-plan.md) | RFI, clasificacion de 40 tipos, mapa con 12 puntos, diccionario de 50 claves, allowlist/PII/entrega por evento, frecuencia, riesgos, exclusiones y pruebas de aceptacion. |
 | [event-schemas.json](event-schemas.json) | JSON Schema Draft 2020-12 version 2.0.0, envelope del enunciado con sesion/correlacion, validacion de 40 variantes y ocho ejemplos sinteticos. |
+| [seed-data.json](seed-data.json) | Fixture sintetico de 8 productos, 3 programas, 15 entradas y 15 salidas; cubre tres alertas de minimo y una variacion de coste. No se carga en el API legacy. |
 | [Cuaderno de aprendizaje](../../aprendiendo%20con%20la%20ia.md#telemetria-plan-de-diseno) | Trabajo realizado, decisiones, problemas encontrados, soluciones, validacion y limites. |
 
 Fuente de requisitos: [briefing completo de Nexova](../../nexova-BRIEFING.es.md). Orientacion del monorepo: [README general](../../README.md).
@@ -45,6 +46,8 @@ Resultado de esta revision: diez criterios con evidencia localizada, cinco oblig
 ## Entrega Publicada y Conservacion
 
 PR de entrega: [#24 - docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24), desde `docs/telemetry-design-plan` hacia `main` en el repositorio de ELDER2007. Se ha creado como PR normal, no borrador. El commit inicial publicado es `a9ed403`; el historial posterior de esta rama contiene las notas de publicacion. Abrir la PR no significa que sus cambios ya esten en main ni que el docente los haya aprobado.
+
+Comprobacion de continuidad (24-10-2026): la PR sigue abierta, con estado de merge limpio, sin checks configurados ni decision de revision. La rama local coincide con `origin/docs/telemetry-design-plan`; antes de registrar esta comprobacion, el workspace estaba limpio. El contrato Draft 2020-12 valida sus 40 variantes y ocho ejemplos. El bundle `/home/codespace/nexova-telemetry-b2d9477.bundle` supera `git bundle verify`; aun esta dentro de Codespaces y debe descargarse a almacenamiento propio para ser una copia independiente. Esta anotacion queda local, sin commit ni push.
 
 Politica de conservacion: mantener la rama, no reescribir historial ni forzar push, y hacer merge solo despues de revision/aprobacion. Los README anteriores permanecen conservados en un desplegable historico. Ningun servicio remoto garantiza disponibilidad perpetua; una segunda copia independiente reduce el riesgo de perdida de acceso.
 
@@ -96,6 +99,20 @@ Desde la raiz, comprobar sintaxis con la biblioteca estandar:
 python -m json.tool docs/telemetry/event-schemas.json > /dev/null
 ```
 
+Comprobar el dataset sintetico, sus monedas, saldos, baseline y alertas derivadas (solo biblioteca estandar):
+
+```bash
+python scripts/validate_telemetry_seed.py
+```
+
+Suite de regresion del API actual (desde `services/api`):
+
+```bash
+uv run --group dev pytest
+```
+
+Comprobada el 24-10-2026: 724 pruebas pasaron y 7 quedaron `xfail`; se conserva una advertencia de deprecacion de `starlette.testclient` con `httpx`. Esta suite cubre el API existente, no instrumentacion futura de telemetria.
+
 Si el entorno dispone de `jsonschema`, comprobar el contrato y sus ocho ejemplos:
 
 ```bash
@@ -119,4 +136,4 @@ Historial de comprobaciones: la ampliacion anterior valido ocho ejemplos, 38 var
 
 ## Fuera de alcance
 
-No se han cambiado modelos, endpoints, interfaces, bases de datos ni dependencias. El dataset sugerido (ocho productos, tres programas, 15 entradas y 15 salidas) y las pruebas de integracion estan especificados, no ejecutados. Tampoco se pueden medir matriculas/finalizaciones con estos eventos de inventario. La publicacion documental en una PR no equivale a despliegue: el merge requiere aprobacion y no esta autorizado en esta tarea.
+No se han cambiado modelos, endpoints, interfaces, bases de datos ni dependencias. El fixture sintetico cumple los conteos del briefing y permite comprobar los casos de minimo/coste, pero no se ha cargado en el API: sus modelos actuales no tienen programa, moneda, coste ni umbral. El arranque usa `SQLModel.metadata.create_all()`, sin migrar tablas existentes; hace falta una migracion versionada y un backfill validado antes de activar eventos sobre datos legacy. Las pruebas de integracion del futuro pipeline tampoco se han ejecutado. No se pueden medir matriculas/finalizaciones con estos eventos de inventario. La publicacion documental en una PR no equivale a despliegue: el merge requiere aprobacion y no esta autorizado en esta tarea.
