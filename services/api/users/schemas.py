@@ -62,6 +62,8 @@ class User(BaseModel):
     is_active: bool = True
     role: Role = Role.user
     created_at: datetime = Field(default_factory=_utcnow)
+    # Set whenever the password changes: tokens issued before it stop working (see auth.dependencies).
+    password_changed_at: datetime | None = None
 
 
 # Optional initial profile data. Stripped per field: a blanket ``str_strip_whitespace``

@@ -69,7 +69,7 @@ async def test_logging_in_changes_nothing_in_the_user_store(async_client, users_
 async def test_the_oauth2_scope_field_cannot_widen_a_session(async_client):
     token = (await login(async_client, BOB, scope="admin superuser")).json()["access_token"]
 
-    assert set(jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])) == {"user_id", "exp"}
+    assert set(jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])) == {"user_id", "exp", "iat"}
     assert (await async_client.get("/users", headers=bearer(token))).status_code == 403  # still only a user
 
 

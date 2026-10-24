@@ -183,6 +183,7 @@ def update_user(user_uuid: UUID, payload: UserUpdate, *, check_password: bool = 
         stored["email"] = changes["email"]
     if "password" in changes:
         stored["hashed_password"] = hash_password(changes["password"])
+        stored["password_changed_at"] = datetime.now(timezone.utc).isoformat()
     new_role = changes.get("role", doc["role"])
     new_active = changes.get("is_active", doc["is_active"])
     if _is_active_admin(doc) and not (new_role == Role.admin and new_active) and _active_admin_count() <= 1:

@@ -7,6 +7,7 @@ all it takes (401 = no valid session); ``role`` is stored but no route checks it
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -16,7 +17,7 @@ from fastapi.security import OAuth2PasswordBearer
 from users import service as users_service
 from users.schemas import Role, UserOut
 
-from .security import decode_access_token
+from .security import decode_access_claims
 
 # tokenUrl only feeds the "Authorize" button in /docs (its "username" box takes the email).
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -29,13 +30,26 @@ _UNAUTHORIZED = HTTPException(
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> UserOut:
-    user_id = decode_access_token(token)
-    if user_id is None:
+    decoded = decode_access_claims(token)
+    if decoded is None:
         raise _UNAUTHORIZED
+    user_id, issued_at = decoded
     doc = users_service.get_doc(user_id)
     if doc is None or not doc["is_active"]:  # deleted or deactivated after the token was issued
         raise _UNAUTHORIZED
+    if _issued_before_password_change(doc, issued_at):
+        raise _UNAUTHORIZED
     return UserOut.model_validate(doc)
+
+
+def _issued_before_password_change(doc: dict, issued_at: int | None) -> bool:
+    """True when the password changed after the token was issued. ``iat`` has one-second resolution, so a
+    token issued in the very second of the change is not cut off. A token without ``iat`` (from before
+    this check existed) is cut off as soon as the account has ever changed its password."""
+    changed = doc.get("password_changed_at")
+    if not changed:
+        return False
+    return issued_at is None or issued_at < int(datetime.fromisoformat(changed).timestamp())
 
 
 CurrentUser = Annotated[UserOut, Depends(get_current_user)]

@@ -112,7 +112,7 @@ def test_profile_and_user_are_linked_by_user_id_but_do_not_share_data(client, us
     user = next(d for d in users_db.all() if d["email"] == ALICE)
     profile = next(d for d in profiles_db.all() if d["user_id"] == user["id"])
     assert user["id"] == profile["user_id"] and profile["id"] != user["id"]
-    assert set(user) == {"id", "email", "hashed_password", "is_active", "role", "created_at"}  # nothing profile-like in User
+    assert set(user) == {"id", "email", "hashed_password", "is_active", "role", "created_at", "password_changed_at"}  # nothing profile-like in User
     assert "hashed_password" not in profile and "email" not in profile
     public = {"id", "email", "is_active", "role", "created_at"}  # ... and none in the User API either
     assert client.get(f"/users/{uuid_of(ALICE)}", headers=headers_for(ALICE)).json().keys() == public
