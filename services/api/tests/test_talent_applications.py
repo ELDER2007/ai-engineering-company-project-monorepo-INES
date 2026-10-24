@@ -94,3 +94,12 @@ def test_list_requires_a_session(client):
 def test_list_is_admin_only(client):
     assert client.get("/talent-applications", headers=headers_for(BOB)).status_code == 403
     assert client.get("/talent-applications", headers=headers_for(ALICE)).status_code == 200
+
+
+def test_a_client_that_floods_the_form_is_slowed_down(client):
+    statuses = [client.post("/talent-applications", json=VALID).status_code for _ in range(11)]
+
+    assert statuses == [201] * 10 + [429]
+    blocked = client.post("/talent-applications", json=VALID)
+    assert blocked.status_code == 429 and int(blocked.headers["Retry-After"]) > 0
+    assert len(client.get("/talent-applications", headers=headers_for(ALICE)).json()) == 10  # nothing stored past the limit

@@ -82,6 +82,20 @@ def jwt_payload(segment: str) -> dict:
     return json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """The abuse counters are process-wide state: every test starts (and leaves) them empty."""
+    from auth import router as auth_router
+    from talent import router as talent_router
+
+    limiters = (auth_router.pair_failures, auth_router.client_failures, talent_router.application_attempts)
+    for limiter in limiters:
+        limiter.reset()
+    yield
+    for limiter in limiters:
+        limiter.reset()
+
+
 @pytest.fixture()
 def auth_headers() -> dict[str, str]:
     return headers_for(ALICE)

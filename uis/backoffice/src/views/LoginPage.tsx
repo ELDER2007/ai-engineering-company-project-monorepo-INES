@@ -37,10 +37,13 @@ export default function LoginPage() {
     } catch (err) {
       // The API answers the same 401 for a wrong password, an unknown email and an account that an
       // admin has switched off, so the message covers all three.
+      // 429: too many failed attempts from this client; the API refuses even a right password for a while.
       setError(
         err instanceof ApiError && err.status === 401
           ? "Email o contraseña incorrectos, o la cuenta está desactivada."
-          : "No se pudo iniciar sesión. Inténtalo de nuevo.",
+          : err instanceof ApiError && err.status === 429
+            ? "Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo."
+            : "No se pudo iniciar sesión. Inténtalo de nuevo.",
       );
     } finally {
       setSubmitting(false);
