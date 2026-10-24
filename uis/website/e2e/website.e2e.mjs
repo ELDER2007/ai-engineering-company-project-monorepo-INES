@@ -50,7 +50,14 @@ ok(text.includes("nombre y apellido"), "nombre sin apellido: error");
 ok(text.includes("email válido"), "email inválido: error");
 ok(text.includes("código de país"), "teléfono sin prefijo: error");
 
-// camino feliz
+// camino feliz (el API se simula: primero falla con 500, después acepta y guardamos el cuerpo enviado)
+let calls = 0; let sentBody = null;
+await page.route("**/talent-applications", (route) => {
+  calls++;
+  if (calls === 1) return route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+  sentBody = route.request().postDataJSON();
+  return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "00000000-0000-4000-8000-000000000000", created_at: "2026-01-01T00:00:00Z" }) });
+});
 await page.locator('input[type="text"]').first().fill("Ana García López");
 await page.locator('input[type="email"]').fill("ana@empresa.com");
 await page.locator('input[type="tel"]').fill("+34 612 345 678");
@@ -63,8 +70,12 @@ await page.getByLabel("Inmediata").check();
 await page.locator('input[type="checkbox"]').check();
 await page.locator("textarea").fill("Hola");
 await page.getByRole("button", { name: /Enviar mi perfil/ }).click();
+await page.getByText("No hemos podido enviar tu perfil").waitFor();
+ok(await page.getByText("¡Gracias por tu interés en Nexova!").count() === 0, "API caído: avisa del error y no confirma el envío");
+await page.getByRole("button", { name: /Enviar mi perfil/ }).click();
 await page.getByText("¡Gracias por tu interés en Nexova!").waitFor();
-ok(true, "datos válidos: se muestra el mensaje de agradecimiento");
+ok(true, "datos válidos: se muestra el mensaje de agradecimiento tras reintentar");
+ok(sentBody?.full_name === "Ana García López" && sentBody?.country === "spain" && sentBody?.sector === "technology" && sentBody?.english_level === "advanced" && sentBody?.availability === "immediate" && sentBody?.experience_years === 5 && sentBody?.linkedin_url === null && sentBody?.consent === true, "datos válidos: el cuerpo enviado al API usa los valores estables");
 
 // volver a la home con el logo
 await page.getByRole("link", { name: /nexova/ }).first().click();

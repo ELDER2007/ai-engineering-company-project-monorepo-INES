@@ -11,6 +11,7 @@ Centralized FastAPI backend for Nexova, per [docs/ARCHITECTURE_PROPOSAL.md](../.
 - **`auth/`** — Login (OAuth2 password flow + JWT carrying the user `id`) and the `get_current_user` dependency used to protect every other domain.
 - **`inventory/`** — Equipment and materials inventory (Hito 5, spec: [CONTEXT — Hito 5](../../CONTEXT%20—%20Hito%205:%20Gestión-de-Inventario-Backend)). The second store of the app: assets and their inbound/outbound orders live in **PostgreSQL (Supabase)** through SQLModel, while users and sessions stay in TinyDB (see [Inventory](#inventory)).
 - **`suppliers/`** — Supplier directory ("Directorio de Proveedores", Patricia Solís / Nexova). Replaces the HR spreadsheet with a [TinyDB](https://tinydb.readthedocs.io/)-backed store, seeded on startup with the 15 suppliers from [`suppliers/seed_data.py`](./suppliers/seed_data.py) (spec: [CONTEXT-suppliers.md](./suppliers/CONTEXT-suppliers.md)). Pydantic (`suppliers/schemas.py`) rejects with `422` any missing `country`, a `status` outside `active`/`suspended`, empty `categories`, or a `currency` that doesn't match the country (Spain→EUR, USA→USD). Suspending (not deleting) is the preferred way to retire a supplier.
+- **`talent/`** — Talent applications from the website form (`uis/website`, "Únete a nuestro banco de talento"). Stored in TinyDB (`talent/db.json`, gitignored). `POST /talent-applications` is public (a visitor has no account) and answers only a receipt (`id`, `created_at`): no personal data is echoed back. `GET /talent-applications` lists every candidate and is admin-only. Pydantic (`talent/schemas.py`) applies the same rules as the form and rejects with `422` a name without surname, an invalid email, a phone without country code, years outside 0–50, comments over 500 characters, a non-http(s) LinkedIn URL, unknown fields, and any request without `consent: true`.
 
 ## Incident manager
 
@@ -152,7 +153,7 @@ uv run seed-inventory --reset    # wipe assets and orders, then reload
 
 Routes are served under one prefix per domain: `/auth`, `/users`, `/profiles`, `/suppliers`, `/inventory`. Supplier routes are also mounted at `/api/suppliers` (hidden from `/docs`): that is the path the backoffice uses through the Vite proxy, which only forwards `/api`. Incident routes live at `/api/incidents`, fixed by the project brief.
 
-All endpoints below need a session (see above) except `POST /auth/login`, `POST /users` and `/health`.
+All endpoints below need a session (see above) except `POST /auth/login`, `POST /users`, `POST /talent-applications` and `/health`.
 
 | Method | Path | Description |
 |---|---|---|
@@ -186,6 +187,8 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `POST` | `/inventory/orders/inbound` | Register a delivery (`AssetEntry`: `asset_id`, `quantity` > 0, `supplier`, `office`); adds stock (`201`). `404` unknown asset. |
 | `POST` | `/inventory/orders/outbound` | Register an allocation or consumption (`AssetExit`: `asset_id`, `quantity` > 0, `exit_type`, `assigned_to`, `office`); removes stock (`201`). `400` if it exceeds the stock, `422` if `assigned_to` does not match `exit_type`, `404` unknown asset. |
 | `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order with its asset, newest first. |
+| `POST` | `/talent-applications` | Public. Store a candidate application (`full_name`, `email`, `phone`, `country`, `experience_years`, `sector`, `english_level`, `availability`, optional `linkedin_url` and `comments`, `consent: true`); answers `201` with `id` and `created_at` only. `422` on invalid data. |
+| `GET` | `/talent-applications` | Admin-only. Every application, newest first. `401` without a session, `403` for non-admins. |
 | `GET` | `/health` | Public liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running; use *Authorize* there with your email (in the *username* box) and password to try the protected routes.
@@ -218,3 +221,4 @@ uv run seed --reset      # wipe and reload the 15 initial suppliers
 - The suppliers directory is stored at `suppliers/db.json`, a TinyDB flat file that's regenerated (and reseeded) whenever it's missing — it's gitignored, not source. A second worker process would not see writes made by another one; fine for the current single-process scope, and the reason the project brief already earmarks a move to Postgres once the ORM is ready.
 - Login has no rate limiting or lockout yet, and a token stays valid until it expires or its account is deleted: changing a password does **not** revoke the tokens already issued (they carry no `iat`), and there is no refresh or logout endpoint, so keep `ACCESS_TOKEN_EXPIRE_MINUTES` short. Put the API behind a reverse proxy with rate limits until that is added.
 - `uis/backoffice` does not send a token yet, so its calls to `/api/suppliers` and `/api/incidents` now get `401` until a login screen is added.
+- `POST /talent-applications` is public and has no rate limiting or captcha, so anyone can fill the store with junk: put it behind the reverse proxy's rate limits. It holds candidates' personal data in a plain TinyDB file (single-process, unencrypted), accepts duplicate emails on purpose, and has no retention or deletion endpoint yet.
