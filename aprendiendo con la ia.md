@@ -177,6 +177,16 @@ Se registra la publicacion en README y cuaderno mediante un commit adicional de 
 - Idempotencia: repetir una operacion o entrega sin duplicar su efecto.
 - Baseline: referencia historica definida para comparar un precio nuevo.
 
+### Verificacion del estado del proyecto (24-10-2026)
+
+Se revisaron las tareas pendientes, el estado de la rama y la entrega. La PR #24 sigue abierta hacia `main`, sin checks configurados ni decision de revision. La rama de telemetria aun no esta integrada en `main`.
+
+Validacion ejecutada en este checkout: API, 724 tests aprobados y 7 `xfail`; backoffice, 550 tests aprobados; paquete compartido, 9 tests aprobados; ambos typechecks de frontend y el fixture de telemetria pasan. El backend conserva una advertencia de deprecacion de Starlette/httpx. Los `xfail` estan documentados como decisiones pendientes, no como fallos de la suite.
+
+Pendientes de producto para una fase posterior: implementar captura, migracion y backfill de los campos de inventario, outbox, almacenamiento/consumidor y pruebas de integracion para telemetria; conectar el formulario de talento a un API y persistir candidaturas; y decidir el endurecimiento necesario antes de produccion (entre otros, persistencia multiworker y controles de abuso de login). Las integraciones de IA siguen siendo alcance futuro, no una funcionalidad ya desplegada.
+
+Durante esta revision se corrigio en la guia del API la nota obsoleta sobre el envio de JWT desde el backoffice y se actualizaron en `TESTING.md` los conteos de las suites con los resultados actuales.
+
 ---
 
 ## 1. ¿Qué es este proyecto?
