@@ -187,7 +187,7 @@ Durante esta revision se actualizaron en `TESTING.md` los conteos de las suites 
 
 ### Estado final de la entrega (24-10-2026)
 
-Todo el trabajo se entrega en **una sola PR: [#24 docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24)**. Su rama contiene el diseno de telemetria (la entrega pedida) y, ademas, las candidaturas persistidas y el endurecimiento del API. Las PR #25 y #26 contienen esos dos bloques por separado (la #26 apilada sobre la #25) y quedan como referencia; no hace falta revisarlas aparte. Se comprobo con fusiones de prueba que las tres ramas se integran sin conflictos.
+Todo el trabajo se entrega en **una sola PR: [#24 docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24)**. Su rama contiene el diseno de telemetria (la entrega pedida) y, ademas, las candidaturas persistidas y el endurecimiento del API. Las PR #25 y #26 contenian esos dos bloques por separado (la #26 apilada sobre la #25); se cerraron con un comentario que apunta a la #24, porque su contenido esta integro en ella. Sus ramas se conservan. **Todo el proyecto se revisa y se entrega desde la #24.** Se comprobo con fusiones de prueba que las tres ramas se integran sin conflictos.
 
 | Bloque | Contenido |
 |---|---|
