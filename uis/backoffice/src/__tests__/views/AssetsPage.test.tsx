@@ -4,8 +4,9 @@
  *
  * Layout shared by every frontend test file: HAPPY PATH, EDGE CASES, FAILURE MODES. Arrange / Act / Assert.
  */
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import AssetsPage from "@/views/AssetsPage";
+import { track } from "@/lib/telemetry";
 
 const mockList = jest.fn();
 jest.mock("next/link", () => ({ __esModule: true, default: ({ href, children, ...rest }: { href: string; children: unknown }) => <a href={href} {...rest}>{children as never}</a> }));
@@ -21,6 +22,9 @@ jest.mock("@/lib/api", () => {
   }
   return { ApiError };
 });
+jest.mock("@/lib/telemetry", () => ({ track: jest.fn() }));
+const trackMock = jest.mocked(track);
+const searches = () => trackMock.mock.calls.filter(([type]) => type === "search_performed").map(([, props]) => props);
 jest.mock("@/lib/inventory", () => ({ listAssets: (...args: unknown[]) => mockList(...args) }));
 
 const asset = (id: number, name: string, sku: string, stock: number, office = "Valencia") => ({
@@ -122,6 +126,46 @@ describe("AssetsPage", () => {
       expect(screen.queryByText("Todavía no hay activos registrados.")).not.toBeInTheDocument();
       finish(ASSETS);
       expect(await screen.findAllByTestId("asset-row")).toHaveLength(3);
+    });
+  });
+
+  describe("telemetry", () => {
+    afterEach(() => jest.useRealTimers());
+
+    it("reports ONE search 500 ms after the user stops changing the filters, with counts and never the text", async () => {
+      jest.useFakeTimers();
+      render(<AssetsPage />);
+      await act(async () => { await jest.advanceTimersByTimeAsync(0); });
+      const box = screen.getByLabelText("Buscar por nombre o SKU");
+
+      fireEvent.change(box, { target: { value: "h" } });
+      fireEvent.change(box, { target: { value: "hu" } });
+      fireEvent.change(box, { target: { value: "hub" } });
+      await act(async () => { await jest.advanceTimersByTimeAsync(499); });
+      expect(searches()).toEqual([]);
+      await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+
+      expect(searches()).toEqual([{ section: "inventory", result_count: 1, filter_count: 1 }]);
+      expect(JSON.stringify(trackMock.mock.calls)).not.toMatch(/hub/i);
+    });
+
+    it("counts every active filter and the results left", async () => {
+      jest.useFakeTimers();
+      render(<AssetsPage />);
+      await act(async () => { await jest.advanceTimersByTimeAsync(0); });
+
+      fireEvent.change(screen.getByLabelText("Filtrar por oficina"), { target: { value: "Miami" } });
+      fireEvent.change(screen.getByLabelText("Buscar por nombre o SKU"), { target: { value: "NXV" } });
+      await act(async () => { await jest.advanceTimersByTimeAsync(500); });
+
+      expect(searches()).toEqual([{ section: "inventory", result_count: 2, filter_count: 2 }]);
+    });
+
+    it("the unfiltered view on load is not a search, and clearing the filters back to it is not one either", async () => {
+      jest.useFakeTimers();
+      render(<AssetsPage />);
+      await act(async () => { await jest.advanceTimersByTimeAsync(2_000); });
+      expect(searches()).toEqual([]);
     });
   });
 });

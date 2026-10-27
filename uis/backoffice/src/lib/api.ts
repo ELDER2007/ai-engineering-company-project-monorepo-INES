@@ -11,6 +11,10 @@ import type { Supplier, SupplierCreate, SupplierStatus } from "../types/supplier
 import type { DirectoryEntry } from "../types/inventory";
 import type { Me, Profile, ProfileUpdate, SignUpOut, SignUpPayload } from "../types/auth";
 import { clearToken, getToken, setToken } from "./token";
+import { componentForPath, routeIdForPath } from "./telemetry/paths";
+import { opaqueId, uuidV4 } from "./telemetry/ids";
+import { track } from "./telemetry";
+import { analysisFailureReason, loginFailureReason, registrationFailureReason } from "./authTelemetry";
 
 // Vacío = mismo origen: los rewrites de next.config.mjs reenvían las llamadas a la API local.
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
@@ -21,6 +25,10 @@ export class ApiError extends Error {
     public status: number,
     /** Per-field messages of a 422 (FastAPI validation), keyed by the body field name. */
     public fieldErrors: Record<string, string> = {},
+    /** Stable machine code of a structured `detail` (`{ code, field, message }`), e.g. `direct_stock_write_forbidden`. */
+    public code?: string,
+    /** The body field a structured `detail` points at. */
+    public field?: string,
   ) {
     super(message);
   }
@@ -30,6 +38,16 @@ async function toApiError(response: Response): Promise<ApiError> {
   try {
     const body = await response.json();
     if (typeof body.detail === "string") return new ApiError(body.detail, response.status);
+    if (body.detail && typeof body.detail === "object" && !Array.isArray(body.detail) && typeof body.detail.code === "string") {
+      const { code, field, message } = body.detail as { code: string; field?: unknown; message?: unknown };
+      return new ApiError(
+        typeof message === "string" ? message : response.statusText,
+        response.status,
+        {},
+        code,
+        typeof field === "string" ? field : undefined,
+      );
+    }
     if (Array.isArray(body.detail)) {
       const fieldErrors: Record<string, string> = {};
       const message = body.detail
@@ -61,10 +79,19 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
     response = await fetch(url, { ...init, headers });
   } catch {
     // fetch only rejects when the request never got an answer (offline, API down, DNS...).
+    const component = componentForPath(path);
+    if (component) track("application_error_occurred", { error_code: "network_failed", component });
     throw new ApiError("No response from the server", 0);
   }
+  // The API refused a protected call (the login's own 401 does not come through here): where, and which refusal.
+  if (response.status === 401 || response.status === 403) {
+    track("authorization_denied", { route_id: routeIdForPath(path), status_code: response.status });
+  }
   // Only if it is still the stored token: a late 401 for an old one must not end a newer session.
-  if (response.status === 401 && token && getToken() === token) clearToken();
+  if (response.status === 401 && token && getToken() === token) {
+    track("session_expired", { reason: "unauthorized_response" });
+    clearToken();
+  }
   return response;
 }
 
@@ -84,33 +111,61 @@ export async function jsonRequest<T>(path: string, init: RequestInit = {}): Prom
 }
 
 export async function login(email: string, password: string): Promise<void> {
-  // OAuth2 password flow: form-encoded, and the field is called "username" but carries the email.
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: "POST",
-    body: new URLSearchParams({ username: email, password }),
-  });
+  // The telemetry of the login is here, in the one function every login goes through (the form, and the sign-up's automatic one),
+  // not on each page. The reason of a failure comes from the HTTP status: what was typed (email, password) never reaches an event.
+  track("login_attempted", { method: "password", duration_ms: 0 });
+  const startedAt = performance.now();
+  const elapsed = () => Math.round(performance.now() - startedAt);
+  let response: Response;
+  try {
+    // OAuth2 password flow: form-encoded, and the field is called "username" but carries the email.
+    response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      body: new URLSearchParams({ username: email, password }),
+    });
+  } catch (err) {
+    // The request never got an answer: not a refusal by the API, so not a `login_failed` (it would count against its rate).
+    track("application_error_occurred", { error_code: "network_failed", component: "auth" });
+    throw err;
+  }
   if (!response.ok) {
-    throw await toApiError(response);
+    const error = await toApiError(response);
+    track("login_failed", { method: "password", duration_ms: elapsed(), reason: loginFailureReason(response.status) });
+    throw error;
   }
   const { access_token } = await response.json();
   if (typeof access_token !== "string" || !access_token) {
     // Storing `undefined` would save the text "undefined" and send it as the bearer token on every call.
+    track("login_failed", { method: "password", duration_ms: elapsed(), reason: "internal_error" });
     throw new ApiError("Unexpected response from the server", 502);
   }
+  // Before the token is stored: storing it starts a new analytic session, and the attempt and its result belong to the old one.
+  track("login_succeeded", { method: "password", duration_ms: elapsed() });
   setToken(access_token);
 }
 
 /** Public sign-up (POST /users). Empty optional profile fields are left out rather than sent blank. */
 export async function register(payload: SignUpPayload): Promise<SignUpOut> {
   const body = Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined && value !== ""));
-  const response = await fetch(`${API_BASE_URL}/users`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw await toApiError(response);
+  const startedAt = performance.now();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    track("application_error_occurred", { error_code: "network_failed", component: "auth" });
+    throw err;
   }
+  if (!response.ok) {
+    const error = await toApiError(response);
+    track("registration_failed", { reason: registrationFailureReason(response.status) });
+    throw error;
+  }
+  // The account exists whatever happens to the automatic login that follows (plan, section 11).
+  track("registration_completed", { method: "password", duration_ms: Math.round(performance.now() - startedAt) });
   return response.json();
 }
 
@@ -132,23 +187,42 @@ export async function updateMyProfile(update: ProfileUpdate): Promise<Profile> {
   if (!response.ok) {
     throw await toApiError(response);
   }
+  const changed = Object.keys(update).length; // `update` holds only the fields that changed (profileChanges)
+  if (changed > 0) track("profile_updated", { changed_field_count: changed });
   return response.json();
 }
 
 export async function analyzeIncidentsFile(file: File): Promise<AnalyzeResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  // One id per analysis attempt, made here: the API has none to give. Never the file's name or contents.
+  const analysisId = uuidV4();
+  const startedAt = performance.now();
 
-  const response = await apiFetch("/api/incidents/analyze", {
-    method: "POST",
-    body: formData,
-  });
+  try {
+    const response = await apiFetch("/api/incidents/analyze", {
+      method: "POST",
+      body: formData,
+    });
 
-  if (!response.ok) {
-    throw await toApiError(response);
+    if (!response.ok) {
+      throw await toApiError(response);
+    }
+
+    const result: AnalyzeResponse = await response.json();
+    track("incident_analysis_completed", {
+      analysis_id: analysisId,
+      row_count: result.total_records,
+      duration_ms: Math.round(performance.now() - startedAt),
+    });
+    return result;
+  } catch (err) {
+    // No answer at all (status 0) is the network's failure, reported by apiFetch; the rest is the analysis's.
+    if (err instanceof ApiError && err.status !== 0) {
+      track("incident_analysis_failed", { analysis_id: analysisId, reason: analysisFailureReason(err.status) });
+    }
+    throw err;
   }
-
-  return response.json();
 }
 
 export async function downloadResultsCsv(): Promise<void> {
@@ -173,14 +247,27 @@ const suppliersRequest = <T>(path: string, init?: RequestInit) => jsonRequest<T>
 
 export const listSuppliers = () => suppliersRequest<Supplier[]>("");
 
-export const createSupplier = (payload: SupplierCreate) =>
-  suppliersRequest<Supplier>("", { method: "POST", body: JSON.stringify(payload) });
+/** Reports a confirmed supplier change by its id only (never the name, the rate or the contact). */
+async function reportSupplier(event: "supplier_created" | "supplier_updated", supplier: Supplier): Promise<Supplier> {
+  const supplier_id = opaqueId(supplier.id);
+  if (supplier_id) track(event, { supplier_id });
+  return supplier;
+}
 
-export const updateSupplierRate = (id: number, monthly_rate: number) =>
-  suppliersRequest<Supplier>(`/${id}/rate`, { method: "PATCH", body: JSON.stringify({ monthly_rate }) });
+export const createSupplier = async (payload: SupplierCreate) =>
+  reportSupplier("supplier_created", await suppliersRequest<Supplier>("", { method: "POST", body: JSON.stringify(payload) }));
 
-export const setSupplierStatus = (id: number, status: SupplierStatus) =>
-  suppliersRequest<Supplier>(`/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+export const updateSupplierRate = async (id: number, monthly_rate: number) =>
+  reportSupplier(
+    "supplier_updated",
+    await suppliersRequest<Supplier>(`/${id}/rate`, { method: "PATCH", body: JSON.stringify({ monthly_rate }) }),
+  );
+
+export const setSupplierStatus = async (id: number, status: SupplierStatus) =>
+  reportSupplier(
+    "supplier_updated",
+    await suppliersRequest<Supplier>(`/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  );
 
 // ---- Incident manager -----------------------------------------------------------------------
 
@@ -232,14 +319,29 @@ export type IncidentFields = {
   customer_email: string | null;
 };
 
-export const createIncident = (payload: IncidentFields) =>
-  incidentsRequest<Incident>("", { method: "POST", body: JSON.stringify(payload) });
+export const createIncident = async (payload: IncidentFields) => {
+  const incident = await incidentsRequest<Incident>("", { method: "POST", body: JSON.stringify(payload) });
+  const incident_id = opaqueId(incident.id); // the id only: never the title, the description or the customer
+  if (incident_id) track("incident_created", { incident_id });
+  return incident;
+};
 
 export const updateIncident = (incidentId: string, changes: Partial<IncidentFields>) =>
   incidentsRequest<Incident>(`/${encodeURIComponent(incidentId)}`, { method: "PATCH", body: JSON.stringify(changes) });
 
-export const changeIncidentStatus = (incidentId: string, change: StatusChangeInput) =>
-  incidentsRequest<Incident>(`/${encodeURIComponent(incidentId)}/status`, { method: "PATCH", body: JSON.stringify(change) });
+export const changeIncidentStatus = async (incidentId: string, change: StatusChangeInput) => {
+  const incident = await incidentsRequest<Incident>(`/${encodeURIComponent(incidentId)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify(change),
+  });
+  // The transition as the API recorded it (the last `status_changed` entry of the history), not as the form asked for it.
+  const move = [...(incident.history ?? [])].reverse().find((entry) => entry.kind === "status_changed");
+  const incident_id = opaqueId(incident.id);
+  if (incident_id && move?.from_status && move.to_status && move.from_status !== move.to_status) {
+    track("incident_status_changed", { incident_id, from_status: move.from_status, to_status: move.to_status });
+  }
+  return incident;
+};
 
 /** Names of the active users, to show who registered each inventory order (orders only carry the user's UUID). */
 export async function listUserDirectory(): Promise<DirectoryEntry[]> {
