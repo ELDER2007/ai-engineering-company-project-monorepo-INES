@@ -1,6 +1,6 @@
 // End-to-end check of the frontend event capture (needs Chromium: npx playwright install chromium).
 // Prerequisites: API on :8000 with an active user and the inventory seed (`uv run seed-inventory`), the backoffice on
-// :5174 (npm run dev) with NEXT_PUBLIC_TELEMETRY_ENDPOINT=http://localhost:8000/telemetry/events in .env.local.
+// :5174 (npm run dev) with NEXT_PUBLIC_TELEMETRY_ENDPOINT=/telemetry/events in .env.local (Next.js forwards it to the API).
 // Run from uis/backoffice:  E2E_EMAIL=you@example.com E2E_PASSWORD=... npm run e2e:telemetry
 // WRITES to the inventory: it registers three setup entries, one entry and one exit for NXV-IT-001 (run it on a
 // development database, never on Supabase). What it proves, watching the real requests the browser makes:
@@ -12,7 +12,7 @@
 //   - nothing personal (email, supplier name, token) is in any event.
 import { chromium } from "playwright";
 const APP = process.env.E2E_APP_URL ?? "http://localhost:5174";
-const ENDPOINT = process.env.E2E_TELEMETRY_ENDPOINT ?? "http://localhost:8000/telemetry/events";
+const ENDPOINT_PATH = process.env.E2E_TELEMETRY_PATH ?? "/telemetry/events"; // the browser posts to the app's own origin; any host matches
 const API = process.env.E2E_API_URL ?? "http://localhost:8000";
 const EMAIL = process.env.E2E_EMAIL;
 const PASSWORD = process.env.E2E_PASSWORD;
@@ -33,7 +33,7 @@ const ok = (c, msg) => { if (!c) fails++; console.log(`${c ? "PASS" : "FAIL"}  $
 const batches = [];
 page.on("response", async (response) => {
   const request = response.request();
-  if (request.url() !== ENDPOINT || request.method() !== "POST") return;
+  if (new globalThis.URL(request.url()).pathname !== ENDPOINT_PATH || request.method() !== "POST") return;
   batches.push({ at: Date.now(), status: response.status(), events: JSON.parse(request.postData()).events, ack: await response.json().catch(() => null) });
 });
 const events = () => batches.flatMap((b) => b.events);

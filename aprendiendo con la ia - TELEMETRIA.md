@@ -250,8 +250,8 @@ cd uis/backoffice && npx tsc --noEmit && npm run build    # tipos y compilación
 **Ver los lotes con tus propios ojos (DevTools)** — esto es lo que te pide el PR:
 1. En `services/api`, arranca la API con un usuario inicial:
    `AUTH_INITIAL_EMAIL=tu@correo.com AUTH_INITIAL_PASSWORD=una-clave-larga uv run uvicorn main:app --port 8000`
-2. En `uis/backoffice`, comprueba que `.env.local` tiene `NEXT_PUBLIC_TELEMETRY_ENDPOINT=http://localhost:8000/telemetry/events` y ejecuta `npm run dev`.
-3. Abre `http://localhost:5174`, pulsa **F12 → pestaña Network** y escribe `telemetry` en el filtro.
+2. En `uis/backoffice`, comprueba que `.env.local` tiene `NEXT_PUBLIC_TELEMETRY_ENDPOINT=/telemetry/events` (ruta relativa: Next.js la reenvía a la API, así no hay problemas de CORS ni de «localhost» en un Codespace) y ejecuta `npm run dev`.
+3. Abre la app (en un Codespace: pestaña **PORTS** → puerto 5174 → icono del globo; en local: `http://localhost:5174`), pulsa **F12 → pestaña Network** y escribe `telemetry` en el filtro.
 4. Entra, registra una entrada de activos y espera hasta **10 segundos**.
 5. Pulsa la petición `events` (método POST): en **Payload** verás `{"events": [...]}` y en **Response** `{"received": N, "accepted": N, "rejected": []}`; el estado es **200**. **Haz la captura ahí.**
 

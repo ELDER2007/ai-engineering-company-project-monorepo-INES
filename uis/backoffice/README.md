@@ -145,8 +145,8 @@ so the working tree stays clean.
 ## Telemetry (event capture)
 
 Every event of the approved catalogue that this app can observe is captured at the moment it happens, queued in memory and sent in
-batches to the endpoint in `NEXT_PUBLIC_TELEMETRY_ENDPOINT` (build-time; in `.env.local`, `http://localhost:8000/telemetry/events`
-today, the real endpoint later: the app does not change). Contract: [docs/telemetry/](../../docs/telemetry/README.md).
+batches to the endpoint in `NEXT_PUBLIC_TELEMETRY_ENDPOINT` (build-time; in `.env.local`, `/telemetry/events` today, which Next.js
+forwards to the API: no CORS, and it works in a Codespace opened in the browser; the real endpoint later: the app does not change). Contract: [docs/telemetry/](../../docs/telemetry/README.md).
 
 - **One public function: `track(eventType, properties)`** from `src/lib/telemetry` (`index.ts` exports nothing else). `properties` is
   checked at compile time against the contract (`events.ts`), so an undeclared key does not compile. No component calls `fetch`

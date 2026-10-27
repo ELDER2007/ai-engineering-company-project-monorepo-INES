@@ -36,6 +36,9 @@ const nextConfig = {
       { source: "/users", destination: `${API}/users`, missing: notAPage },
       { source: "/users/:path*", destination: `${API}/users/:path*`, missing: notAPage },
       { source: "/profiles/:path*", destination: `${API}/profiles/:path*`, missing: notAPage },
+      // Telemetry batches (NEXT_PUBLIC_TELEMETRY_ENDPOINT=/telemetry/events): same origin as the app, so there is no CORS to configure and it
+      // also works in a Codespace opened in the browser, where "localhost:8000" would be the visitor's own machine. No page lives here.
+      { source: "/telemetry/:path*", destination: `${API}/telemetry/:path*` },
     ];
   },
 };
