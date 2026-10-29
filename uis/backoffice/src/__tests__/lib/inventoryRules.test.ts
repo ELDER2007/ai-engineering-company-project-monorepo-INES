@@ -17,7 +17,11 @@ import {
   isBadRequest,
   orderDetail,
   outboundPayload,
+  classifyInventoryFailure,
+  inboundPayload,
+  officeCurrency,
   parseQuantity,
+  parseUnitCost,
   stockLevel,
   stockWarning,
   unitsLabel,
@@ -32,6 +36,9 @@ const asset = (over: Partial<Asset> = {}): Asset => ({
   sku: "NXV-PER-001",
   category: "peripherals",
   office: "Valencia",
+  programme_id: null,
+  product_category: null,
+  minimum_stock: 0,
   current_stock: 10,
   ...over,
 });
@@ -39,14 +46,21 @@ const asset = (over: Partial<Asset> = {}): Asset => ({
 const order = (over: Partial<InventoryOrder> = {}): InventoryOrder => ({
   type: "inbound",
   id: 1,
-  asset: { id: 1, name: "Ratón ergonómico", sku: "NXV-PER-001", category: "peripherals", office: "Valencia" },
+  asset: {
+    id: 1, name: "Ratón ergonómico", sku: "NXV-PER-001", category: "peripherals", office: "Valencia",
+    programme_id: null, product_category: null, minimum_stock: 0,
+  },
   quantity: 3,
   office: "Valencia",
   created_at: "2026-10-13T08:00:00Z",
   user_uuid: "6f1c2b7e-0000-4000-8000-000000000000",
   supplier: "Office Depot Miami",
+  supplier_id: null,
+  unit_cost_minor: null,
+  currency: null,
   exit_type: null,
   assigned_to: null,
+  effects: null,
   ...over,
 });
 
@@ -121,15 +135,15 @@ describe("parseQuantity", () => {
 
 describe("validateInbound", () => {
   it("passes a complete entry", () => {
-    expect(validateInbound({ assetId: "1", quantity: "5", supplier: "Office Depot Miami" })).toEqual({});
+    expect(validateInbound({ assetId: "1", quantity: "5", unitCost: "12,50", supplier: "Office Depot Miami" })).toEqual({});
   });
   it("asks for every missing field, in Spanish", () => {
-    const errors = validateInbound({ assetId: "", quantity: "", supplier: "   " });
-    expect(Object.keys(errors).sort()).toEqual(["assetId", "quantity", "supplier"]);
+    const errors = validateInbound({ assetId: "", quantity: "", unitCost: "", supplier: "   " });
+    expect(Object.keys(errors).sort()).toEqual(["assetId", "quantity", "supplier", "unitCost"]);
     expect(errors.supplier).toBe("Indica el proveedor.");
   });
   it("rejects zero units", () => {
-    expect(validateInbound({ assetId: "1", quantity: "0", supplier: "X" }).quantity).toMatch(/mayor que 0/);
+    expect(validateInbound({ assetId: "1", quantity: "0", unitCost: "1", supplier: "X" }).quantity).toMatch(/mayor que 0/);
   });
 });
 
@@ -318,5 +332,68 @@ describe("order history helpers", () => {
     );
     expect(orderDetail(order({ type: "outbound", supplier: null, exit_type: "consumption" }))).toBe("Consumo");
     expect(orderDetail(order({ type: "outbound", supplier: null }))).toBe("Salida");
+  });
+});
+
+describe("parseUnitCost", () => {
+  describe("happy path", () => {
+    it.each([
+      ["12,50", 1250],
+      ["12.50", 1250],
+      ["12", 1200],
+      ["12,5", 1250],
+      ["0", 0],
+      ["0,29", 29],
+      ["  7,05 ", 705],
+      ["1234567", 123456700],
+    ])("%p is %i minor units", (raw, minor) => {
+      expect(parseUnitCost(raw)).toBe(minor);
+    });
+    it("is exact: 0,29 and 1,15 never pass through a float", () => {
+      expect(parseUnitCost("0,29")).toBe(29);
+      expect(parseUnitCost("1,15")).toBe(115);
+      expect(parseUnitCost("4,35")).toBe(435);
+    });
+  });
+  describe("failure modes", () => {
+    it.each(["", " ", "abc", "-1", "1,234", "1.2.3", "12 EUR", "1e3", ",5", "12,", "9999999999"])("rejects %p", (raw) => {
+      expect(parseUnitCost(raw)).toBeNull();
+    });
+  });
+});
+
+describe("inboundPayload and officeCurrency", () => {
+  it("sends the cost in minor units, the trimmed supplier and the asset's office", () => {
+    expect(inboundPayload({ assetId: "4", quantity: " 10 ", unitCost: "12,50", supplier: "  Imprenta  " }, "Miami")).toEqual({
+      asset_id: 4, quantity: 10, supplier: "Imprenta", unit_cost_minor: 1250, office: "Miami",
+    });
+  });
+  it("names the currency each office keeps its books in, with no conversion", () => {
+    expect(officeCurrency("Valencia")).toBe("EUR");
+    expect(officeCurrency("Miami")).toBe("USD");
+  });
+});
+
+describe("classifyInventoryFailure", () => {
+  it("recognises a stock write by its code, whatever the status", () => {
+    expect(classifyInventoryFailure(new ApiError("m", 422, {}, "direct_stock_write_forbidden", "stock"))).toEqual({ kind: "direct_stock_write", field: "stock" });
+    expect(classifyInventoryFailure(new ApiError("m", 422, {}, "direct_stock_write_forbidden"))).toEqual({ kind: "direct_stock_write", field: "current_stock" });
+  });
+  it("recognises the service's business rules by their message", () => {
+    expect(classifyInventoryFailure(new ApiError("Insufficient stock for asset 'X'. Available: 2, requested: 5.", 400))).toEqual({ kind: "insufficient_stock" });
+    expect(classifyInventoryFailure(new ApiError("Asset 'X' belongs to the Miami office: an order for it cannot be registered in Valencia.", 422))).toEqual({ kind: "office_mismatch" });
+  });
+  it("names the field of a validation failure, 'multiple' for several, 'none' for none it knows", () => {
+    expect(classifyInventoryFailure(new ApiError("m", 422, { asset_id: "x" }))).toEqual({ kind: "validation", field: "product_id" });
+    expect(classifyInventoryFailure(new ApiError("m", 422, { supplier: "x" }))).toEqual({ kind: "validation", field: "supplier_id" });
+    expect(classifyInventoryFailure(new ApiError("m", 422, { quantity: "x", office: "y" }))).toEqual({ kind: "validation", field: "multiple" });
+    expect(classifyInventoryFailure(new ApiError("assigned_to is required", 422))).toEqual({ kind: "validation", field: "none" });
+    expect(classifyInventoryFailure(new ApiError("m", 422, { exit_type: "x" }))).toEqual({ kind: "validation", field: "none" });
+  });
+  it("is null for what is not an inventory refusal", () => {
+    expect(classifyInventoryFailure(new ApiError("x", 500))).toBeNull();
+    expect(classifyInventoryFailure(new ApiError("Insufficient stock for asset 'X'. Available: 2, requested: 5.", 422))).toEqual({ kind: "validation", field: "none" });
+    expect(classifyInventoryFailure(new Error("x"))).toBeNull();
+    expect(classifyInventoryFailure(undefined)).toBeNull();
   });
 });

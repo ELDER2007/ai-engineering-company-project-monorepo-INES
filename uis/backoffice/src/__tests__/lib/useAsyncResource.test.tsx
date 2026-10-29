@@ -4,7 +4,11 @@
 // Layout shared by every frontend test file: one `describe` per function, and inside each HAPPY PATH, EDGE CASES,
 // FAILURE MODES. Arrange / Act / Assert.
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { track } from "@/lib/telemetry";
 import { useAsyncResource } from "@/lib/useAsyncResource";
+
+jest.mock("@/lib/telemetry", () => ({ track: jest.fn() }));
+const trackMock = jest.mocked(track);
 
 const describeError = (err: unknown) => `fallo: ${err instanceof Error ? err.message : "desconocido"}`;
 
@@ -115,5 +119,45 @@ describe("useAsyncResource", () => {
       expect(result.current.loading).toBe(false);
       expect(result.current.data).toEqual(["a"]);
     });
+  });
+});
+
+describe("useAsyncResource: section_load_completed", () => {
+  it("reports the first load once, as a success, with the time it took on the monotonic clock", async () => {
+    let now = 100;
+    jest.spyOn(performance, "now").mockImplementation(() => now);
+    const load = jest.fn().mockImplementation(async () => {
+      now += 750;
+      return ["a"];
+    });
+    const { result } = renderHook(() => useAsyncResource<string[]>(load, [], describeError, "suppliers"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(trackMock).toHaveBeenCalledTimes(1);
+    expect(trackMock).toHaveBeenCalledWith("section_load_completed", { section: "suppliers", duration_ms: 750, outcome: "success" });
+    jest.restoreAllMocks();
+  });
+
+  it("reports an error outcome when the first load fails", async () => {
+    const load = jest.fn().mockRejectedValue(new Error("down"));
+    const { result } = renderHook(() => useAsyncResource<string[]>(load, [], describeError, "inventory"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(trackMock).toHaveBeenCalledWith("section_load_completed", expect.objectContaining({ section: "inventory", outcome: "error" }));
+  });
+
+  it("does not report a reload or a retry as a new section load", async () => {
+    const load = jest.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(["a"]);
+    const { result } = renderHook(() => useAsyncResource<string[]>(load, [], describeError, "inventory"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(() => result.current.retry());
+    await act(() => result.current.reload());
+    expect(trackMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports nothing when the view names no section", async () => {
+    const load = jest.fn().mockResolvedValue([]);
+    const { result } = renderHook(() => useAsyncResource<string[]>(load, [], describeError));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(trackMock).not.toHaveBeenCalled();
   });
 });
