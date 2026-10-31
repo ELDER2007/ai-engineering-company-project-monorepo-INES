@@ -191,3 +191,24 @@ def suppliers_db(tmp_path, monkeypatch) -> TinyDB:
     yield database
     database.close()
 
+
+
+@pytest.fixture()
+def telemetry_db(tmp_path):
+    """The telemetry receiver on a throw-away SQLite database, never the real ``inventory/db.sqlite``. Yields the engine."""
+    from sqlmodel import Session, SQLModel
+
+    from inventory.database import build_engine, get_db
+    from main import app
+
+    engine = build_engine(f"sqlite:///{tmp_path / 'telemetry.sqlite'}")
+    SQLModel.metadata.create_all(engine)
+
+    def _session():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _session
+    yield engine
+    app.dependency_overrides.pop(get_db, None)
+    engine.dispose()

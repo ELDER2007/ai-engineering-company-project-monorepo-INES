@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { createOutboundOrder } from "../lib/inventory";
+import { uuidV4 as newRequestId } from "../lib/telemetry/ids";
+import { useFlowTelemetry } from "../lib/telemetry/useFlow";
 import { ErrorBanner, Field, inputClass } from "../components/ui/Field";
 import AssetSelect from "../components/inventory/AssetSelect";
 import SuccessNotice from "../components/inventory/SuccessNotice";
@@ -25,6 +27,9 @@ import { EXIT_TYPES, EXIT_TYPE_LABELS, type ExitType } from "../types/inventory"
 
 const EMPTY: OutboundForm = { assetId: "", quantity: "", exitType: "allocation", assignedTo: "" };
 
+// The form's field names, in the contract's vocabulary, for `form_validation_failed` (never the typed values).
+const TELEMETRY_FIELD = { assetId: "product_id", quantity: "quantity", exitType: "other", assignedTo: "assigned_to" } as const;
+
 /**
  * `/inventory/orders/outbound`: registers a salida de activos (AssetExit), an allocation to an employee or a
  * consumption — POST /inventory/orders/outbound. `current_stock` of the selected asset is shown (and follows the
@@ -32,7 +37,7 @@ const EMPTY: OutboundForm = { assetId: "", quantity: "", exitType: "allocation",
  * enough stock) is shown inline next to the quantity field. `initialAssetId` comes from the "Salida" link of a row.
  */
 export default function OutboundOrderPage({ initialAssetId = "" }: { initialAssetId?: string }) {
-  const { assets, loading, error: loadError, reload } = useAssets();
+  const { assets, loading, error: loadError, reload } = useAssets("outbound");
   const [form, setForm] = useState<OutboundForm>({ ...EMPTY, assetId: initialAssetId });
   const [errors, setErrors] = useState<FormErrors<keyof OutboundForm>>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -40,6 +45,7 @@ export default function OutboundOrderPage({ initialAssetId = "" }: { initialAsse
   const [saving, setSaving] = useState(false);
   const { asset, stock, refreshing, refresh } = useAssetStock(assets, form.assetId);
   const warning = stockWarning(form.quantity, stock);
+  const flow = useFlowTelemetry("outbound");
 
   useClearUnknownAsset(assets, loading, form.assetId, () => setForm((prev) => ({ ...prev, assetId: "" })));
 
@@ -57,12 +63,21 @@ export default function OutboundOrderPage({ initialAssetId = "" }: { initialAsse
     const found = validateOutbound(form);
     if (!found.assetId && !asset) found.assetId = "Selecciona el activo.";
     setErrors(found);
-    if (Object.keys(found).length > 0 || !asset) return;
+    if (Object.keys(found).length > 0 || !asset) {
+      const failed = Object.keys(found) as (keyof OutboundForm)[];
+      if (failed.length > 0) flow.validationFailed(failed.map((name) => TELEMETRY_FIELD[name]));
+      return;
+    }
 
+    flow.step("validated");
+    // One id for the whole submission: the HTTP request (X-Request-ID), its flow step and every event it causes.
+    const requestId = newRequestId();
+    flow.step("submitted", requestId);
     setSaving(true);
     try {
       // Sent even above the stock shown: the figure may be stale, and the API applies the real rule.
-      const order = await createOutboundOrder(outboundPayload(form, asset.office));
+      const order = await createOutboundOrder(outboundPayload(form, asset.office), { asset, requestId });
+      flow.complete(requestId);
       const updated = await refresh();
       void reload();
       setSuccess(
@@ -94,7 +109,12 @@ export default function OutboundOrderPage({ initialAssetId = "" }: { initialAsse
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <form
+        onSubmit={handleSubmit}
+        onFocus={flow.begin}
+        noValidate
+        className="mt-6 space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-6"
+      >
         <AssetSelect
           id="outbound-asset"
           assets={assets}
@@ -196,7 +216,7 @@ export default function OutboundOrderPage({ initialAssetId = "" }: { initialAsse
             {saving && <Loader2 className="animate-spin" size={14} />}
             Registrar salida
           </button>
-          <Link href="/inventory/products" className="text-sm text-slate-300 hover:text-white">
+          <Link href="/inventory/products" onClick={flow.cancel} className="text-sm text-slate-300 hover:text-white">
             Volver al inventario
           </Link>
         </div>

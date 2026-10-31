@@ -28,23 +28,36 @@ from .schemas import AssetCreate, AssetEntryCreate, AssetExitCreate
 # Fallback author when there is no admin yet. Nothing references it: user_uuid is a plain column.
 SYSTEM_USER_UUID = str(UUID(int=0))
 
+# `programme_id` / `product_category` / `minimum_stock` are PROPOSALS for Elena to validate (telemetry plan,
+# section 3): they classify what has an obvious programme and deliberately leave the paper unclassified, so it
+# emits no inventory events until someone decides its programme.
+_ONBOARDING = {"programme_id": "onboarding-soporte", "product_category": "onboarding_equipment"}
 ASSETS = [
-    {"name": 'Portátil 14" Business', "sku": "NXV-IT-001", "category": "hardware", "office": "Valencia"},
-    {"name": 'Portátil 14" Business', "sku": "NXV-IT-002", "category": "hardware", "office": "Miami"},
-    {"name": "Ratón ergonómico", "sku": "NXV-PER-001", "category": "peripherals", "office": "Valencia"},
-    {"name": "Hub USB-C", "sku": "NXV-PER-002", "category": "peripherals", "office": "Miami"},
+    {"name": 'Portátil 14" Business', "sku": "NXV-IT-001", "category": "hardware", "office": "Valencia", **_ONBOARDING, "minimum_stock": 2},
+    {"name": 'Portátil 14" Business', "sku": "NXV-IT-002", "category": "hardware", "office": "Miami", **_ONBOARDING, "minimum_stock": 2},
+    {"name": "Ratón ergonómico", "sku": "NXV-PER-001", "category": "peripherals", "office": "Valencia", **_ONBOARDING, "minimum_stock": 5},
+    {"name": "Hub USB-C", "sku": "NXV-PER-002", "category": "peripherals", "office": "Miami", **_ONBOARDING, "minimum_stock": 5},
     {"name": "Resma de papel A4", "sku": "NXV-OFF-001", "category": "office_supplies", "office": "Valencia"},
-    {"name": "Cuaderno de formación en liderazgo", "sku": "NXV-TRN-001", "category": "training_materials", "office": "Valencia"},
+    {
+        "name": "Cuaderno de formación en liderazgo",
+        "sku": "NXV-TRN-001",
+        "category": "training_materials",
+        "office": "Valencia",
+        "programme_id": "liderazgo-basico",
+        "product_category": "training_kit",
+        "minimum_stock": 10,
+    },
 ]
 
+# `unit_cost_minor` is in cents of the office's currency (Valencia EUR, Miami USD).
 ENTRIES = [
-    {"sku": "NXV-IT-001", "quantity": 10, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia"},
-    {"sku": "NXV-IT-001", "quantity": 5, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia"},
-    {"sku": "NXV-IT-002", "quantity": 6, "supplier": "Office Depot Miami", "office": "Miami"},
-    {"sku": "NXV-PER-001", "quantity": 30, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia"},
-    {"sku": "NXV-PER-002", "quantity": 25, "supplier": "Office Depot Miami", "office": "Miami"},
-    {"sku": "NXV-OFF-001", "quantity": 100, "supplier": "Papelería Central Valencia S.L.", "office": "Valencia"},
-    {"sku": "NXV-TRN-001", "quantity": 40, "supplier": "Formación Ibérica S.L.", "office": "Valencia"},
+    {"sku": "NXV-IT-001", "quantity": 10, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia", "unit_cost_minor": 85000},
+    {"sku": "NXV-IT-001", "quantity": 5, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia", "unit_cost_minor": 87000},
+    {"sku": "NXV-IT-002", "quantity": 6, "supplier": "Office Depot Miami", "office": "Miami", "unit_cost_minor": 90000},
+    {"sku": "NXV-PER-001", "quantity": 30, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia", "unit_cost_minor": 2500},
+    {"sku": "NXV-PER-002", "quantity": 25, "supplier": "Office Depot Miami", "office": "Miami", "unit_cost_minor": 3500},
+    {"sku": "NXV-OFF-001", "quantity": 100, "supplier": "Papelería Central Valencia S.L.", "office": "Valencia", "unit_cost_minor": 450},
+    {"sku": "NXV-TRN-001", "quantity": 40, "supplier": "Formación Ibérica S.L.", "office": "Valencia", "unit_cost_minor": 1800},
 ]
 
 EXITS = [

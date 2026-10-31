@@ -116,6 +116,7 @@ def test_a_new_asset_starts_with_no_stock_and_shows_every_field(client):
     assert asset == {
         "id": asset["id"], "name": "Monitor 27\"", "sku": "NXV-TST-001",
         "category": "peripherals", "office": "Valencia", "current_stock": 0,
+        "programme_id": None, "product_category": None, "minimum_stock": 0,
     }
     assert client.get(f"/inventory/products/{asset['id']}").json() == asset
 
@@ -149,12 +150,14 @@ def test_products_can_be_filtered_by_office_and_category(seeded):
 
 # --- the stock cannot be set, only moved by orders ----------------------------------------------
 
-def test_stock_in_a_request_body_is_ignored(client):
-    asset = client.post(
+def test_stock_in_a_request_body_is_refused_not_silently_ignored(client):
+    response = client.post(
         "/inventory/products",
         json={"name": "Ratón", "sku": "NXV-S-1", "category": "peripherals", "office": "Miami", "current_stock": 500},
-    ).json()
-    assert asset["current_stock"] == 0
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "direct_stock_write_forbidden"
+    assert client.get("/inventory/products").json() == []  # nothing was created
 
 
 def test_there_is_no_route_to_edit_an_asset_or_an_order(client):
@@ -311,7 +314,7 @@ def test_orders_list_inbound_and_outbound_with_their_asset(seeded):
     orders = seeded.get("/inventory/orders").json()
     assert len(orders) == 11
     first = next(o for o in orders if o["type"] == "outbound" and o["exit_type"] == "allocation")
-    assert set(first["asset"]) == {"id", "name", "sku", "category", "office"}
+    assert set(first["asset"]) == {"id", "name", "sku", "category", "office", "programme_id", "product_category", "minimum_stock"}
     assert first["created_at"] and first["office"] in {"Valencia", "Miami"}
     assert [o["created_at"] for o in orders] == sorted((o["created_at"] for o in orders), reverse=True)
 
@@ -411,7 +414,7 @@ def test_all_inventory_routes_live_under_the_inventory_prefix():
 
 
 def test_the_inventory_has_no_users_table_and_orders_reference_users_by_plain_uuid():
-    assert set(SQLModel.metadata.tables) == {"assets", "asset_entries", "asset_exits"}
+    assert set(SQLModel.metadata.tables) == {"assets", "asset_entries", "asset_exits", "telemetry_events"}  # the last one: telemetry storage
     for name in ("asset_entries", "asset_exits"):
         assert not SQLModel.metadata.tables[name].c.user_uuid.foreign_keys
 
