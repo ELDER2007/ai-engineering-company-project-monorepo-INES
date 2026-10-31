@@ -130,11 +130,10 @@ def get_jwt_secret() -> str:
 
 
 def get_telemetry_endpoint() -> str | None:
-    """Where the real telemetry collector will live, from the TELEMETRY_ENDPOINT env var (None when unset).
+    """Where an EXTERNAL telemetry collector lives, from the TELEMETRY_ENDPOINT env var (None when unset).
 
-    Read since the stub so the pattern is in place from the start, but NOT used to forward or redirect any traffic yet: the
-    receiver still validates and drops. Phase 3 replaces the stub with the real implementation and starts using it. It is
-    not the frontend's NEXT_PUBLIC_TELEMETRY_ENDPOINT, which is where the browser posts (this receiver today).
+    Informational only: the receiver stores the events itself (``telemetry/store.py``) and never forwards or redirects any
+    traffic to it. It is not the frontend's NEXT_PUBLIC_TELEMETRY_ENDPOINT, which is where the browser posts (this receiver).
     """
     return os.environ.get("TELEMETRY_ENDPOINT", "").strip() or None
 

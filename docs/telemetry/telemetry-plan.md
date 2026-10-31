@@ -608,4 +608,6 @@ Reglas: `value` en milisegundos, salvo `CLS`, que no tiene unidad (fraccion); ce
 
 ## 18. Limites de esta entrega
 
-Entregado: plan, contrato JSON Schema, ejemplos, README y registro de aprendizaje. Pendiente: aprobar decisiones propuestas con negocio, migrar/enriquecer catalogo y precios, instrumentar API/outbox/rechazos, implementar consumidor y almacenamiento, ejecutar pruebas de integracion y elaborar dashboard/reporte sobre datos reales. No se han levantado servidores, instalado infraestructura ni cambiado reglas de la aplicacion.
+Entregado: plan, contrato JSON Schema, ejemplos, README y registro de aprendizaje. Pendiente: aprobar decisiones propuestas con negocio, migrar/enriquecer catalogo y precios, instrumentar API/outbox/rechazos, ejecutar pruebas de integracion y elaborar dashboard/reporte sobre datos reales. No se han levantado servidores, instalado infraestructura ni cambiado reglas de la aplicacion.
+
+Actualizacion (almacenamiento): el receptor persiste los eventos validos en la tabla `telemetry_events` (seccion 12: append-only, deduplicada por `eventId`, `tags` JSONB con el `properties` intacto y las dimensiones del briefing dentro). Los campos opcionales guardados en `tags` son claves del diccionario de la seccion 15 y de la 17. Siguen pendientes la outbox transaccional, la aprobacion de la retencion de 90 dias, las agregaciones y el reporte.

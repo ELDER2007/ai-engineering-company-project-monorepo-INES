@@ -1,12 +1,14 @@
-"""Telemetry receiver, still a STUB: it validates and acknowledges, it stores nothing (persistence is phase 3).
+"""Telemetry receiver: validates the events and STORES them (``store.py``, table ``telemetry_events``), then acknowledges.
 
 ``POST /telemetry/events`` takes a batch ``{"events": [...]}`` (the backoffice never posts one event at a time),
 checks every event against the approved contract (``contract.py``), stamps the server-owned fields and answers
-200 with what it accepted and what it rejected, per event: a bad event must not cost the good ones of its batch.
+200 with what it accepted, stored and rejected, per event: a bad event must not cost the good ones of its batch.
 A body that is not a batch at all (not JSON, no ``events`` list, too big, too many) is refused as a whole.
 
-It logs how many events arrived and the type of each (that log is its only output). Contract for the real implementation (the frontend must not need a change): same URL, same request, same
-response shape; the endpoint is public on purpose (the browser can flush with ``navigator.sendBeacon`` while the
+The acknowledgement is sent only after the valid events are stored, and an ``eventId`` already stored is not an error (the
+frontend retries a batch with the same ids): a retry is acknowledged as accepted and stored once. If the database fails the answer is
+503, so the client retries the same batch instead of dropping it. It also logs how many events arrived and the type of each. The
+contract the frontend relies on has not changed since the stub: same URL, same request, same response shape; the endpoint is public on purpose (the browser can flush with ``navigator.sendBeacon`` while the
 page unloads, and a beacon cannot carry an ``Authorization`` header; website visitors are anonymous too). The
 identity is taken from the bearer token only when there is one.
 
@@ -20,19 +22,23 @@ import json
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 import re
 
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session
 
 from auth.security import decode_access_token
+from inventory.database import get_db
 from users import service as users_service
 
-from . import contract
+from . import contract, store
 from .schemas import TelemetryEvent
 
-# The stub's whole visible output is this log (nothing is stored): how many events arrived and the type of each. The app does not
-# configure the root logger, so this one carries its own INFO handler or the lines would never be shown.
+# How many events arrived and the type of each. The app does not configure the root logger, so this one carries its own INFO
+# handler or the lines would never be shown.
 logger = logging.getLogger("telemetry")
 if not logger.handlers:
     _handler = logging.StreamHandler()
@@ -57,8 +63,9 @@ class RejectedEvent(BaseModel):
 
 
 class Ack(BaseModel):
-    received: int
-    accepted: int
+    received: int  # events in the batch
+    accepted: int  # events that passed the contract (a retried event counts: it is valid)
+    stored: int  # rows really written; accepted minus stored = events already stored by an earlier delivery
     rejected: list[RejectedEvent]
 
 
@@ -80,18 +87,20 @@ def _loggable_type(event: Any) -> str:
     return event_type if isinstance(event_type, str) and len(event_type) <= 64 and _EVENT_TYPE.match(event_type) else "<invalid>"
 
 
-def _problem(event: Any, user_id: str | None) -> dict[str, str] | None:
-    """Why an event is refused, or None. First the envelope (``TelemetryEvent``), then what depends on its type (the JSON Schema).
-    Never quotes a value: only where it is wrong and which rule."""
+def _check(event: Any, user_id: str | None) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    """``(stamped event, None)`` when the event is valid, ``(None, why)`` when it is refused. First the envelope
+    (``TelemetryEvent``), then what depends on its type (the JSON Schema). The reason never quotes a value: only where it is
+    wrong and which rule. The stamped event is what gets stored: the server-owned fields are the server's, not the client's."""
     if not isinstance(event, dict):
-        return {"path": "/", "rule": "type", "detail": "violates 'type'"}
+        return None, {"path": "/", "rule": "type", "detail": "violates 'type'"}
     stamped = contract.stamp(event, user_id)
     try:
-        TelemetryEvent.model_validate(stamped)
+        model = TelemetryEvent.model_validate(stamped)
     except ValidationError as exc:
         first = exc.errors(include_input=False, include_url=False)[0]
-        return {"path": "/" + "/".join(str(part) for part in first["loc"]), "rule": first["type"], "detail": f"violates '{first['type']}'"}
-    return contract.problem(stamped)
+        return None, {"path": "/" + "/".join(str(part) for part in first["loc"]), "rule": first["type"], "detail": f"violates '{first['type']}'"}
+    found = contract.problem(stamped)
+    return (None, found) if found else (model.model_dump(mode="json"), None)
 
 
 def _batch(raw: bytes) -> list[Any]:
@@ -112,13 +121,18 @@ def _batch(raw: bytes) -> list[Any]:
 
 
 @router.post("/events", response_model=Ack)
-async def receive_events(request: Request, authorization: Annotated[str | None, Header()] = None) -> Ack:
+async def receive_events(
+    request: Request, session: Annotated[Session, Depends(get_db)], authorization: Annotated[str | None, Header()] = None
+) -> Ack:
     events = _batch(await request.body())
     user_id = _verified_user_id(authorization)
     rejected: list[RejectedEvent] = []
+    valid: list[dict[str, Any]] = []
     for index, event in enumerate(events):
-        found = _problem(event, user_id)
-        if found is not None:
+        stamped, found = _check(event, user_id)
+        if stamped is not None:
+            valid.append(stamped)
+        else:
             event_id = event.get("eventId") if isinstance(event, dict) else None
             rejected.append(
                 RejectedEvent(
@@ -127,7 +141,12 @@ async def receive_events(request: Request, authorization: Annotated[str | None, 
                     **found,
                 )
             )
+    try:
+        stored = await run_in_threadpool(store.save, session, valid)  # sync SQL: keep it off the event loop, like routers/inventory.py
+    except SQLAlchemyError:
+        logger.exception("could not store %d valid event(s) of a batch of %d", len(valid), len(events))
+        raise HTTPException(503, detail="The events could not be stored; retry the same batch") from None
     logger.info("received %d event(s): %s", len(events), ", ".join(_loggable_type(event) for event in events) or "-")
     if rejected:
         logger.info("rejected %d: %s", len(rejected), ", ".join(f"#{r.index} {r.path} ({r.rule})" for r in rejected))
-    return Ack(received=len(events), accepted=len(events) - len(rejected), rejected=rejected)
+    return Ack(received=len(events), accepted=len(valid), stored=stored, rejected=rejected)
