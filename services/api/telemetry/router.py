@@ -12,6 +12,9 @@ contract the frontend relies on has not changed since the stub: same URL, same r
 page unloads, and a beacon cannot carry an ``Authorization`` header; website visitors are anonymous too). The
 identity is taken from the bearer token only when there is one.
 
+``GET /report`` is the exception: the technical report (``analysis.py``, cached by ``report_cache.py``) reads everybody's
+telemetry, so it is admin-only.
+
 The body is read raw and parsed here whatever its ``Content-Type``: ``sendBeacon`` sends ``text/plain`` to stay a
 CORS "simple" request (no preflight).
 """
@@ -20,21 +23,23 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Annotated, Any
+from datetime import datetime
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 import re
 
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
+from auth.dependencies import admin_only
 from auth.security import decode_access_token
 from inventory.database import get_db
 from users import service as users_service
 
-from . import contract, store
+from . import contract, report, store
 from .schemas import TelemetryEvent
 
 # How many events arrived and the type of each. The app does not configure the root logger, so this one carries its own INFO
@@ -150,3 +155,45 @@ async def receive_events(
     if rejected:
         logger.info("rejected %d: %s", len(rejected), ", ".join(f"#{r.index} {r.path} ({r.rule})" for r in rejected))
     return Ack(received=len(events), accepted=len(valid), stored=stored, rejected=rejected)
+
+
+class ReportPeriod(BaseModel):
+    """The resolved period, both bounds in UTC: ``from`` inclusive, ``to`` exclusive."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: datetime = Field(alias="from")
+    to: datetime
+
+
+class ReportResponse(BaseModel):
+    period: ReportPeriod
+    metrics: dict[str, Any]  # events_per_day, error_rate_by_type and the other technical metrics (analysis.build_report)
+    findings: list[dict[str, Any]]  # what to look at first, worst first
+    generated_at: datetime
+    environment: str | None
+    truncated: bool  # True when the period held more events than the report reads (analysis.MAX_ROWS)
+    cached: bool  # True when served from the in-memory cache (see report_cache.py)
+    cache_age_seconds: float
+
+
+@router.get("/report", response_model=ReportResponse, dependencies=[Depends(admin_only)])
+def technical_report(
+    session: Annotated[Session, Depends(get_db)],
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    environment: Literal["development", "test", "staging", "production"] | None = None,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Technical report of the stored events: ``{"period": {"from", "to"}, "metrics": {"events_per_day", "error_rate_by_type", ...}}``
+    plus the findings.
+
+    Admins only: unlike ``POST /events`` this reads everybody's telemetry. ``start_date`` is inclusive and ``end_date`` exclusive (ISO
+    8601; no timezone means UTC); by default the last 7 days (``end_date`` = now, ``start_date`` = 7 days before it). The period is
+    resolved once and handed to every metric function; the endpoint computes nothing itself. Cached for 60 s per requested
+    ``start_date``/``end_date`` and dropped when this process stores a new event; ``refresh=true`` skips it.
+    """
+    start, end = report.resolve_window(start_date, end_date)
+    if start >= end:
+        raise HTTPException(422, detail="start_date must be earlier than end_date")
+    return report.get_report(session, start_date, end_date, environment, refresh)
