@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   Boxes,
   ClipboardList,
   FileBarChart,
@@ -29,6 +30,11 @@ const navItems = [
   { href: "/account/profile", label: "Mi perfil", icon: UserCircle, end: false },
 ];
 
+// Only for admins: GET /telemetry/report reads everybody's telemetry and answers 403 to anybody else.
+const adminNavItems = [{ href: "/system-health", label: "Salud del sistema", icon: Activity, end: true }];
+
+type NavItem = { href: string; label: string; icon: typeof Boxes; end: boolean; exclude?: string };
+
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
@@ -41,7 +47,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </p>
         <p className="px-2 text-xs uppercase tracking-widest text-slate-400">Backoffice</p>
         <nav className="mt-8 space-y-1" aria-label="Navegación principal">
-          {navItems.map(({ href, label, icon: Icon, end, exclude }) => {
+          {[...navItems, ...(user?.role === "admin" ? adminNavItems : [])].map(({ href, label, icon: Icon, end, exclude }: NavItem) => {
             const isActive =
               !(exclude && pathname.startsWith(exclude)) &&
               (end ? pathname === href : pathname === href || pathname.startsWith(`${href}/`));
