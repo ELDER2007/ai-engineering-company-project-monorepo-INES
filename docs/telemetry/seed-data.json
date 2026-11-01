@@ -1,0 +1,79 @@
+{
+  "fixture_version": "1.0.0",
+  "purpose": "Synthetic acceptance fixture for the future Nexova telemetry implementation. Not production data and not loadable by the current legacy inventory API.",
+  "synthetic_author_user_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "products": [
+    { "product_id": "product-001", "product_category": "training_kit", "programme_id": "ventas-b2b", "office": "valencia", "currency": "EUR", "minimum_stock": 8 },
+    { "product_id": "product-002", "product_category": "certification", "programme_id": "liderazgo-basico", "office": "valencia", "currency": "EUR", "minimum_stock": 6 },
+    { "product_id": "product-003", "product_category": "onboarding_equipment", "programme_id": "onboarding-soporte", "office": "miami", "currency": "USD", "minimum_stock": 5 },
+    { "product_id": "product-004", "product_category": "training_kit", "programme_id": "ventas-b2b", "office": "miami", "currency": "USD", "minimum_stock": 4 },
+    { "product_id": "product-005", "product_category": "certification", "programme_id": "liderazgo-basico", "office": "miami", "currency": "USD", "minimum_stock": 3 },
+    { "product_id": "product-006", "product_category": "onboarding_equipment", "programme_id": "onboarding-soporte", "office": "valencia", "currency": "EUR", "minimum_stock": 5 },
+    { "product_id": "product-007", "product_category": "training_kit", "programme_id": "liderazgo-basico", "office": "valencia", "currency": "EUR", "minimum_stock": 3 },
+    { "product_id": "product-008", "product_category": "certification", "programme_id": "ventas-b2b", "office": "valencia", "currency": "EUR", "minimum_stock": 2 }
+  ],
+  "inbound_orders": [
+    { "order_id": "in-001", "product_id": "product-001", "quantity": 5, "supplier_id": "supplier-print-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1000, "total_cost_minor": 5000, "created_at": "2026-09-01T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-002", "product_id": "product-001", "quantity": 5, "supplier_id": "supplier-print-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1000, "total_cost_minor": 5000, "created_at": "2026-09-02T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-003", "product_id": "product-001", "quantity": 5, "supplier_id": "supplier-print-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1000, "total_cost_minor": 5000, "created_at": "2026-09-03T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-004", "product_id": "product-001", "quantity": 5, "supplier_id": "supplier-print-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1000, "total_cost_minor": 5000, "created_at": "2026-09-04T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-005", "product_id": "product-001", "quantity": 5, "supplier_id": "supplier-print-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1000, "total_cost_minor": 5000, "created_at": "2026-09-05T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-006", "product_id": "product-001", "quantity": 5, "supplier_id": "supplier-print-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1200, "total_cost_minor": 6000, "created_at": "2026-09-06T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-007", "product_id": "product-002", "quantity": 8, "supplier_id": "supplier-cert-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 2500, "total_cost_minor": 20000, "created_at": "2026-09-07T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-008", "product_id": "product-002", "quantity": 8, "supplier_id": "supplier-cert-01", "office": "valencia", "currency": "EUR", "unit_cost_minor": 2500, "total_cost_minor": 20000, "created_at": "2026-09-08T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-009", "product_id": "product-003", "quantity": 10, "supplier_id": "supplier-hardware-01", "office": "miami", "currency": "USD", "unit_cost_minor": 5000, "total_cost_minor": 50000, "created_at": "2026-09-09T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-010", "product_id": "product-003", "quantity": 5, "supplier_id": "supplier-hardware-01", "office": "miami", "currency": "USD", "unit_cost_minor": 5200, "total_cost_minor": 26000, "created_at": "2026-09-10T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-011", "product_id": "product-004", "quantity": 15, "supplier_id": "supplier-hardware-02", "office": "miami", "currency": "USD", "unit_cost_minor": 2200, "total_cost_minor": 33000, "created_at": "2026-09-11T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-012", "product_id": "product-005", "quantity": 8, "supplier_id": "supplier-cert-02", "office": "miami", "currency": "USD", "unit_cost_minor": 1500, "total_cost_minor": 12000, "created_at": "2026-09-12T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-013", "product_id": "product-006", "quantity": 10, "supplier_id": "supplier-hardware-03", "office": "valencia", "currency": "EUR", "unit_cost_minor": 8000, "total_cost_minor": 80000, "created_at": "2026-09-13T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-014", "product_id": "product-007", "quantity": 12, "supplier_id": "supplier-print-02", "office": "valencia", "currency": "EUR", "unit_cost_minor": 1200, "total_cost_minor": 14400, "created_at": "2026-09-14T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "in-015", "product_id": "product-008", "quantity": 7, "supplier_id": "supplier-cert-03", "office": "valencia", "currency": "EUR", "unit_cost_minor": 3000, "total_cost_minor": 21000, "created_at": "2026-09-15T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  ],
+  "outbound_orders": [
+    { "order_id": "out-001", "product_id": "product-001", "quantity": 24, "office": "valencia", "currency": "EUR", "created_at": "2026-09-16T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-002", "product_id": "product-001", "quantity": 1, "office": "valencia", "currency": "EUR", "created_at": "2026-09-17T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-003", "product_id": "product-002", "quantity": 10, "office": "valencia", "currency": "EUR", "created_at": "2026-09-18T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-004", "product_id": "product-002", "quantity": 1, "office": "valencia", "currency": "EUR", "created_at": "2026-09-19T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-005", "product_id": "product-003", "quantity": 4, "office": "miami", "currency": "USD", "created_at": "2026-09-20T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-006", "product_id": "product-003", "quantity": 3, "office": "miami", "currency": "USD", "created_at": "2026-09-21T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-007", "product_id": "product-004", "quantity": 5, "office": "miami", "currency": "USD", "created_at": "2026-09-22T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-008", "product_id": "product-004", "quantity": 3, "office": "miami", "currency": "USD", "created_at": "2026-09-23T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-009", "product_id": "product-005", "quantity": 2, "office": "miami", "currency": "USD", "created_at": "2026-09-24T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-010", "product_id": "product-005", "quantity": 1, "office": "miami", "currency": "USD", "created_at": "2026-09-25T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-011", "product_id": "product-006", "quantity": 4, "office": "valencia", "currency": "EUR", "created_at": "2026-09-26T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-012", "product_id": "product-006", "quantity": 2, "office": "valencia", "currency": "EUR", "created_at": "2026-09-27T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-013", "product_id": "product-007", "quantity": 4, "office": "valencia", "currency": "EUR", "created_at": "2026-09-28T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-014", "product_id": "product-007", "quantity": 2, "office": "valencia", "currency": "EUR", "created_at": "2026-09-29T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "order_id": "out-015", "product_id": "product-008", "quantity": 2, "office": "valencia", "currency": "EUR", "created_at": "2026-09-30T09:00:00Z", "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  ],
+  "expected_derived_events": {
+    "inbound_order_created_count": 15,
+    "outbound_order_created_count": 15,
+    "stock_threshold_triggered": [
+      { "order_id": "out-001", "product_id": "product-001", "stock_before": 30, "stock_after": 6, "minimum_stock": 8 },
+      { "order_id": "out-004", "product_id": "product-002", "stock_before": 6, "stock_after": 5, "minimum_stock": 6 },
+      { "order_id": "out-012", "product_id": "product-006", "stock_before": 6, "stock_after": 4, "minimum_stock": 5 }
+    ],
+    "kit_cost_variance_detected": {
+      "order_id": "in-006",
+      "product_id": "product-001",
+      "supplier_id": "supplier-print-01",
+      "baseline_order_ids": ["in-001", "in-002", "in-003", "in-004", "in-005"],
+      "baseline_order_count": 5,
+      "reference_unit_cost_minor": 1000,
+      "unit_cost_minor": 1200,
+      "variance_percent": 20,
+      "threshold_percent": 10
+    },
+    "ending_stock_by_product": {
+      "product-001": 5,
+      "product-002": 5,
+      "product-003": 8,
+      "product-004": 7,
+      "product-005": 5,
+      "product-006": 4,
+      "product-007": 6,
+      "product-008": 5
+    }
+  }
+}

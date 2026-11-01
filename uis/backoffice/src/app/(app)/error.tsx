@@ -1,7 +1,17 @@
 "use client";
 
+import { useEffect } from "react";
+import { track } from "@/lib/telemetry";
+import { componentForPath } from "@/lib/telemetry/paths";
+
 // Last line of defence: an unexpected rendering error shows this instead of a blank page.
 export default function AppError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    // Only the kind of failure and the area: never the error's message or stack, which can quote data.
+    const component = componentForPath(window.location.pathname);
+    if (component) track("application_error_occurred", { error_code: "render_failed", component });
+  }, []);
+
   return (
     <div role="alert" className="mx-auto max-w-xl rounded-2xl border border-rose-500/30 bg-rose-500/10 p-6 text-rose-200">
       <h1 className="text-xl font-semibold text-white">Algo ha salido mal</h1>

@@ -66,9 +66,20 @@ export function parseQuantity(raw: string): number | null {
   return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
 }
 
+/**
+ * The unit-cost box holds text in major units ("12,50" or "12.50"); the API takes minor units (cents). Parsed from
+ * the digits, never through a float, so 0,29 is 29 and not 28.999.... At most two decimals; 0 is a valid (free) cost.
+ */
+export function parseUnitCost(raw: string): number | null {
+  const match = /^(\d{1,9})(?:[.,](\d{1,2}))?$/.exec(raw.trim());
+  if (!match) return null;
+  return Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
+}
+
 export interface InboundForm {
   assetId: string;
   quantity: string;
+  unitCost: string;
   supplier: string;
 }
 
@@ -76,9 +87,24 @@ export function validateInbound(form: InboundForm): FormErrors<keyof InboundForm
   const errors: FormErrors<keyof InboundForm> = {};
   if (!form.assetId) errors.assetId = "Selecciona el activo recibido.";
   if (parseQuantity(form.quantity) === null) errors.quantity = "Indica la cantidad: un número entero mayor que 0.";
+  if (parseUnitCost(form.unitCost) === null) errors.unitCost = "Indica el coste unitario: un importe con hasta dos decimales.";
   if (!form.supplier.trim()) errors.supplier = "Indica el proveedor.";
   return errors;
 }
+
+/** The exact body of an inbound order: the cost goes in minor units, in the currency of the asset's office. */
+export function inboundPayload(form: InboundForm, office: Office) {
+  return {
+    asset_id: Number(form.assetId),
+    quantity: Number(form.quantity.trim()),
+    supplier: form.supplier.trim(),
+    unit_cost_minor: parseUnitCost(form.unitCost) ?? undefined,
+    office,
+  };
+}
+
+/** The currency the office keeps its books in (briefing, section 6): never converted, so the form just names it. */
+export const officeCurrency = (office: Office): "EUR" | "USD" => (office === "Miami" ? "USD" : "EUR");
 
 export interface OutboundForm {
   assetId: string;
@@ -137,6 +163,7 @@ const FIELD_LABELS: Record<string, string> = {
   asset_id: "Activo",
   quantity: "Cantidad",
   supplier: "Proveedor",
+  unit_cost_minor: "Coste unitario",
   exit_type: "Tipo de salida",
   assigned_to: "Asignado a",
   office: "Oficina",
@@ -226,6 +253,38 @@ export function orderDetail(order: InventoryOrder): string {
   if (order.type === "inbound") return order.supplier ?? "—";
   const type = order.exit_type ? EXIT_TYPE_LABELS[order.exit_type] : "Salida";
   return order.assigned_to ? `${type}: ${order.assigned_to}` : type;
+}
+
+/**
+ * What an API refusal means for the telemetry (plan, section 10): a stock write attempt, a business rule of the
+ * service, or a failed validation. Anything else (404, 5xx, no answer) is the HTTP layer's, not the inventory's.
+ */
+export type InventoryFailure =
+  | { kind: "direct_stock_write"; field: "stock" | "current_stock" }
+  | { kind: "insufficient_stock" }
+  | { kind: "office_mismatch" }
+  | { kind: "validation"; field: "quantity" | "office" | "product_id" | "supplier_id" | "unit_cost_minor" | "multiple" | "none" };
+
+const VALIDATION_FIELD: Record<string, "quantity" | "office" | "product_id" | "supplier_id" | "unit_cost_minor"> = {
+  quantity: "quantity",
+  office: "office",
+  asset_id: "product_id",
+  supplier: "supplier_id",
+  unit_cost_minor: "unit_cost_minor",
+};
+
+export function classifyInventoryFailure(err: unknown): InventoryFailure | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.code === "direct_stock_write_forbidden") {
+    return { kind: "direct_stock_write", field: err.field === "stock" ? "stock" : "current_stock" };
+  }
+  if (err.status === 400 && INSUFFICIENT_STOCK.test(err.message)) return { kind: "insufficient_stock" };
+  if (err.status === 422 && OFFICE_MISMATCH.test(err.message)) return { kind: "office_mismatch" };
+  if (err.status === 422) {
+    const fields = new Set(Object.keys(err.fieldErrors).map((name) => VALIDATION_FIELD[name] ?? "none"));
+    return { kind: "validation", field: fields.size === 1 ? [...fields][0] : fields.size === 0 ? "none" : "multiple" };
+  }
+  return null;
 }
 
 /** A 400 from the API: on an exit it is "not enough stock", which belongs next to the quantity field. */

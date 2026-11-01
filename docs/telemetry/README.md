@@ -1,0 +1,181 @@
+# Nexova: proyecto de diseno de telemetria
+
+## Que se entrega
+
+Respuesta al RFI de gestion: diseno de telemetria de inventario, autenticacion, navegacion, abandono de flujos, proveedores, incidencias, website, salud tecnica y procesos internos. El catalogo contiene 40 tipos con hipotesis, decision, responsable, prioridad y modo batch/stream; cinco se clasifican como Obligatorio y 35 como Oportunidad identificada. Esta fase es documental: no requiere arrancar el website, el backoffice, la API ni un servidor nuevo.
+
+| Documento | Contenido |
+| --- | --- |
+| [telemetry-plan.md](telemetry-plan.md) | RFI, clasificacion de 40 tipos, mapa con 12 puntos, diccionario de 50 claves, allowlist/PII/entrega por evento, frecuencia, riesgos, exclusiones y pruebas de aceptacion. |
+| [event-schemas.json](event-schemas.json) | JSON Schema Draft 2020-12 version 2.0.0, envelope del enunciado con sesion/correlacion, validacion de 40 variantes y ocho ejemplos sinteticos. |
+| [seed-data.json](seed-data.json) | Fixture sintetico de 8 productos, 3 programas, 15 entradas y 15 salidas; cubre tres alertas de minimo y una variacion de coste. No se carga en el API legacy. |
+| [Cuaderno de aprendizaje](../../aprendiendo%20con%20la%20ia.md#telemetria-plan-de-diseno) | Trabajo realizado, decisiones, problemas encontrados, soluciones, validacion y limites. |
+
+Fuente de requisitos: [briefing completo de Nexova](../../nexova-BRIEFING.es.md). Orientacion del monorepo: [README general](../../README.md).
+
+## Captura en el frontend (implementada)
+
+El plan de arriba ya tiene su primera implementacion: el backoffice captura los eventos que puede observar y los envia por lotes a un
+receptor que valida el formato (sin persistir; la persistencia es la fase 3). Detalle en el [README del backoffice](../../uis/backoffice/README.md#telemetry-event-capture)
+y en el [README de la API](../../services/api/README.md#telemetry-receiver-telemetry).
+
+| Que | Estado |
+| --- | --- |
+| Cinco obligatorios del briefing | Instrumentados desde las ordenes reales: `inbound_order_created`, `outbound_order_created`, `stock_threshold_triggered`, `direct_stock_edit_rejected`, `kit_cost_variance_detected`. Umbral y variacion de coste los calcula la API en la transaccion de la orden. `direct_stock_edit_rejected`: el rechazo (422 con codigo) y el evento existen de punta a punta, pero la UI no tiene ningun campo que escriba stock, asi que solo se dispara si una llamada del navegador lo intenta; esta cubierto por pruebas y no por un clic de usuario. |
+| Otros eventos de negocio | `inventory_order_rejected`, `inventory_validation_failed`, `supplier_created`, `supplier_updated`, `incident_created`, `incident_status_changed`, `incident_analysis_completed`, `incident_analysis_failed`. Los de proveedores e incidencias se emiten desde el cliente de la API, por id y nunca con nombres, importes ni contenido. |
+| Autenticacion (en el cliente de la API, no en cada pagina) | `login_attempted`, `login_succeeded`, `login_failed` (razon: `invalid_credentials`, `invalid_request`, `rate_limited` o `internal_error`; nunca el email ni la contraseña), `logout_completed`, `session_expired`, `authorization_denied` (por plantilla de ruta), `registration_completed`, `registration_failed`, `profile_updated` (solo cuantos campos). Un fallo de red al entrar es `application_error_occurred` con `network_failed`, no un `login_failed`: no llego al API y distorsionaria su tasa de fallos. |
+| Piso tecnico transversal | Errores no capturados (`window.onerror`, `unhandledrejection`) y del Error Boundary: `application_error_occurred`. Rendimiento: `section_load_completed` (tiempo hasta tener los datos de la seccion) y `web_vital_reported` (LCP, CLS, INP, FCP, TTFB, contrato 2.1.0). Navegacion: `section_viewed` de las 11 secciones. |
+| Navegacion y flujos | `section_viewed`, `section_load_completed`, `search_performed`, `flow_started`, `flow_step_completed`, `flow_completed`, `flow_cancelled`, `form_validation_failed`. |
+| Receptor | `POST /telemetry/events`, lote `{"events": [...]}`, 200 con `accepted`/`rejected` por evento, validado contra `event-schemas.json`. Guarda los validos en la tabla `telemetry_events` antes de responder (ver abajo). |
+| Variable de entorno | `NEXT_PUBLIC_TELEMETRY_ENDPOINT` (se fija al compilar). |
+| Contrato | 2.1.0 (aditivo sobre 2.0.0): añade `web_vital_reported` ([plan, seccion 17](telemetry-plan.md#17-cambio-de-contrato-210-web-vitals)). El receptor acepta `2.0.0` y `2.1.0`. |
+
+En total 32 de los 41 eventos del catalogo. Los 9 restantes no los puede emitir este frontend: `product_created` y `product_updated` (no hay pantalla), `supplier_deleted` (la app no puede borrar), `http_request_completed` y `dependency_call_completed` (solo el servidor sabe lo que tarda), `background_job_completed` y `telemetry_delivery_failed` (procesos internos) y `talent_form_submitted`/`talent_form_rejected` (el website).
+
+El receptor fija en el servidor la `source` de los eventos que el contrato ata a una fuente (los del inventario y los que decide el API: logins, altas, proveedores, incidencias...) y el `userId` (nulo en intentos y fallos de login aunque haya sesion; obligatorio en los que lo exigen). El frontend solo retransmite lo que el API respondio: no es la fuente de verdad.
+
+Cambios previos que el plan (seccion 3) marcaba como prerrequisito y que se han hecho: programa, categoria de negocio, minimo de stock,
+coste unitario y proveedor por ID en el inventario, y rechazo explicito de escritura directa de stock. Siguen pendientes:
+clasificar el catalogo real (Elena), la outbox transaccional en el servidor, el consentimiento y la politica de almacenamiento analitico
+(seccion 11) y los eventos que solo puede emitir la API o el website.
+
+Intervalos de envio: lote a los 20 eventos o a los 10 s (el enunciado de la fase de captura; el plan, seccion 10, proponia 5 s, y el valor del plan es una propuesta), 3 reintentos con espera 1, 2 y 4 s.
+
+Limitaciones conocidas de esta fase: los eventos de inventario los emite el navegador tras la respuesta del API, no el servidor en la
+transaccion; si el usuario cierra la pestaña antes del envio, el evento se pierde (se mitiga con `sendBeacon` al ocultar la pestaña y con
+`fetch keepalive` para los eventos que necesitan identidad). El receptor sustituye `source` y `userId` en el servidor, como pide el plan.
+
+## Almacenamiento (implementado)
+
+El receptor guarda cada evento valido en `telemetry_events` (misma base SQL que el inventario; Supabase o SQLite local), inmutable (solo
+INSERT) y deduplicada por `eventId`, con una sola operacion de insercion por lote. Ocho columnas: `event_id`, `event_type`, `timestamp`,
+`service` (la `source` del envelope), `user_id` (seudonimo HMAC), `session_id`, `environment` y `tags` (JSONB = `properties` intacto, con las
+dimensiones del briefing: oficina, programa, producto, categoria, moneda y cantidad). Tres indices: `timestamp`, `event_type` y GIN sobre
+`tags`. Un test comprueba que las claves guardadas en `tags` pertenecen al diccionario del plan. La retencion de 90 dias del plan no esta
+implementada (pendiente de aprobacion). SQL para Supabase: [telemetry_events.sql](telemetry_events.sql). Detalle en el
+[README de la API](../../services/api/README.md#storage-telemetrymodelspy-telemetrystorepy).
+
+## Revision de Fase 1
+
+- Metricas obligatorias: los cinco nombres coinciden literalmente con el briefing; entidades, identificadores, categorias, oficinas y monedas se mantienen sin sustituir el dominio de Nexova.
+- Flujo completo: acceso autenticado -> carga de inventario -> formulario -> validacion local -> API -> reglas de negocio -> orden confirmada -> confirmacion visible. La seccion 6 del plan incluye diagrama y 12 puntos, con ramas de rechazo y abandono.
+- Exploracion adicional: autenticacion, carga de secciones, latencia de API, errores frontend, navegacion y otros dominios; no se limita a cumplir un minimo numerico.
+- Regla de oro: todas las filas del catalogo incluyen hipotesis y decision concreta.
+- Origen: clasificacion individual de cinco Obligatorio y 35 Oportunidad identificada, independiente de P0/P1/P2.
+
+El envelope exige `eventId`, `timestamp`, `sessionId`, `userId`, `event_type`, `schemaVersion`, `requestId` y `properties`, mas entorno y fuente. Sustituye la primera propuesta local 1.0.0 sin sesion; es un cambio incompatible de contrato, no una migracion desplegada. Hay ejemplos de los cinco eventos de inventario, login fallido, navegacion anonima y proceso sin sesion. No sustituyen las pruebas de integracion.
+
+## Revision de Fases 2 y 3
+
+- Envelope: diez claves obligatorias con descripciones en el JSON; ocho exigidas por el enunciado mas entorno y fuente. Valor null no significa campo opcional.
+- Esquemas: cinco metricas obligatorias y 35 eventos adicionales en diez categorias. La taxonomia entidad_accion conserva los nombres literales del briefing.
+- Propiedades: seccion 15 del plan con diccionario de 50 claves (nombre, tipo, presencia y descripcion), allowlist individual para 40 eventos y perfil de sensibilidad/sanitizacion previo por evento. Todos los payloads actuales tienen sus claves declaradas como obligatorias y rechazan extras.
+- Formato: Draft 2020-12, con format habilitado. No validarlo como draft-07 porque ignoraria unevaluatedProperties en los payloads compuestos.
+- Entrega: 16 eventos stream y 24 batch, con justificacion individual por urgencia de la decision, no por preferencia de tecnologia.
+- Frecuencia: seccion 16 con debounce de busqueda, deduplicacion de navegacion/flujo, agrupacion de alertas sin eliminar hechos, buffer cliente limitado y backpressure/reintentos del publicador.
+- Riesgos y exclusiones: PII indirecta, confidencialidad comercial, volumen, duplicados, reloj, perdida y contratos; ocho grupos de candidatos descartados, con motivo y alternativa. No se considera HMAC como anonimizacion irreversible.
+
+Comprobacion ejecutada para esta revision: las 40 allowlists y sus claves obligatorias coinciden entre schema y matriz; las 50 claves tienen entrada en el diccionario; las 40 filas tienen perfil PII y motivo de entrega; ocho ejemplos siguen siendo validos. La anotacion del envelope tambien se comprobo con 16 casos de campos extra rechazados sobre los ocho ejemplos. No se ha instrumentado ninguna de estas politicas.
+
+## Revision Contra la Rubrica
+
+La seccion 14 del [plan](telemetry-plan.md) contiene la matriz E01-E10 con evidencia para los diez criterios: obligatorios, amplitud, hipotesis/decision, envelope, allowlists, schema, entrega, privacidad, riesgos y precision de implementacion. Es autoevaluacion de diseno, no aprobacion docente ni nota garantizada.
+
+Se ha corregido una incoherencia encontrada durante la revision: el schema de product_created admitia cambios classification/threshold aunque su descripcion exige catalogue. Ahora rechaza ambos en altas y los mantiene permitidos en product_updated. Los nombres, el numero de eventos y las allowlists no cambian; se alinea una restriccion del contrato de diseno 2.0.0 aun no instrumentado.
+
+Resultado de esta revision: diez criterios con evidencia localizada, cinco obligatorios coincidentes con briefing, 40 variantes y allowlists verificadas, 50 claves documentadas, reparto 16 stream/24 batch y ocho ejemplos validos. La bateria actual rechaza 639 casos invalidos: 637 de claves obligatorias/extra y dos de tipo de cambio incorrecto en alta. No incluye pruebas funcionales del backend ni implica aprobacion docente.
+
+## Entrega Publicada y Conservacion
+
+PR de entrega: [#24 - docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24), desde `docs/telemetry-design-plan` hacia `main` en el repositorio de ELDER2007. Se ha creado como PR normal, no borrador. El commit inicial publicado es `a9ed403`; el historial posterior de esta rama contiene las notas de publicacion. Abrir la PR no significa que sus cambios ya esten en main ni que el docente los haya aprobado.
+
+Comprobacion de continuidad (24-10-2026): la PR sigue abierta, con estado de merge limpio, sin checks configurados ni decision de revision. La rama local coincide con `origin/docs/telemetry-design-plan`; antes de registrar esta comprobacion, el workspace estaba limpio. El contrato Draft 2020-12 valida sus 40 variantes y ocho ejemplos. El bundle `/home/codespace/nexova-telemetry-b2d9477.bundle` supera `git bundle verify`; aun esta dentro de Codespaces y debe descargarse a almacenamiento propio para ser una copia independiente. Esta anotacion queda local, sin commit ni push.
+
+Politica de conservacion: mantener la rama, no reescribir historial ni forzar push, y hacer merge solo despues de revision/aprobacion. Los README anteriores permanecen conservados en un desplegable historico. Ningun servicio remoto garantiza disponibilidad perpetua; una segunda copia independiente reduce el riesgo de perdida de acceso.
+
+La copia Git se genera con `git bundle create ... --all` y se comprueba con `git bundle verify ...`. Contiene archivos y commits versionados, no el contenido de GitHub (comentarios/aprobaciones de PR, issues o configuracion), archivos ignorados ni cambios sin commit. No debe incluir secretos locales. Se guarda fuera del repositorio para no subir un duplicado binario en la PR. Mientras permanezca dentro de Codespaces no es una copia externa independiente: hay que descargarla a un equipo o almacenamiento propio.
+
+Para recuperar una copia descargada, sustituye la ruta por la de tu archivo:
+
+```bash
+git clone -b docs/telemetry-design-plan /ruta/a/la-copia.bundle nexova-recuperado
+```
+
+## Que Te Corresponde y Que Queda Preparado
+
+### Trabajo Tecnico Preparado Con Copilot
+
+- Plan de las fases 1, 2 y 3, basado en el briefing de Nexova.
+- Catalogo de 40 eventos, cinco obligatorios y 35 oportunidades, con hipotesis y decisiones.
+- Mapa de inventario con 12 puntos, envelope, schema, allowlists, privacidad y estrategia de entrega.
+- README generales en espanol e ingles orientados a portfolio, y registro de decisiones en el cuaderno.
+- Comprobaciones locales del schema, ejemplos y coherencia documental. No tienes que instalar servicios ni repetir comandos para esta entrega de diseno.
+
+Validacion final ejecutada sobre el catalogo actual: 40 fixtures de evento validos, ocho ejemplos validos, 637 casos invalidos rechazados (claves obligatorias ausentes y campos extra), clasificacion coincidente y 20 enlaces locales de la entrega resueltos. Esta bateria tiene un alcance distinto al historial de 807 casos sobre 38 variantes: no se suman ni se comparan como una cobertura equivalente. No acredita instrumentacion en produccion.
+
+### Tus Pasos Antes de Entregar
+
+1. Lee el resumen de este README y recorre el plan. Prepara la explicacion de cinco conceptos: por que el stock solo cambia mediante ordenes, diferencia evento/metrica, funcion del envelope/requestId, allowlist y privacidad, y cuando elegir stream o batch.
+2. Confirma con tu docente el mecanismo de entrega (enlace de repositorio o PR) y la fecha concreta. El enunciado dice viernes, pero no identifica por si solo una convocatoria. Si exige draft-07 especificamente, avisalo: el contrato actual usa Draft 2020-12 y no debe cambiarse solo el identificador del draft.
+3. La publicacion de estos seis documentos ya esta realizada mediante la PR #24 enlazada arriba. Puedes usar ese enlace para entregar; no necesitas ejecutar comandos Git. Para mantener otra copia independiente, descarga el bundle generado fuera de Codespaces.
+4. Una vez publicada, envia el enlace por el canal del curso, responde al feedback del docente y solicita revision. El merge corresponde solo despues de aprobacion y checks; no se da por autorizado por tener documentos locales.
+
+### Decisiones Que Requieren Revision, No Trabajo Manual Tuyo
+
+El baseline de cinco entradas y umbral del 10%, las ventanas de agregacion/abandono, la retencion, los minimos y las alertas son propuestas documentadas. En este proyecto formativo puedes presentarlas al docente como decisiones justificadas; en un caso real deben aprobarlas negocio, tecnologia y privacidad. No necesitas contactar con personas ficticias de Nexova ni configurar Supabase, un colector o un dashboard para esta entrega.
+
+No incluyas contrasenas, JWT, claves de Supabase ni datos personales en la entrega. La implementacion de captura, outbox y almacenamiento es otra fase; no esta pendiente como tarea manual tuya de hoy.
+
+## Como usar la entrega
+
+1. Leer el plan y resolver con negocio las decisiones propuestas (baseline, retencion, calendario y catalogo).
+2. Consultar los ejemplos incluidos en la clave `examples` del JSON; no son datos de produccion ni ordenes insertadas.
+3. Validar los eventos con un validador Draft 2020-12 con `format` habilitado. Validar tambien las reglas aritmeticas y transaccionales del plan en el servicio.
+4. Implementar en una fase posterior los campos faltantes, outbox, captura, almacenamiento y pruebas de integracion. No considerar instrumentados estos eventos por existir la documentacion.
+
+## Validacion local sin servidor
+
+Desde la raiz, comprobar sintaxis con la biblioteca estandar:
+
+```bash
+python -m json.tool docs/telemetry/event-schemas.json > /dev/null
+```
+
+Comprobar el dataset sintetico, sus monedas, saldos, baseline y alertas derivadas (solo biblioteca estandar):
+
+```bash
+python scripts/validate_telemetry_seed.py
+```
+
+Suite de regresion del API actual (desde `services/api`):
+
+```bash
+uv run --group dev pytest
+```
+
+Comprobada el 24-10-2026 con todo el trabajo integrado (candidaturas y endurecimiento del API incluidos): 763 pruebas pasaron y 7 quedaron `xfail`; se conserva una advertencia de deprecacion de `starlette.testclient` con `httpx`. Esta suite cubre el API existente, no instrumentacion futura de telemetria.
+
+Si el entorno dispone de `jsonschema`, comprobar el contrato y sus ocho ejemplos:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+from jsonschema import Draft202012Validator, FormatChecker
+
+schema = json.loads(Path("docs/telemetry/event-schemas.json").read_text())
+Draft202012Validator.check_schema(schema)
+validator = Draft202012Validator(schema, format_checker=FormatChecker())
+for example in schema["examples"]:
+    validator.validate(example)
+print(f"Contrato valido; {len(schema['examples'])} ejemplos aceptados")
+PY
+```
+
+`jsonschema` es una herramienta de comprobacion, no una dependencia nueva de la aplicacion. Si no esta disponible, la comprobacion de sintaxis no sustituye la validacion del contrato.
+
+Historial de comprobaciones: la ampliacion anterior valido ocho ejemplos, 38 variantes y rechazo 807 casos invalidos. La revision de Fase 1 conserva los ocho ejemplos validos y comprueba especificamente dos variantes nuevas (carga de seccion y validacion local), con 17 casos invalidos rechazados. Ademas se verifica la correspondencia de los 40 tipos entre schema/catalogo/clasificacion, los cinco obligatorios contra el briefing y los 12 puntos unicos del flujo. No se afirma haber repetido la bateria de 807 casos sobre las 40 variantes. El comando anterior reproduce schema y ocho ejemplos, no esas baterias locales ni pruebas funcionales de la aplicacion.
+
+## Fuera de alcance
+
+No se han cambiado modelos, endpoints, interfaces, bases de datos ni dependencias. El fixture sintetico cumple los conteos del briefing y permite comprobar los casos de minimo/coste, pero no se ha cargado en el API: sus modelos actuales no tienen programa, moneda, coste ni umbral. El arranque usa `SQLModel.metadata.create_all()`, sin migrar tablas existentes; hace falta una migracion versionada y un backfill validado antes de activar eventos sobre datos legacy. Las pruebas de integracion del futuro pipeline tampoco se han ejecutado. No se pueden medir matriculas/finalizaciones con estos eventos de inventario. La publicacion documental en una PR no equivale a despliegue: el merge requiere aprobacion y no esta autorizado en esta tarea.

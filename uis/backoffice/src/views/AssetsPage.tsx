@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { PackageMinus, PackagePlus, RefreshCw } from "lucide-react";
 import { ErrorBanner, inputClass } from "../components/ui/Field";
 import StockBadge from "../components/inventory/StockBadge";
 import { useAssets } from "../components/inventory/useAssets";
 import LoadingState from "../components/ui/LoadingState";
+import { track } from "../lib/telemetry";
+import { useDebounced } from "../lib/useDebounced";
 import {
   compareByUrgency,
   countByLevel,
@@ -33,7 +35,7 @@ const actionClass =
 
 /** `/inventory/products`: every asset with its `current_stock`, colour-coded, and a link per row to order for it. */
 export default function AssetsPage() {
-  const { assets, loading, error, retry } = useAssets();
+  const { assets, loading, error, retry } = useAssets("inventory");
   const [office, setOffice] = useState<Office | "">("");
   const [category, setCategory] = useState<AssetCategory | "">("");
   const [search, setSearch] = useState("");
@@ -52,6 +54,20 @@ export default function AssetsPage() {
       )
       .sort(compareByUrgency);
   }, [assets, office, category, level, search]);
+
+  // `search_performed` (plan, section 10): once the user has stopped changing the filters for 500 ms, never per
+  // keystroke. Only counts leave the page: how many results and how many filters, not what was typed.
+  const filtersKey = JSON.stringify([search.trim(), office, category, level]);
+  const settledFilters = useDebounced(filtersKey, 500);
+  const firstFilters = useRef(settledFilters);
+  const resultCount = useRef(visible.length);
+  resultCount.current = visible.length;
+  useEffect(() => {
+    if (settledFilters === firstFilters.current) return; // the initial, unfiltered view is not a search
+    firstFilters.current = settledFilters;
+    const filters = (JSON.parse(settledFilters) as string[]).filter(Boolean);
+    track("search_performed", { section: "inventory", result_count: resultCount.current, filter_count: filters.length });
+  }, [settledFilters]);
 
   return (
     <div className="mx-auto max-w-6xl">

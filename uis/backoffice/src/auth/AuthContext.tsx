@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { fetchMe, login as apiLogin, register as apiRegister, updateMyProfile } from "../lib/api";
 import { clearToken, getToken, onTokenChange, onTokenChangeInOtherTab } from "../lib/token";
+import { track } from "../lib/telemetry";
 import type { Me, ProfileUpdate, SignUpPayload } from "../types/auth";
 
 /**
@@ -125,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     setLoggedOut(true);
+    track("logout_completed", { reason: "user_action" }); // with the session that is ending; clearToken starts the next one
     clearToken();
   }, []);
 

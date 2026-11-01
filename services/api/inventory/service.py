@@ -13,17 +13,29 @@ the number of rows: no N+1.
 
 from __future__ import annotations
 
+import hashlib
+from decimal import ROUND_HALF_UP, Decimal
+from fractions import Fraction
+
 from sqlmodel import Session, col, func, select
 
-from .models import Asset, AssetEntry, AssetExit
+from .models import OFFICE_CURRENCY, Asset, AssetEntry, AssetExit
 from .schemas import (
     AssetBrief,
     AssetCreate,
     AssetEntryCreate,
     AssetExitCreate,
     AssetOut,
+    CostVariance,
+    OrderEffects,
     OrderOut,
 )
+
+# Cost-variance rule of docs/telemetry/telemetry-plan.md, section 5: the new unit cost is compared with the
+# weighted mean of the last BASELINE_ORDERS eligible entries (same asset, supplier and office/currency); strictly
+# more than VARIANCE_THRESHOLD_PERCENT away, up or down, is an anomaly. Fewer entries than that: no baseline.
+BASELINE_ORDERS = 5
+VARIANCE_THRESHOLD_PERCENT = 10
 
 # Correlated scalar subqueries: one SELECT returns every asset with its net stock. The sums
 # are bounded by the partition key of the CONTEXT, ``office``: an asset's stock only counts
@@ -63,9 +75,27 @@ class InsufficientStockError(Exception):
         super().__init__(f"Insufficient stock for asset '{name}'. Available: {available}, requested: {quantity}.")
 
 
+def supplier_id_for(name: str) -> str:
+    """Opaque, stable id of a supplier from its name, ignoring case and spacing ("Acme  S.L." == "acme s.l.").
+
+    Interim until the suppliers registry is the source of inventory suppliers: the commercial name must never
+    reach telemetry (schema `id`, no free text), and a hash cannot be read back as one.
+    """
+    normalised = " ".join(name.casefold().split())
+    return "sup-" + hashlib.sha256(normalised.encode("utf-8")).hexdigest()[:12]
+
+
 def _asset_out(asset: Asset, stock: int) -> AssetOut:
     return AssetOut(
-        id=asset.id, name=asset.name, sku=asset.sku, category=asset.category, office=asset.office, current_stock=stock
+        id=asset.id,
+        name=asset.name,
+        sku=asset.sku,
+        category=asset.category,
+        office=asset.office,
+        programme_id=asset.programme_id,
+        product_category=asset.product_category,
+        minimum_stock=asset.minimum_stock,
+        current_stock=stock,
     )
 
 
@@ -93,7 +123,15 @@ def create_asset(session: Session, payload: AssetCreate) -> AssetOut:
     """A new asset starts at 0 units: stock only arrives through an inbound order."""
     if _sku_exists(session, payload.sku):
         raise DuplicateSkuError(payload.sku)
-    asset = Asset(name=payload.name, sku=payload.sku, category=payload.category.value, office=payload.office.value)
+    asset = Asset(
+        name=payload.name,
+        sku=payload.sku,
+        category=payload.category.value,
+        office=payload.office.value,
+        programme_id=payload.programme_id,
+        product_category=payload.product_category.value if payload.product_category else None,
+        minimum_stock=payload.minimum_stock,
+    )
     session.add(asset)
     try:
         session.commit()
@@ -109,10 +147,19 @@ def create_asset(session: Session, payload: AssetCreate) -> AssetOut:
 
 
 def _brief(asset: Asset) -> AssetBrief:
-    return AssetBrief(id=asset.id, name=asset.name, sku=asset.sku, category=asset.category, office=asset.office)
+    return AssetBrief(
+        id=asset.id,
+        name=asset.name,
+        sku=asset.sku,
+        category=asset.category,
+        office=asset.office,
+        programme_id=asset.programme_id,
+        product_category=asset.product_category,
+        minimum_stock=asset.minimum_stock,
+    )
 
 
-def _inbound_out(entry: AssetEntry, asset: Asset) -> OrderOut:
+def _inbound_out(entry: AssetEntry, asset: Asset, effects: OrderEffects | None = None) -> OrderOut:
     return OrderOut(
         type="inbound",
         id=entry.id,
@@ -122,10 +169,14 @@ def _inbound_out(entry: AssetEntry, asset: Asset) -> OrderOut:
         created_at=entry.created_at,
         user_uuid=entry.user_uuid,
         supplier=entry.supplier,
+        supplier_id=entry.supplier_id,
+        unit_cost_minor=entry.unit_cost_minor,
+        currency=OFFICE_CURRENCY[entry.office],
+        effects=effects,
     )
 
 
-def _outbound_out(exit_: AssetExit, asset: Asset) -> OrderOut:
+def _outbound_out(exit_: AssetExit, asset: Asset, effects: OrderEffects | None = None) -> OrderOut:
     return OrderOut(
         type="outbound",
         id=exit_.id,
@@ -134,8 +185,43 @@ def _outbound_out(exit_: AssetExit, asset: Asset) -> OrderOut:
         office=exit_.office,
         created_at=exit_.created_at,
         user_uuid=exit_.user_uuid,
+        currency=OFFICE_CURRENCY[exit_.office],
         exit_type=exit_.exit_type,
         assigned_to=exit_.assigned_to,
+        effects=effects,
+    )
+
+
+def cost_variance(session: Session, asset: Asset, office: str, supplier_id: str, unit_cost_minor: int) -> CostVariance | None:
+    """The variance of a new inbound unit cost against its baseline, or None when it is within the threshold or
+    there is no baseline to compare with (never invented: fewer than BASELINE_ORDERS eligible entries, or a zero
+    reference). Called before the new entry is inserted, so the baseline is the entries *prior* to it."""
+    prior = session.exec(
+        select(AssetEntry)
+        .where(
+            AssetEntry.asset_id == asset.id,
+            AssetEntry.office == office,
+            AssetEntry.supplier_id == supplier_id,
+            col(AssetEntry.unit_cost_minor).is_not(None),
+        )
+        .order_by(col(AssetEntry.created_at).desc(), col(AssetEntry.id).desc())
+        .limit(BASELINE_ORDERS)
+    ).all()
+    if len(prior) < BASELINE_ORDERS:
+        return None
+    units = sum(entry.quantity for entry in prior)
+    weighted = Decimal(sum(entry.quantity * entry.unit_cost_minor for entry in prior)) / Decimal(units)
+    reference = int(weighted.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    if reference == 0:
+        return None
+    variance = Fraction(100 * abs(unit_cost_minor - reference), reference)  # exact: 10 % is not "more than 10 %"
+    if variance <= VARIANCE_THRESHOLD_PERCENT:
+        return None
+    return CostVariance(
+        reference_unit_cost_minor=reference,
+        baseline_order_count=BASELINE_ORDERS,
+        variance_percent=float(variance),
+        threshold_percent=VARIANCE_THRESHOLD_PERCENT,
     )
 
 
@@ -147,21 +233,42 @@ def _check_office(asset: Asset, order_office: str) -> None:
 
 
 def register_inbound(session: Session, payload: AssetEntryCreate, user_uuid: str) -> OrderOut:
-    asset = session.get(Asset, payload.asset_id)
-    if asset is None:
+    # FOR UPDATE serialises concurrent entries of the same asset (PostgreSQL), so each one sees the others in
+    # its cost baseline and in the stock it reports; SQLite ignores the clause and is single-writer anyway.
+    row = session.exec(select(Asset, _STOCK).where(Asset.id == payload.asset_id).with_for_update(of=Asset)).first()
+    if row is None:
         raise AssetNotFoundError(payload.asset_id)
-    _check_office(asset, payload.office.value)
+    asset, stock_before = row[0], int(row[1])
+    try:
+        _check_office(asset, payload.office.value)
+    except OfficeMismatchError:
+        session.rollback()  # release the lock; nothing was written
+        raise
+    supplier_id = supplier_id_for(payload.supplier)
+    variance = (
+        cost_variance(session, asset, payload.office.value, supplier_id, payload.unit_cost_minor)
+        if payload.unit_cost_minor is not None
+        else None
+    )
     entry = AssetEntry(
         asset_id=asset.id,
         quantity=payload.quantity,
         supplier=payload.supplier,
+        supplier_id=supplier_id,
+        unit_cost_minor=payload.unit_cost_minor,
         office=payload.office.value,
         user_uuid=user_uuid,
     )
     session.add(entry)
     session.commit()
     session.refresh(entry)
-    return _inbound_out(entry, asset)
+    effects = OrderEffects(
+        stock_before=stock_before,
+        stock_after=stock_before + payload.quantity,
+        minimum_stock=asset.minimum_stock,
+        cost_variance=variance,
+    )
+    return _inbound_out(entry, asset, effects)
 
 
 def register_outbound(session: Session, payload: AssetExitCreate, user_uuid: str) -> OrderOut:
@@ -191,7 +298,15 @@ def register_outbound(session: Session, payload: AssetExitCreate, user_uuid: str
     session.add(exit_)
     session.commit()
     session.refresh(exit_)
-    return _outbound_out(exit_, asset)
+    stock_after = available - payload.quantity
+    effects = OrderEffects(
+        stock_before=available,
+        stock_after=stock_after,
+        minimum_stock=asset.minimum_stock,
+        # Strict: ending exactly at the minimum is not a crossing, and once below, later exits do not repeat it.
+        threshold_crossed=asset.minimum_stock > 0 and available >= asset.minimum_stock > stock_after,
+    )
+    return _outbound_out(exit_, asset, effects)
 
 
 def list_orders(session: Session, *, office: str | None = None) -> list[OrderOut]:

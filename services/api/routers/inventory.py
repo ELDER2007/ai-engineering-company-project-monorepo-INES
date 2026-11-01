@@ -21,11 +21,34 @@ from auth.dependencies import CurrentUser, get_current_user
 from inventory import service
 from inventory.database import get_db
 from inventory.models import AssetCategory, Office
-from inventory.schemas import AssetCreate, AssetEntryCreate, AssetExitCreate, AssetOut, OrderOut
+from inventory.schemas import (
+    DIRECT_STOCK_WRITE_CODE,
+    AssetCreate,
+    AssetEntryCreate,
+    AssetExitCreate,
+    AssetOut,
+    OrderOut,
+)
 
 router = APIRouter(prefix="/inventory", tags=["inventory"], dependencies=[Depends(get_current_user)])
 
 SessionDep = Annotated[Session, Depends(get_db)]
+
+
+def _refuse_direct_stock(payload: AssetCreate | AssetEntryCreate | AssetExitCreate) -> None:
+    """Stock is derived from the orders: a body that tries to write it is refused with a 422 that names the
+    field and carries a stable code, so callers (and the telemetry) can tell it from any other validation error.
+    It goes before every other check, so one attempt is one rejection. Nothing is written."""
+    field = payload.forbidden_stock_field()
+    if field is not None:
+        raise HTTPException(
+            422,
+            detail={
+                "code": DIRECT_STOCK_WRITE_CODE,
+                "field": field,
+                "message": "Stock cannot be written directly: register an inbound or outbound order.",
+            },
+        )
 
 
 @router.get("/products", response_model=list[AssetOut])
@@ -41,6 +64,7 @@ def list_products(
 
 @router.post("/products", response_model=AssetOut, status_code=status.HTTP_201_CREATED)
 def create_product(payload: AssetCreate, session: SessionDep) -> AssetOut:
+    _refuse_direct_stock(payload)
     try:
         return service.create_asset(session, payload)
     except service.DuplicateSkuError as exc:
@@ -57,6 +81,7 @@ def get_product(asset_id: int, session: SessionDep) -> AssetOut:
 
 @router.post("/orders/inbound", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def register_inbound(payload: AssetEntryCreate, session: SessionDep, current: CurrentUser) -> OrderOut:
+    _refuse_direct_stock(payload)
     try:
         return service.register_inbound(session, payload, str(current.id))
     except service.AssetNotFoundError as exc:
@@ -67,6 +92,7 @@ def register_inbound(payload: AssetEntryCreate, session: SessionDep, current: Cu
 
 @router.post("/orders/outbound", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def register_outbound(payload: AssetExitCreate, session: SessionDep, current: CurrentUser) -> OrderOut:
+    _refuse_direct_stock(payload)
     try:
         return service.register_outbound(session, payload, str(current.id))
     except service.AssetNotFoundError as exc:
