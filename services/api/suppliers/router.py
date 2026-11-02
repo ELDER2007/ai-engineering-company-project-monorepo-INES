@@ -86,7 +86,7 @@ async def set_supplier_status(supplier_id: int, payload: SupplierStatusUpdate) -
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{supplier_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 async def delete_supplier(supplier_id: int) -> None:
     try:
         service.delete_supplier(supplier_id)

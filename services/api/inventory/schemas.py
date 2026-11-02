@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import AssetCategory, ExitType, Office
 
@@ -23,6 +23,8 @@ def _blank_to_none(value: str | None) -> str | None:
 
 
 class AssetCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # an unknown field (current_stock...) is a 422, not ignored
+
     name: str = Field(min_length=1, max_length=200)
     sku: str = Field(min_length=1, max_length=50)
     category: AssetCategory
@@ -49,6 +51,8 @@ class AssetOut(BaseModel):
 class AssetEntryCreate(BaseModel):
     """Inbound order. The author and the timestamp are set by the server."""
 
+    model_config = ConfigDict(extra="forbid")
+
     asset_id: int
     quantity: int = Field(gt=0)
     supplier: str = Field(min_length=1, max_length=200)
@@ -67,6 +71,8 @@ class AssetExitCreate(BaseModel):
     """Outbound order. ``assigned_to`` is required for an allocation and must be null for a
     consumption (business rule 3)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     asset_id: int
     quantity: int = Field(gt=0)
     exit_type: ExitType
@@ -83,21 +89,18 @@ class AssetExitCreate(BaseModel):
         return self
 
 
-class AssetBrief(BaseModel):
-    id: int
-    name: str
-    sku: str
-    category: AssetCategory
-    office: Office
-
-
 class OrderOut(BaseModel):
-    """One inbound or outbound order with its asset. ``supplier`` is set on inbound orders,
-    ``exit_type``/``assigned_to`` on outbound ones."""
+    """One inbound or outbound order. The asset is flattened to the three things an order row
+    shows (``asset_id`` to link, ``asset_name`` and ``asset_sku`` to display): its category
+    and office are not repeated (the order's own ``office`` always equals the asset's).
+    ``supplier`` is set on inbound orders, ``exit_type``/``assigned_to`` on outbound ones.
+    ``user_uuid`` is the author's id, there to be resolved with ``GET /users/directory``."""
 
     type: Literal["inbound", "outbound"]
     id: int
-    asset: AssetBrief
+    asset_id: int
+    asset_name: str
+    asset_sku: str
     quantity: int
     office: Office
     created_at: datetime

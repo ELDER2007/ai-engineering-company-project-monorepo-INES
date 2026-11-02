@@ -39,7 +39,7 @@ const asset = (over: Partial<Asset> = {}): Asset => ({
 const order = (over: Partial<InventoryOrder> = {}): InventoryOrder => ({
   type: "inbound",
   id: 1,
-  asset: { id: 1, name: "Ratón ergonómico", sku: "NXV-PER-001", category: "peripherals", office: "Valencia" },
+  asset_id: 1, asset_name: "Ratón ergonómico", asset_sku: "NXV-PER-001",
   quantity: 3,
   office: "Valencia",
   created_at: "2026-10-13T08:00:00Z",

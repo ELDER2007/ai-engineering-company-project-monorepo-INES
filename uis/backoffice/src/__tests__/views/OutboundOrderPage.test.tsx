@@ -76,7 +76,7 @@ describe("OutboundOrderPage", () => {
     });
 
     it("registers an allocation with the employee and the product's office", async () => {
-      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 2, office: "Valencia" });
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 2, office: "Valencia" });
       render(<OutboundOrderPage />);
       await choose(PAPER);
       fireEvent.change(screen.getByLabelText("Asignado a"), { target: { value: "Ana Pérez" } });
@@ -97,7 +97,7 @@ describe("OutboundOrderPage", () => {
     });
 
     it("registers a consumption without asking for an employee", async () => {
-      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 1, office: "Valencia" });
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 1, office: "Valencia" });
       render(<OutboundOrderPage />);
       await choose(PAPER);
       fireEvent.change(screen.getByLabelText("Tipo de salida"), { target: { value: "consumption" } });
@@ -144,7 +144,7 @@ describe("OutboundOrderPage", () => {
     });
 
     it("clears the whole form after a successful send and confirms it", async () => {
-      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 1, office: "Valencia" });
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 1, office: "Valencia" });
       render(<OutboundOrderPage />);
       await choose(PAPER);
       fireEvent.change(screen.getByLabelText("Asignado a"), { target: { value: "Ana" } });

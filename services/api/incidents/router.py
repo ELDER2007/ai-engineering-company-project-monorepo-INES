@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from auth.dependencies import get_current_user
 
 from . import service
-from .schemas import AnalyzeResponse
+from .schemas import AnalyzeResponse, ErrorResponse
 
 # Support-ticket data is internal: any valid session may analyze and export.
 router = APIRouter(
@@ -40,7 +40,18 @@ async def analyze_incidents(file: UploadFile) -> AnalyzeResponse:
     return service.to_response(result)
 
 
-@router.get("/results/export")
+@router.get(
+    "/results/export",
+    response_model=None,  # a file, not JSON: the contract is the text/csv response below
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The last analysis as a CSV file (`metric,value` rows), as an attachment.",
+            "content": {"text/csv": {"schema": {"type": "string"}}},
+        },
+        404: {"model": ErrorResponse, "description": "No analysis has been run yet."},
+    },
+)
 async def export_results() -> Response:
     try:
         result = service.get_last_result()

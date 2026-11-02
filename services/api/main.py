@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from auth.router import router as auth_router
 from core.config import get_allowed_origins, get_jwt_secret
 from core.errors import validation_error_handler
+from core.schemas import HealthOut
 from incidents.incident_router import router as incident_manager_router
 from incidents.router import router as incidents_router
 from inventory.database import init_db as init_inventory_db
@@ -63,6 +64,6 @@ app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+@app.get("/health", response_model=HealthOut)
+async def health() -> HealthOut:
+    return HealthOut(status="ok")

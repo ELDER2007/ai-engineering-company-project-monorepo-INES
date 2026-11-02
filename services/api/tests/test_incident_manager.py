@@ -22,6 +22,7 @@ NEW = {
     "branch": "central",
 }
 BASE = "/api/incidents"
+LIST_ITEM_FIELDS = {"id", "title", "category", "status", "origin", "branch", "created_at", "updated_at"}
 CSV = Path(__file__).resolve().parents[3] / "data" / "raw" / "incidents-nexova.csv"
 REQUIRED = ["title", "description", "category", "origin", "branch"]
 
@@ -332,21 +333,23 @@ def test_stored_incidents_cannot_break_the_lifecycle_invariants():
 
 # --- list / filters --------------------------------------------------------------------------
 
-def test_list_is_paginated_sorted_and_masks_customer_emails(seeded, client):
+def test_list_is_paginated_and_sorted(seeded, client):
     body = client.get(BASE, params={"page_size": 10}).json()
     assert (body["total"], body["pages"], len(body["items"])) == (96, 10, 10)
     created = [i["created_at"] for i in body["items"]]
     assert created == sorted(created, reverse=True)
     for item in body["items"]:
-        assert "customer_email" not in item and item["customer_email_masked"][1:4] == "***"
+        assert set(item) == LIST_ITEM_FIELDS
     assert len(client.get(BASE, params={"page": 10, "page_size": 10}).json()["items"]) == 6
     by_id = client.get(BASE, params={"sort": "id", "order": "asc", "page_size": 3}).json()["items"]
     assert [i["id"] for i in by_id] == ["NXV-000001", "NXV-000002", "NXV-000003"]
 
 
-def test_list_item_without_email_has_no_mask(empty, client):
-    create(client)
-    assert client.get(BASE).json()["items"][0]["customer_email_masked"] is None
+def test_list_rows_carry_no_email_description_or_audit_trail(empty, client):
+    create(client, customer_email="elena.smith@icloud.com")
+    row = client.get(BASE).json()["items"][0]
+    assert set(row) == LIST_ITEM_FIELDS
+    assert "icloud" not in str(row) and "elena" not in str(row)  # not even masked: the table never shows it
 
 
 def test_filters_combine_with_and(seeded, client):

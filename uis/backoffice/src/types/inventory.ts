@@ -35,16 +35,16 @@ export interface Asset {
 /** POST /inventory/products. `current_stock` is never sent: it is computed from the orders. */
 export type AssetCreate = Omit<Asset, "id" | "current_stock">;
 
-/** The asset as embedded in an order (no stock). */
-export type AssetBrief = Omit<Asset, "current_stock">;
-
 export type OrderType = "inbound" | "outbound";
 
 /** GET /inventory/orders: one entry (inbound) or exit (outbound). `supplier` is set only on inbound, `exit_type` and `assigned_to` only on outbound. */
 export interface InventoryOrder {
   type: OrderType;
   id: number;
-  asset: AssetBrief;
+  /** The asset is flat: the id to link, the name and the SKU to show. */
+  asset_id: number;
+  asset_name: string;
+  asset_sku: string;
   quantity: number;
   office: Office;
   created_at: string;

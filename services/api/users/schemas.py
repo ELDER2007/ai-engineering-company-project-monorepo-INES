@@ -123,8 +123,11 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
-class SignUpOut(UserOut):
-    """Answer of the public sign-up: the new (active) user and what happens next."""
+class SignUpOut(BaseModel):
+    """Answer of the public sign-up: a generic confirmation and nothing else. The email is in
+    the request and is not sent back (an unauthenticated flow must not echo it); the role
+    (always ``user``), the state (always active), the id and ``created_at`` are not echoed
+    either. The client signs in next, with the credentials it already has."""
 
     message: str
 

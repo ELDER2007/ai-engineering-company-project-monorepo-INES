@@ -27,8 +27,8 @@ const MARTA = "6f1c2b7e-1111-4000-8000-000000000001";
 const NIL = "00000000-0000-0000-0000-000000000000";
 const PAPER = { id: 5, name: "Resma de papel A4", sku: "NXV-OFF-001", category: "office_supplies", office: "Valencia" };
 const ORDERS = [
-  { type: "inbound", id: 1, asset: PAPER, quantity: 100, office: "Valencia", created_at: "2026-10-12T08:00:00Z", user_uuid: NIL, supplier: "Office Depot Miami", exit_type: null, assigned_to: null },
-  { type: "outbound", id: 1, asset: PAPER, quantity: 20, office: "Valencia", created_at: "2026-10-13T09:30:00Z", user_uuid: MARTA, supplier: null, exit_type: "allocation", assigned_to: "Ana Pérez" },
+  { type: "inbound", id: 1, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 100, office: "Valencia", created_at: "2026-10-12T08:00:00Z", user_uuid: NIL, supplier: "Office Depot Miami", exit_type: null, assigned_to: null },
+  { type: "outbound", id: 1, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 20, office: "Valencia", created_at: "2026-10-13T09:30:00Z", user_uuid: MARTA, supplier: null, exit_type: "allocation", assigned_to: "Ana Pérez" },
 ];
 
 beforeEach(() => {

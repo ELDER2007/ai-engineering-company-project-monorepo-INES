@@ -153,7 +153,7 @@ def delete_supplier(supplier_id: int) -> None:
 
 
 def _to_out(doc) -> SupplierOut:
-    return SupplierOut(id=doc.doc_id, **doc)
+    return SupplierOut.model_validate({**doc, "id": doc.doc_id})
 
 
 # Seed immediately on import so the directory is never empty (see docstring).

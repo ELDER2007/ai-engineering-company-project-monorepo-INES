@@ -56,7 +56,7 @@ beforeEach(() => {
 describe("InboundOrderPage", () => {
   describe("happy path", () => {
     it("lists the assets by name (never asks for a raw id) and sends the entry with the asset's office", async () => {
-      mockCreate.mockResolvedValue({ type: "inbound", id: 7, asset: HUB, quantity: 10, office: "Miami" });
+      mockCreate.mockResolvedValue({ type: "inbound", id: 7, asset_id: HUB.id, asset_name: HUB.name, asset_sku: HUB.sku, quantity: 10, office: "Miami" });
       render(<InboundOrderPage />);
       await choose();
 
@@ -69,7 +69,7 @@ describe("InboundOrderPage", () => {
     });
 
     it("clears the form and confirms after a successful send", async () => {
-      mockCreate.mockResolvedValue({ type: "inbound", id: 7, asset: HUB, quantity: 10, office: "Miami" });
+      mockCreate.mockResolvedValue({ type: "inbound", id: 7, asset_id: HUB.id, asset_name: HUB.name, asset_sku: HUB.sku, quantity: 10, office: "Miami" });
       render(<InboundOrderPage />);
       await choose();
 

@@ -17,7 +17,8 @@ from .fields import ADDRESS_MAX, NAME_MAX, PHONE_PATTERN
 
 
 class Profile(BaseModel):
-    """The document stored in TinyDB (``profiles/db.json``) and what the API returns.
+    """The document stored in TinyDB (``profiles/db.json``). Never returned as is: the API
+    answers with ``ProfileMe`` or ``ProfileOut``, which leave the internal ``id`` out.
     ``name`` is required; the rest is optional."""
 
     id: UUID = Field(default_factory=uuid4)
@@ -26,6 +27,46 @@ class Profile(BaseModel):
     contact_email: EmailStr | None = None
     phone: str | None = None
     address: str | None = None
+
+
+class ProfileMe(BaseModel):
+    """Your own profile (``/auth/me``, ``/profiles/me``): the editable data and nothing else.
+    No ``id`` (storage key) and no ``user_id`` (it is the session's own id)."""
+
+    name: str
+    contact_email: EmailStr | None
+    phone: str | None
+    address: str | None
+
+    @classmethod
+    def from_profile(cls, profile: Profile) -> ProfileMe:
+        return cls(
+            name=profile.name,
+            contact_email=profile.contact_email,
+            phone=profile.phone,
+            address=profile.address,
+        )
+
+
+class ProfileOut(BaseModel):
+    """A profile addressed by user (``/profiles`` for admins, ``/profiles/{user_id}``):
+    ``user_id`` says whose it is. The profile's own storage ``id`` never leaves the API."""
+
+    user_id: UUID
+    name: str
+    contact_email: EmailStr | None
+    phone: str | None
+    address: str | None
+
+    @classmethod
+    def from_profile(cls, profile: Profile) -> ProfileOut:
+        return cls(
+            user_id=profile.user_id,
+            name=profile.name,
+            contact_email=profile.contact_email,
+            phone=profile.phone,
+            address=profile.address,
+        )
 
 
 class ProfileUpdate(BaseModel):

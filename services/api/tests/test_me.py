@@ -29,7 +29,8 @@ async def test_it_returns_the_account_of_the_session_with_its_profile(async_clie
     assert response.status_code == 200
     body = response.json()
     assert (body["id"], body["email"], body["role"]) == (str(uuid_of(ALICE)), ALICE, "admin")
-    assert body["profile"]["user_id"] == body["id"] and body["profile"]["name"] == "alice"
+    assert body["profile"]["name"] == "alice"
+    assert set(body["profile"]) == {"name", "contact_email", "phone", "address"}  # no storage id, no user_id
 
 
 @pytest.mark.parametrize(("email", "role"), [(ALICE, "admin"), (BOB, "user"), (CAROL, "user")])
@@ -37,7 +38,7 @@ async def test_every_account_sees_its_own_data_and_nobody_elses(async_client, em
     body = (await me(async_client, email)).json()
 
     assert (body["id"], body["email"], body["role"]) == (str(uuid_of(email)), email, role)
-    assert body["profile"]["user_id"] == str(uuid_of(email))
+    assert body["profile"]["name"] == email.split("@")[0]
 
 
 async def test_the_password_and_its_hash_are_never_part_of_the_answer(async_client, users_db):
