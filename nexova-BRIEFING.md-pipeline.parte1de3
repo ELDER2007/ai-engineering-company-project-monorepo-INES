@@ -127,4 +127,3 @@ Expón el resultado de este pipeline a través de un módulo **nuevo**, `service
 - Nunca mezcles monedas en una sola fila agregada — `EUR` (Valencia) y `USD` (Miami) se reportan por separado, lado a lado, no sumados entre sí.
 - Este pipeline lee `telemetry_events` en **modo solo lectura**. Nunca escribe de vuelta ahí.
 - `services/telemetry/analysis.py` y `GET /telemetry/report` quedan fuera del alcance de este hito — no los modifiques.
-
