@@ -39,3 +39,6 @@ results.csv
 *.log
 npm-debug.log*
 dist-ssr/
+
+# Local pipeline databases (SQLite fallback)
+data/.local/
