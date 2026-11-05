@@ -118,6 +118,9 @@ Protection is applied on the routers themselves (`dependencies=[Depends(get_curr
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime in minutes (default `30`). An invalid value (`0`, negative, not an integer) stops the API at startup. |
 | `AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` | Creates the first user on startup, only if the user store is empty. |
 | `DATABASE_URL` | SQL connection for the inventory: the Supabase *Transaction pooler* URI. If unset, a local SQLite file is used (development only). Users and sessions never use it. |
+| `TELEMETRY_HMAC_KEY` | Key of the telemetry `userId` pseudonym (HMAC-SHA256), at least 32 characters, separate per environment and stable while the events are kept. If unset it is derived from `SECRET_KEY` (development only: the pseudonyms change whenever `SECRET_KEY` does). |
+| `TELEMETRY_ENDPOINT` | Informational: an external collector. Logged at startup, **not used**: this API stores the events itself and forwards nothing. Not the frontend's `NEXT_PUBLIC_TELEMETRY_ENDPOINT`, which is where the browser posts (this receiver). |
+| `TELEMETRY_SCHEMA_PATH` | The event contract the receiver validates against. Default: `docs/telemetry/event-schemas.json` of this repo. |
 
 Without them the API starts with no users; create one with `uv run create-user --email <email>` (prompts for the password).
 
@@ -147,6 +150,65 @@ Connection: set `DATABASE_URL` in `.env` to the Supabase **Transaction pooler** 
 uv run seed-inventory            # seed only if the inventory is empty
 uv run seed-inventory --reset    # wipe assets and orders, then reload
 ```
+
+### Telemetry hooks of the inventory
+
+The classification and the facts the telemetry needs live in the inventory, not in the browser
+([docs/telemetry/](../../docs/telemetry/README.md)):
+
+- **An asset carries** `programme_id`, `product_category` (`training_kit` / `certification` / `onboarding_equipment`, a business
+  classification kept apart from the legacy `category`) and `minimum_stock` (`0` switches the alert off). All optional: an
+  asset without a programme or category is **not classified** and emits no inventory events (nothing is invented). The seed
+  classifies what is obvious and leaves the paper unclassified on purpose; Elena validates the proposal.
+- **An inbound order carries** `unit_cost_minor` (cents of the office's currency: EUR for Valencia, USD for Miami, never converted)
+  and a `supplier_id` the API derives from the supplier text (`sup-` + 12 hex of a hash of the normalised name; interim until
+  the suppliers registry feeds the inventory). The name itself never reaches the telemetry.
+- **The response that creates an order has `effects`**, computed in the order's transaction: `stock_before`, `stock_after`,
+  `minimum_stock`, `threshold_crossed` (outbound: stock went from `>= minimum` to `< minimum`, strict, not repeated while it stays
+  below) and `cost_variance` (inbound: the unit cost is more than 10 % away, up or down, from the quantity-weighted mean of the
+  last 5 entries of the same asset, supplier and office, rounded half up; fewer than 5 eligible entries means no baseline).
+  Listings never carry `effects`.
+- **A body with `stock` or `current_stock`** on `POST /inventory/products`, `/orders/inbound` or `/orders/outbound` is refused with
+  `422` and `detail = {code: "direct_stock_write_forbidden", field, message}` before any other check, instead of being ignored.
+- **Older databases** get the new columns at startup (`add_missing_columns`, additive `ALTER TABLE ADD COLUMN`; nothing is dropped,
+  retyped or backfilled; existing assets stay unclassified until someone classifies them).
+
+## Telemetry receiver (`telemetry/`)
+
+`POST /telemetry/events` takes a batch `{"events": [...]}` (at most 100 events / 256 KB) from the backoffice and answers **200**
+`{"received", "accepted", "rejected": [{index, event_id, path, rule, detail}]}`. The valid events are
+**stored** (see "Storage" below) before the 200 is sent, and it logs how many events arrived and the type of each. The envelope is the
+Pydantic model `TelemetryEvent` (`telemetry/schemas.py`, with `TelemetryBatch`). Every event is
+validated first against that model and then against `docs/telemetry/event-schemas.json` (Draft 2020-12, `format` checked); a
+bad event is reported in `rejected` without costing the good ones, and a rejection names the field and the rule, never the value.
+The server stamps what a browser cannot be trusted with: `userId` is the HMAC pseudonym of the bearer token's user (null without a
+valid token) and the inventory events are sourced `inventory_api`. The endpoint is public (a `sendBeacon` cannot carry
+`Authorization`; website visitors are anonymous) and reads the body whatever its `Content-Type` (a beacon sends `text/plain`).
+The URL, request and response are the ones of the stub the frontend was built against, so the frontend did not change.
+
+### Storage (`telemetry/models.py`, `telemetry/store.py`)
+
+Events go to **one immutable table, `telemetry_events`**, in the same SQL store as the inventory (`DATABASE_URL`: Supabase/PostgreSQL,
+or the local SQLite fallback). `init_db()` creates it at startup if it is missing; the SQL to create it by hand in Supabase is
+[docs/telemetry/telemetry_events.sql](../../docs/telemetry/telemetry_events.sql). No new database, as the plan asks (section 12).
+
+| Column | Content |
+|---|---|
+| `event_id` (PK) | The envelope's `eventId`. A delivery retry carries the same id, so it is stored once (`INSERT ... ON CONFLICT DO NOTHING`). |
+| `event_type`, `timestamp`, `service` | The fixed columns of the analytical queries. `timestamp` is when the event happened (UTC); `service` is the envelope's `source`, as the server stamped it, never what the browser declared. |
+| `user_id`, `session_id`, `environment` | The rest of the identity. `user_id` is the HMAC pseudonym, never the operational id. |
+| `tags` (JSONB) | The envelope's `properties`, unchanged: already the closed allowlist of the event type, so a new property needs no schema change. The dimensions of the briefing (`office`, `programme_id`, `product_id`, `product_category`, `currency`, `quantity`) live here and are searched with the GIN index. |
+
+Three indexes: `timestamp`, `event_type` and a **GIN on `tags`** (PostgreSQL only). `requestId` and `schemaVersion` of the envelope are
+validated but not stored. The table is **immutable**: the application only INSERTs (a test fails if update or delete logic appears in
+`telemetry/`). Retention (the plan proposes 90 days, pending approval) is not implemented: it would need its own reviewed job.
+
+The whole valid part of a batch is written in **one statement and one transaction** (bulk insert). The answer is
+`{"received", "accepted", "stored", "rejected": [...]}`: `stored` is the rows really written (`accepted - stored` = events an earlier
+delivery had already stored) and `rejected` stays a list of `{index, event_id, path, rule, detail}`, which is what the frontend already
+reads. If the database fails the answer is **503** and nothing is acknowledged: the frontend retries the same batch (same ids), which is
+safe. Only the valid events are stored; the rejected ones are reported and kept nowhere. Aggregates, reports and read access for Elena,
+Laura and Patricia are not part of this storage phase.
 
 ## Endpoints
 
