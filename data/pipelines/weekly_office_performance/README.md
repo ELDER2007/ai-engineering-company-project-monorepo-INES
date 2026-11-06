@@ -1,30 +1,33 @@
 # weekly_office_performance
 
-Pipeline Prefect del "Reporte Semanal de Desempeño por Oficina y Programa". Diseño: [`../PIPELINE_DESIGN.md`](../PIPELINE_DESIGN.md).
+Pipeline Prefect del "Reporte Semanal de Desempeño por Oficina y Programa". Especificación: [`../PIPELINE_DESIGN.md`](../PIPELINE_DESIGN.md). Punto de entrada: [`../pipeline.py`](../pipeline.py).
 
 | Pieza | Archivo |
 | --- | --- |
-| Flow + tasks (orquestación) | `flow.py` |
-| Lógica pura (agregación, validación) | `data/process/weekly_performance.py` |
-| Tablas / conexiones (`reporting`) | `storage.py`, `sql/001_reporting_schema.sql` |
-| Datos demo de telemetría (solo dev local) | `seed_telemetry.py` |
+| Flow + tasks (orquestación) | `data/pipelines/pipeline.py` |
+| Cálculos puros (validar, deduplicar, agregar, conciliar) | `data/process/weekly_performance.py` |
+| Todo el SQL | `repository.py` |
+| Tablas del esquema `reporting`, conexiones | `storage.py`, `sql/001_reporting_schema.sql` |
+| Lo único que `services/` puede importar | `interface.py` |
+| Datos demo (solo local y tests) | `seed_telemetry.py` |
 
-## Ejecutar (desde la raíz del repo)
+## Probarlo (desde la raíz del repo)
 
 ```bash
 cd services/api && uv sync && cd ../..
-services/api/.venv/bin/python -m data.pipelines.weekly_office_performance --seed --week-start 2026-10-26
+services/api/.venv/bin/python -m data.pipelines.pipeline --demo --week-start 2026-10-26
 ```
 
-Sin `DATABASE_URL` usa un SQLite local en `data/.local/` (gitignored). Con `DATABASE_URL`
-(o `REPORTING_DATABASE_URL` / `TELEMETRY_DATABASE_URL` por separado) usa PostgreSQL/Supabase;
-ahí aplica antes `sql/001_reporting_schema.sql` (o deja que la API cree el esquema al arrancar).
+`--demo` usa una base de datos desechable (`data/.local/demo.sqlite`) con eventos de ejemplo, nunca la de la aplicación.
+Sin `--demo` lee `telemetry_events` de la base de la API (`DATABASE_URL`, o su SQLite local) en modo solo lectura, y por defecto solo del entorno `production`
+(`--environment` o `PIPELINE_ENVIRONMENT` para cambiarlo).
 
-Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corrida. Para
-programarlo cada lunes 05:00 UTC hace falta un servidor/worker y un deployment (pendiente).
+Cada corrida deja: una fila en `reporting.pipeline_runs`, la copia de los eventos leídos en `data/raw/` y un informe en `data/eval/`.
 
-## API
+Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corrida.
 
-`GET /reporting/weekly-office-program-performance`, `GET /reporting/pipeline-runs/latest`,
-`POST /reporting/pipeline-runs` (módulo `services/api/reporting/`). Tests: `services/api/tests/test_reporting.py`
-y `test_weekly_performance.py`.
+## Tests
+
+```bash
+cd services/api && uv run pytest tests/test_weekly_performance.py tests/test_reporting.py tests/test_pipeline_resilience.py
+```

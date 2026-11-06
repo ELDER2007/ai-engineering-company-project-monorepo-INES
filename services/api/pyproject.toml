@@ -22,7 +22,7 @@ dependencies = [
     "jsonschema>=4.21",
     "rfc3339-validator>=0.1.4",
     "pandas>=2.2",
-    "prefect>=3.0",
+    "prefect>=3",
 ]
 
 [dependency-groups]

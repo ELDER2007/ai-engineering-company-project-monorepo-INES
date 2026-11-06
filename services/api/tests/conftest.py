@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import os
+
+os.environ.setdefault("PIPELINE_RETRIES", "0")  # the pipeline's retry back-off (5/30/120 s) would make failure tests take minutes
+
+import os
 import time
 import base64
 import json

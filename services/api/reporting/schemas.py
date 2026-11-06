@@ -1,4 +1,4 @@
-"""Request/response shapes of the reporting API."""
+"""Request/response shapes of the reporting API (the vocabulary of the Nexova briefing)."""
 
 from __future__ import annotations
 
@@ -24,20 +24,27 @@ class WeeklyReport(BaseModel):
 
 
 class PipelineRunOut(BaseModel):
+    """One row of the execution log."""
+
     id: str
     flow_name: str
-    trigger: str
-    state: str
-    week_start: date | None
+    trigger: Literal["scheduled", "manual"]
+    prefect_flow_run_id: str | None
+    week_start: date
+    environment: str
+    state: Literal["Running", "Completed", "Failed", "Crashed", "Skipped"]
+    started_at: datetime
+    finished_at: datetime | None
     events_read: int
+    window_events_total: int
     rejected_count: int
     rows_written: int
+    rows_changed: int
+    rows_deleted: int
     error: str | None
-    started_at: datetime
-    finished_at: datetime
 
 
 class PipelineRunCreate(BaseModel):
-    """Body of ``POST /reporting/pipeline-runs``. Optional: omit to run the last complete week."""
+    """Body of ``POST /reporting/pipeline-runs``. Optional: omit it to run the last complete week."""
 
     week_start: date | None = None

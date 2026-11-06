@@ -1,13 +1,14 @@
 """Storage of the pipeline: the read-only telemetry source and the ``reporting`` schema.
 
-* ``telemetry_events`` is only ever *read* (SELECT). The table is owned by the telemetry domain.
+* ``telemetry_events`` is only ever *read* (SELECT). It is owned by the telemetry domain
+  (``services/api/telemetry/models.py``); the definition below mirrors its real columns and is used to build the
+  queries and, for local demos only, to create a throw-away copy. The pipeline never writes to it in production.
 * Everything the pipeline writes lives under the dedicated ``reporting`` schema.
 
-PostgreSQL/Supabase is the real target. SQLite is the local fallback (same idea as the
-inventory domain): since SQLite has no schemas, ``reporting`` is emulated by attaching a
-second database file under that name, so the very same ``reporting.<table>`` SQL runs on both.
+PostgreSQL/Supabase is the real target. SQLite is the local fallback: since SQLite has no schemas, ``reporting`` is
+emulated by attaching a second database file under that name, so the same ``reporting.<table>`` SQL runs on both.
 
-Engines are always passed in by the caller; nothing here imports from ``services/``.
+Engines are built from connection strings here, and passed in by callers; nothing imports from ``services/``.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Index,
     Integer,
     MetaData,
     Numeric,
@@ -31,20 +33,26 @@ from sqlalchemy import (
     event,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 
 REPORTING_SCHEMA = "reporting"
 _SQLITE_PREFIX = "sqlite:///"
+DEFAULT_ENVIRONMENT = "production"
 
-# Read-only view of the source. Only the columns the pipeline needs.
-# ASSUMPTION (see PIPELINE_DESIGN.md, open questions): telemetry_events has these columns.
+# Read-only mirror of services/api/telemetry/models.py (8 columns). `tags` is the event's `properties`.
 source_metadata = MetaData()
 telemetry_events = Table(
     "telemetry_events",
     source_metadata,
-    Column("event_type", String, nullable=False),
-    Column("occurred_at", DateTime(timezone=True), nullable=False),
-    Column("properties", JSON, nullable=False),
+    Column("event_id", String(36), primary_key=True),
+    Column("event_type", String(64), nullable=False, index=True),
+    Column("timestamp", DateTime(timezone=True), nullable=False, index=True),
+    Column("service", String(16), nullable=False),
+    Column("user_id", String(64)),
+    Column("session_id", String(36)),
+    Column("environment", String(16), nullable=False),
+    Column("tags", JSON().with_variant(JSONB(), "postgresql"), nullable=False),
 )
 
 metadata = MetaData(schema=REPORTING_SCHEMA)
@@ -65,41 +73,67 @@ weekly_performance = Table(
     UniqueConstraint("office", "programme_id", "week_start", name="uq_weekly_office_program_week"),
 )
 
+# One row per run (the execution log, PIPELINE_DESIGN.md section 5.2).
 pipeline_runs = Table(
     "pipeline_runs",
     metadata,
     Column("id", Uuid, primary_key=True),
     Column("flow_name", String, nullable=False),
-    Column("trigger", String, nullable=False),  # "scheduled" | "manual"
-    Column("state", String, nullable=False),  # "Completed" | "Failed"
-    Column("week_start", Date, nullable=True),
+    Column("trigger", String, nullable=False),  # scheduled | manual
+    Column("prefect_flow_run_id", String),
+    Column("week_start", Date, nullable=False),
+    Column("environment", String, nullable=False),  # which telemetry environment was read
+    Column("state", String, nullable=False),  # Running | Completed | Failed | Crashed | Skipped
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True)),
     Column("events_read", Integer, nullable=False, default=0),
+    Column("window_events_total", Integer, nullable=False, default=0),
     Column("rejected_count", Integer, nullable=False, default=0),
     Column("rows_written", Integer, nullable=False, default=0),
-    Column("error", String, nullable=True),
-    Column("started_at", DateTime(timezone=True), nullable=False),
-    Column("finished_at", DateTime(timezone=True), nullable=False),
+    Column("rows_changed", Integer, nullable=False, default=0),
+    Column("rows_deleted", Integer, nullable=False, default=0),
+    Column("error", String),
+    # The lock: the database itself refuses a second `Running` run of the same week (no check-then-insert race).
+    Index(
+        "uq_pipeline_runs_one_running_per_week",
+        "flow_name",
+        "week_start",
+        unique=True,
+        sqlite_where=text("state = 'Running'"),
+        postgresql_where=text("state = 'Running'"),
+    ),
 )
 
 UPSERT_CONFLICT_COLUMNS = ("office", "programme_id", "week_start")
 
 
-def default_local_url() -> str:
-    """SQLite file used when no DATABASE_URL is configured (gitignored)."""
-    path = Path(__file__).resolve().parents[2] / ".local" / "pipeline.sqlite"
+def app_local_url() -> str:
+    """The SQLite file the API uses when DATABASE_URL is not set (where its telemetry lives in local development)."""
+    return f"{_SQLITE_PREFIX}{Path(__file__).resolve().parents[3] / 'services' / 'api' / 'inventory' / 'db.sqlite'}"
+
+
+def demo_url() -> str:
+    """A throw-away SQLite file for ``--demo`` runs: never the app's own database."""
+    path = Path(__file__).resolve().parents[2] / ".local" / "demo.sqlite"
     path.parent.mkdir(parents=True, exist_ok=True)
     return f"{_SQLITE_PREFIX}{path}"
 
 
 def database_url(env: str = "DATABASE_URL") -> str:
-    """Connection string from the environment, with the same fallback the API uses."""
+    """Connection string: ``env``, else DATABASE_URL, else the API's local SQLite file."""
     raw = os.environ.get(env, "").strip() or os.environ.get("DATABASE_URL", "").strip()
     if not raw:
-        return default_local_url()
+        return app_local_url()
     for scheme in ("postgres://", "postgresql://"):
         if raw.startswith(scheme):
             return "postgresql+psycopg2://" + raw[len(scheme):]
     return raw
+
+
+def default_environment() -> str:
+    """Telemetry environment to report on (PIPELINE_ENVIRONMENT, default ``production``): test and development
+    events must never reach a report the CEO reads."""
+    return os.environ.get("PIPELINE_ENVIRONMENT", "").strip() or DEFAULT_ENVIRONMENT
 
 
 def build_engine(url: str) -> Engine:
