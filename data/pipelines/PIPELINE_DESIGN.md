@@ -458,7 +458,7 @@ Regla de dependencia: `services/reporting/` importa de `data/pipelines/`; nunca 
 | # | Para qué | Endpoint | Llama a (en `data/pipelines/`) | Acceso |
 | --- | --- | --- | --- | --- |
 | 1 | **Consulta de estado** | `GET /reporting/pipeline-runs/latest` | `interface.get_latest_run(engine)` | sesión válida |
-| 2 | **Disparo manual** | `POST /reporting/pipeline-runs` | `interface.run_weekly_office_performance(week_start, trigger="manual")` → ejecuta el flow `weekly_office_performance_flow` | solo `admin` |
+| 2 | **Disparo manual** | `POST /reporting/pipeline-runs` | `interface.run_weekly_office_performance(target_engine=…, source_engine=…, week_start=…)` → ejecuta el flow `weekly_office_performance_flow` con `trigger="manual"` | solo `admin` |
 | 3 | **Consulta de KPIs** (feed del dashboard de la Parte 3) | `GET /reporting/weekly-office-program-performance?week_start=` | `interface.get_weekly_performance(engine, week_start)` | sesión válida |
 
 Las tres funciones que `services/reporting/router.py` importa, y nada más de `data/pipelines/`:
@@ -478,10 +478,12 @@ Todos separados de `telemetry_events`, de `services/telemetry/` y de `GET /telem
 ```json
 {
   "id": "5d0e…", "flow_name": "weekly-office-performance", "trigger": "scheduled",
-  "state": "Completed", "week_start": "2026-10-26",
-  "events_read": 31, "rejected_count": 0, "rows_written": 5, "rows_deleted": 0,
-  "error": null,
-  "started_at": "2026-11-02T05:00:03Z", "finished_at": "2026-11-02T05:00:09Z"
+  "prefect_flow_run_id": "9b1c…", "week_start": "2026-10-26", "environment": "production",
+  "state": "Completed",
+  "started_at": "2026-11-02T05:00:03Z", "finished_at": "2026-11-02T05:00:09Z",
+  "events_read": 17, "window_events_total": 18, "rejected_count": 0,
+  "rows_written": 5, "rows_changed": 0, "rows_deleted": 0,
+  "error": null, "warnings": null
 }
 ```
 Errores: `404` si el pipeline nunca ha corrido; `401`/`403` sin sesión.
