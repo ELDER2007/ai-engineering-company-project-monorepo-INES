@@ -260,7 +260,14 @@ Solo se guardan en caché las tasks que terminaron `Completed`: un fallo nunca s
 
 ### 4.2e Línea de comandos
 
-`python data/pipelines/pipeline.py [--week-start AAAA-MM-DD] [--environment production] [--refresh] [--trigger manual|scheduled] [--demo]`. Código de salida `0` si termina (o si se omite porque la semana ya corre) y `1` si falla, para que un programador de tareas lo detecte.
+```bash
+python data/pipelines/pipeline.py                      # la última semana ISO completa
+python data/pipelines/pipeline.py --week-start 2026-10-26 --refresh
+```
+
+Opciones: `[--week-start AAAA-MM-DD] [--environment production] [--refresh] [--trigger manual|scheduled] [--demo]`. Funciona desde cualquier carpeta y también como `python -m data.pipelines.pipeline` desde la raíz. Código de salida `0` si termina (o si se omite porque la semana ya corre) y `1` si falla, para que un programador de tareas lo detecte.
+
+Sin argumentos lee la telemetría que guarda la API (`DATABASE_URL`, o su SQLite local). **En un clon limpio** (sin `DATABASE_URL` y sin telemetría local todavía) lo avisa por pantalla y usa los datos de demostración, para que el comando se pueda ejecutar de punta a punta. Con una base de datos configurada nunca hace eso: un fallo real debe seguir siendo un fallo.
 
 ### 4.3 Subflows
 
@@ -295,12 +302,25 @@ Reglas de negocio sobre fallos:
 - No hay block de configuración (`JSON`) en v1: reintentos y zona horaria (UTC) son constantes del código y no sostienen ningún KPI.
 - Fuera de la v1: un block de notificación (Slack o correo) para avisar de un `Failed` cuando Laura y Elena dependan del reporte (ver 8b).
 
-### 4.6 Programación (deployment)
+### 4.6 Frecuencia del ciclo de reporting y programación
 
-- Deployment `weekly-office-performance` sobre un *work pool* de tipo `process`.
-- Schedule cron `0 5 * * 1` en UTC (lunes 05:00), con `week_start=None` y `trigger="scheduled"`.
-- **Corrida de corrección:** un segundo cron, jueves 05:00 UTC, recalcula la semana anterior para absorber eventos tardíos (anexo, I-3). Después, cualquier cambio se hace solo con un `POST` manual.
-- El `POST /reporting/pipeline-runs` lanza el mismo flow con `trigger="manual"` y, opcionalmente, un `week_start`.
+**Ciclo de reporting de Nexova: semanal.** Laura (CEO) y Elena (L&D) leen el "Reporte Semanal de Desempeño por Oficina y Programa" cada **lunes por la mañana**, sobre la semana ISO que acaba de cerrar (lunes a domingo, UTC). Por eso el pipeline corre una vez por semana, no cada día:
+
+| Corrida | Cuándo | Qué hace |
+| --- | --- | --- |
+| **Programada** | Cada **lunes 05:00 UTC** (cron `0 5 * * 1`), lista antes de las 06:00 UTC | Calcula la semana que acaba de cerrar |
+| **De corrección** | Cada **jueves 05:00 UTC** (cron `0 5 * * 4`) | Recalcula esa misma semana para absorber eventos tardíos (anexo, I-3) |
+| **Manual** | Cuando un administrador la pide (`POST /reporting/pipeline-runs`) | Recalcula una semana concreta, ignorando la caché |
+
+**Comando de ejecución** (el mismo para las tres; solo cambian los argumentos):
+
+```bash
+python data/pipelines/pipeline.py --trigger scheduled   # lunes 05:00 UTC; la semana por defecto es la última completa
+python data/pipelines/pipeline.py --trigger scheduled --refresh   # jueves 05:00 UTC: ignora la caché de 1 h
+python data/pipelines/pipeline.py --week-start 2026-10-26 --refresh   # reproceso de una semana concreta
+```
+
+Con Prefect, el equivalente es un *deployment* `weekly-office-performance` sobre un *work pool* de tipo `process`, con esos dos crons en UTC, `week_start=None` y `trigger="scheduled"`. Se ejecuta con el script de arriba mientras no haya un servidor de Prefect desplegado. El `POST /reporting/pipeline-runs` lanza el mismo flow con `trigger="manual"` y, opcionalmente, un `week_start`.
 
 ## 5. Robustez: idempotencia, observabilidad, recuperabilidad
 

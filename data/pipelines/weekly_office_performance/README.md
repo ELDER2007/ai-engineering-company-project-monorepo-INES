@@ -24,10 +24,12 @@ Pipeline Prefect del "Reporte Semanal de Desempeño por Oficina y Programa". Esp
 
 ```bash
 cd services/api && uv sync && cd ../..
-services/api/.venv/bin/python data/pipelines/pipeline.py --demo --week-start 2026-10-26
+services/api/.venv/bin/python data/pipelines/pipeline.py
 ```
 
-`--demo` usa una base de datos desechable (`data/.local/demo.sqlite`) con eventos de ejemplo, nunca la de la aplicación.
+Sin argumentos lee la última semana completa. En un clon limpio (sin `DATABASE_URL` y sin telemetría local) lo avisa y usa datos de demostración, para que el comando funcione siempre.
+
+`--demo` fuerza una base de datos desechable (`data/.local/demo.sqlite`) con eventos de ejemplo, nunca la de la aplicación.
 Sin `--demo` lee `telemetry_events` de la base de la API (`DATABASE_URL`, o su SQLite local) en modo solo lectura, y por defecto solo del entorno `production`
 (`--environment` o `PIPELINE_ENVIRONMENT` para cambiarlo).
 

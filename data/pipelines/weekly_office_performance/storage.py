@@ -14,6 +14,7 @@ Engines are built from connection strings here, and passed in by callers; nothin
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 from sqlalchemy import (
@@ -108,9 +109,34 @@ pipeline_runs = Table(
 UPSERT_CONFLICT_COLUMNS = ("office", "programme_id", "week_start")
 
 
+def _app_local_path() -> Path:
+    """The SQLite file the API uses when DATABASE_URL is not set (PIPELINE_LOCAL_DB overrides it, for tests)."""
+    return Path(os.environ.get("PIPELINE_LOCAL_DB") or Path(__file__).resolve().parents[3] / "services" / "api" / "inventory" / "db.sqlite")
+
+
 def app_local_url() -> str:
-    """The SQLite file the API uses when DATABASE_URL is not set (where its telemetry lives in local development)."""
-    return f"{_SQLITE_PREFIX}{Path(__file__).resolve().parents[3] / 'services' / 'api' / 'inventory' / 'db.sqlite'}"
+    """Where the API's telemetry lives in local development."""
+    return f"{_SQLITE_PREFIX}{_app_local_path()}"
+
+
+def database_configured() -> bool:
+    """True when a real database was configured through the environment (DATABASE_URL or TELEMETRY_DATABASE_URL)."""
+    return bool(os.environ.get("TELEMETRY_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip())
+
+
+def local_telemetry_available() -> bool:
+    """Does the API's local SQLite file already hold ``telemetry_events``? Opened read-only, so asking never creates the file."""
+    path = _app_local_path()
+    if not path.exists():
+        return False
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return connection.execute("select 1 from sqlite_master where type = 'table' and name = 'telemetry_events'").fetchone() is not None
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return False
 
 
 def demo_url() -> str:

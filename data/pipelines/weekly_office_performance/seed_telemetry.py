@@ -9,7 +9,7 @@ database: ``python -m data.pipelines.pipeline --demo`` works on a throw-away fil
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import delete
 from sqlalchemy.engine import Engine
@@ -26,6 +26,7 @@ PRODUCTS = [
     ("product-006", "onboarding_equipment"), ("product-007", "onboarding_equipment"),
 ]
 WEEKS = (datetime(2026, 10, 19, tzinfo=timezone.utc), datetime(2026, 10, 26, tzinfo=timezone.utc))
+DEMO_WEEK = date(2026, 10, 26)  # the week of the demo events a demo run reports on by default
 _NAMESPACE = uuid.UUID("5a1c2d3e-0000-4000-8000-000000000001")
 
 

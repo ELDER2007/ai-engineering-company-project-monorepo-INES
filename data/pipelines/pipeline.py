@@ -8,6 +8,14 @@ Run it as a script, from anywhere:
 Exit code: 0 = completed (or skipped because the week is already running), 1 = failed (the failure is in the
 execution log), so a scheduler can tell.
 
+With no argument it reports on the last complete ISO week, reading the telemetry the API stores (DATABASE_URL, or the
+API's local SQLite). On a fresh checkout, with no database configured and no local telemetry, it says so and runs on
+demo data instead of failing.
+
+REPORTING CYCLE: the leadership report is WEEKLY. The scheduled run is every Monday at 05:00 UTC (cron ``0 5 * * 1``)
+for the ISO week that just closed, and a correction run every Thursday at 05:00 UTC absorbs late events
+(PIPELINE_DESIGN.md, section 4.6).
+
 It turns the telemetry of one closed ISO week into the "Weekly Performance Report per Office and Programme"
 (``reporting.weekly_office_program_performance``), as designed in ``PIPELINE_DESIGN.md``:
 
@@ -348,15 +356,25 @@ def main(argv: list[str] | None = None) -> int:
 
     source = target = None
     environment = args.environment
-    if args.demo:
-        from data.pipelines.weekly_office_performance.seed_telemetry import seed_telemetry
+    week_start = args.week_start
+    use_demo = args.demo
+    if not use_demo and not storage.database_configured() and not storage.local_telemetry_available():
+        # A fresh checkout: no DATABASE_URL and the API has not stored any telemetry yet. Say so and use the demo data,
+        # so `python data/pipelines/pipeline.py` runs end to end. With a configured database this never happens: a real
+        # failure there must stay a failure.
+        print("No telemetry database is configured (DATABASE_URL is not set) and the local one has no telemetry_events:\n"
+              "running on the DEMO data. Set DATABASE_URL to run on real telemetry.", file=sys.stderr)
+        use_demo = True
+    if use_demo:
+        from data.pipelines.weekly_office_performance.seed_telemetry import DEMO_WEEK, seed_telemetry
 
         source = target = storage.build_engine(storage.demo_url())
         environment = environment or storage.DEFAULT_ENVIRONMENT
+        week_start = week_start or DEMO_WEEK  # the demo events are of a fixed week, not of "last week"
         print(f"demo: {seed_telemetry(source, environment)} telemetry events loaded")
     try:
         summary = weekly_office_performance_flow(
-            week_start=args.week_start, trigger=args.trigger, environment=environment, refresh=args.refresh,
+            week_start=week_start, trigger=args.trigger, environment=environment, refresh=args.refresh,
             source_engine=source, target_engine=target,
         )
     except Exception as exc:  # noqa: BLE001 - already recorded in the execution log by the flow
