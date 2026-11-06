@@ -227,6 +227,39 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 - Los reintentos solo están en las tasks que tocan red/base de datos y son idempotentes (2, 7, 8); una task de transformación que falla es un error de datos o de lógica, y reintentarla no lo arregla.
 - Las tasks 4, 5 y 6 son puras (sin I/O), por lo que se prueban sin base de datos.
 
+### 4.2b Tasks críticas y tasks opcionales (tolerancia a fallos parciales)
+
+Un fallo no tumba siempre toda la corrida: depende de si la task es imprescindible para un reporte honesto.
+
+| Tipo | Tasks | Si fallan |
+| --- | --- | --- |
+| **Crítica** | `start_pipeline_run`, `resolve_week_window`, `extract_events`, `validate_events`, `check_currency_consistency`, `aggregate_by_office_programme`, `reconcile`, `load_weekly_performance`, `finish_pipeline_run` | La corrida se detiene, queda `Failed` en el log y no se carga nada (o se hace *rollback*) |
+| **Opcional** | `count_window_events` (señal de vida), `save_raw_snapshot` (copia en `data/raw/`), `save_eval_report` (informe en `data/eval/`) | Se anota en el campo `warnings` del log y la corrida **continúa y termina `Completed`** |
+
+Reglas: un dato que falla queda como **desconocido, nunca como cero** (`window_events_total` es `null` si su task falló). En Prefect las opcionales se llaman con `return_state=True`, que devuelve el estado de la task en lugar de lanzar su error.
+
+### 4.2c Reintentos
+
+Toda task que toca la base de datos reintenta con espera creciente (5 s, 30 s y 2 min): `extract_events`, `load_weekly_performance`, `start_pipeline_run` y `finish_pipeline_run` (3 reintentos), y `count_window_events` (1 reintento, porque es opcional y no debe retrasar la corrida). Las tasks puras no reintentan: repetirlas no arregla un error de datos.
+
+### 4.2d Caché de una hora
+
+Una task que ya terminó bien hace menos de una hora no se repite (`cache_expiration = 1 h`):
+
+| Task | ¿Caché? | Por qué |
+| --- | --- | --- |
+| `extract_events` | Sí, clave = base de datos + entorno + ventana | Es la lectura cara. Tras una carga fallida, reintentar no vuelve a leer la fuente |
+| `aggregate_by_office_programme` | Sí, clave = sus datos de entrada | Misma entrada, mismo resultado: reutilizar es siempre seguro |
+| `load_weekly_performance`, `start/finish_pipeline_run`, `reconcile`, `check_currency_consistency` | **Nunca** | Actúan sobre el mundo o son comprobaciones: saltárselas sería peligroso |
+
+Solo se guardan en caché las tasks que terminaron `Completed`: un fallo nunca se reutiliza.
+
+**Tensión con "recalcular la semana completa" (sección 3c):** durante la hora siguiente, una corrida repetida no vería un evento tardío. La salida es `refresh`: el disparo manual (`POST`) y la opción `--refresh` ignoran la caché. La corrida programada del lunes y la de corrección del jueves están separadas por días, así que la caché nunca esconde nada entre ellas.
+
+### 4.2e Línea de comandos
+
+`python data/pipelines/pipeline.py [--week-start AAAA-MM-DD] [--environment production] [--refresh] [--trigger manual|scheduled] [--demo]`. Código de salida `0` si termina (o si se omite porque la semana ya corre) y `1` si falla, para que un programador de tareas lo detecte.
+
 ### 4.3 Subflows
 
 **No hay subflows en la v1.** Un flow plano de 9 tasks ya da reintentos y estados por etapa; dividirlo en subflows no sostiene ningún KPI. La Parte 3 dividirá las etapas en subflows (`extract`, `transform`, `load`) y puede añadir un flow de *backfill* que llame al principal para un rango de semanas.
@@ -321,7 +354,9 @@ Cada corrida es **una fila** en `reporting.pipeline_runs`, creada como `Running`
 | `rows_written` | integer | **Registros procesados (salida).** Se concilia contra `events_read` y contra lo que hay en la tabla; sin él, no se puede probar que la carga coincide con el cálculo. |
 | `rows_deleted` | integer | Filas obsoletas eliminadas en la carga. Hace visible que una semana se corrigió a la baja, algo que de otro modo cambiaría cifras en silencio. |
 | `rows_changed` | integer | Filas que ya existían y cuyos KPIs cambiaron respecto a la carga anterior. Si una corrida de una semana ya publicada tiene `rows_changed > 0`, el log deja constancia de **que** y **cuándo** se corrigió esa semana (ver anexo, I-3). |
-| `window_events_total` | integer | Eventos de **cualquier tipo** en la ventana (no solo los 4 de negocio). Es la señal de control para distinguir un cero real de una captura caída (ver anexo, O-1). |
+| `window_events_total` | integer (`null` si se desconoce) | Eventos de **cualquier tipo** en la ventana (no solo los 4 de negocio). Es la señal de control para distinguir un cero real de una captura caída (ver anexo, O-1). |
+| `environment` | text | Entorno de telemetría que se leyó (`production` por defecto). Sin él no se sabría si una cifra vino de datos reales o de pruebas. |
+| `warnings` | text (null si no hubo) | Fallos de tasks **opcionales**: la corrida terminó, pero algo secundario no se pudo hacer. Sin este campo, un `Completed` ocultaría que faltó, por ejemplo, la señal de vida. |
 | `error` | text (null si no hubo) | **Errores.** Tipo y mensaje de la excepción (por ejemplo `CurrencyMismatchError: miami/EUR`), para diagnosticar sin entrar al servidor. Nunca contiene el contenido de los eventos ni `user_id`. |
 
 **Consultas de auditoría que este log permite responder:** ¿corrió el pipeline el lunes y terminó antes de las 06:00 UTC? (`state`, `finished_at`); ¿por qué cambió la cifra de la semana pasada? (corridas `manual` o con `rows_deleted > 0` sobre esa `week_start`); ¿hubo corridas que murieron sin cerrar? (`state = 'Running'` con `started_at` antiguo).

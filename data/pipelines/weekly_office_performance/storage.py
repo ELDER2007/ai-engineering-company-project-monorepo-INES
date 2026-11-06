@@ -87,12 +87,13 @@ pipeline_runs = Table(
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("finished_at", DateTime(timezone=True)),
     Column("events_read", Integer, nullable=False, default=0),
-    Column("window_events_total", Integer, nullable=False, default=0),
+    Column("window_events_total", Integer),  # NULL = unknown (its optional task failed); never read as zero
     Column("rejected_count", Integer, nullable=False, default=0),
     Column("rows_written", Integer, nullable=False, default=0),
     Column("rows_changed", Integer, nullable=False, default=0),
     Column("rows_deleted", Integer, nullable=False, default=0),
     Column("error", String),
+    Column("warnings", String),  # failures of OPTIONAL tasks: recorded, the run continued
     # The lock: the database itself refuses a second `Running` run of the same week (no check-then-insert race).
     Index(
         "uq_pipeline_runs_one_running_per_week",
@@ -113,8 +114,8 @@ def app_local_url() -> str:
 
 
 def demo_url() -> str:
-    """A throw-away SQLite file for ``--demo`` runs: never the app's own database."""
-    path = Path(__file__).resolve().parents[2] / ".local" / "demo.sqlite"
+    """A throw-away SQLite file for ``--demo`` runs (PIPELINE_DEMO_DB to choose it): never the app's own database."""
+    path = Path(os.environ.get("PIPELINE_DEMO_DB") or Path(__file__).resolve().parents[2] / ".local" / "demo.sqlite")
     path.parent.mkdir(parents=True, exist_ok=True)
     return f"{_SQLITE_PREFIX}{path}"
 

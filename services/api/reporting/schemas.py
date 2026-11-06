@@ -36,12 +36,13 @@ class PipelineRunOut(BaseModel):
     started_at: datetime
     finished_at: datetime | None
     events_read: int
-    window_events_total: int
+    window_events_total: int | None  # null = unknown (never read it as zero)
     rejected_count: int
     rows_written: int
     rows_changed: int
     rows_deleted: int
     error: str | None
+    warnings: str | None  # failures of optional tasks; the run still completed
 
 
 class PipelineRunCreate(BaseModel):

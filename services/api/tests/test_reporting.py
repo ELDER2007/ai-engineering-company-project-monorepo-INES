@@ -50,7 +50,9 @@ def engines(tmp_path):
 
 
 def run(engines, week=WEEK, **kwargs):
+    """Fresh data by default (``refresh``): the data tests change the source between runs. The cache has its own tests."""
     source, target = engines
+    kwargs.setdefault("refresh", True)
     return weekly_office_performance_flow(week_start=week, source_engine=source, target_engine=target, **kwargs)
 
 

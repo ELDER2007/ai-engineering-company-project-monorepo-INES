@@ -57,18 +57,13 @@ class RunInfo:
     started_at: datetime
     finished_at: datetime | None
     events_read: int
-    window_events_total: int
+    window_events_total: int | None
     rejected_count: int
     rows_written: int
     rows_changed: int
     rows_deleted: int
     error: str | None
-
-
-@dataclass(frozen=True)
-class Extraction:
-    events: list[wp.TelemetryEvent]
-    window_events_total: int  # events of ANY type in the window: the liveness signal of the capture
+    warnings: str | None
 
 
 @dataclass(frozen=True)
@@ -85,19 +80,24 @@ def _now() -> datetime:
 # --------------------------------------------------------------------------- extract (read-only)
 
 
-def extract(source: Engine, start: datetime, end: datetime, environment: str) -> Extraction:
-    """SELECT the four business event types of ``[start, end)`` in ``environment`` (indexed columns), plus a count of
-    every event of the window. Never writes."""
-    window = and_(_te.c.timestamp >= start, _te.c.timestamp < end, _te.c.environment == environment)
-    events_query = select(_te.c.event_id, _te.c.event_type, _te.c.timestamp, _te.c.tags).where(
-        window, _te.c.event_type.in_(wp.EVENT_TYPES)
+def _window(start: datetime, end: datetime, environment: str):
+    return and_(_te.c.timestamp >= start, _te.c.timestamp < end, _te.c.environment == environment)
+
+
+def extract(source: Engine, start: datetime, end: datetime, environment: str) -> list[wp.TelemetryEvent]:
+    """SELECT the four business event types of ``[start, end)`` in ``environment`` (indexed columns). Never writes."""
+    query = select(_te.c.event_id, _te.c.event_type, _te.c.timestamp, _te.c.tags).where(
+        _window(start, end, environment), _te.c.event_type.in_(wp.EVENT_TYPES)
     )
-    total_query = select(func.count()).select_from(_te).where(window)
     with source.connect() as connection:
-        rows = connection.execute(events_query).all()
-        total = connection.execute(total_query).scalar_one()
-    events = [wp.TelemetryEvent(r.event_type, wp.ensure_utc(r.timestamp), r.tags or {}, r.event_id) for r in rows]
-    return Extraction(events=events, window_events_total=total)
+        rows = connection.execute(query).all()
+    return [wp.TelemetryEvent(r.event_type, wp.ensure_utc(r.timestamp), r.tags or {}, r.event_id) for r in rows]
+
+
+def count_window_events(source: Engine, start: datetime, end: datetime, environment: str) -> int:
+    """Events of ANY type in the window: the liveness signal of the capture (a real zero vs a dead capture)."""
+    with source.connect() as connection:
+        return connection.execute(select(func.count()).select_from(_te).where(_window(start, end, environment))).scalar_one()
 
 
 # --------------------------------------------------------------------------- load (one transaction)

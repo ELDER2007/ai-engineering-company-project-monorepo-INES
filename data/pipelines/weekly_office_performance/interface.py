@@ -73,10 +73,11 @@ def run_weekly_office_performance(
     *, target_engine: Engine, source_engine: Engine, week_start: date | None = None, trigger: str = "manual"
 ) -> RunInfo:
     """Run the flow now and return the run it recorded. Raises ``PipelineBusyError`` if the week is already running and
-    ``PipelineRunFailed`` if the run failed (after recording it)."""
+    ``PipelineRunFailed`` if the run failed (after recording it). A manual run ignores the one-hour cache
+    (``refresh=True``): whoever asks to recompute wants the latest events, including late ones."""
     try:
         summary = weekly_office_performance_flow(
-            week_start=week_start, trigger=trigger, source_engine=source_engine, target_engine=target_engine
+            week_start=week_start, trigger=trigger, refresh=True, source_engine=source_engine, target_engine=target_engine
         )
     except Exception as exc:
         raise PipelineRunFailed(str(exc), repository.get_latest_run(target_engine)) from exc

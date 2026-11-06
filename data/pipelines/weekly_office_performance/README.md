@@ -11,11 +11,20 @@ Pipeline Prefect del "Reporte Semanal de Desempeño por Oficina y Programa". Esp
 | Lo único que `services/` puede importar | `interface.py` |
 | Datos demo (solo local y tests) | `seed_telemetry.py` |
 
+## Resiliencia (lo que exige el ticket)
+
+| Requisito | Cómo se cumple |
+| --- | --- |
+| Tolera fallos parciales | Tasks **opcionales** (`count_window_events`, `save_raw_snapshot`, `save_eval_report`): si fallan se anota en `warnings` y la corrida sigue. Las críticas la detienen |
+| Reintentos en servicios externos | `extract_events`, `load_weekly_performance` y el log reintentan 3 veces (5 s, 30 s, 2 min) |
+| Corre como script | `python data/pipelines/pipeline.py ...` (código de salida 0 / 1) |
+| No repite lo que corrió hace menos de 1 h | Caché de 1 h en `extract_events` y `aggregate_by_office_programme`; `--refresh` la salta. La carga nunca se cachea |
+
 ## Probarlo (desde la raíz del repo)
 
 ```bash
 cd services/api && uv sync && cd ../..
-services/api/.venv/bin/python -m data.pipelines.pipeline --demo --week-start 2026-10-26
+services/api/.venv/bin/python data/pipelines/pipeline.py --demo --week-start 2026-10-26
 ```
 
 `--demo` usa una base de datos desechable (`data/.local/demo.sqlite`) con eventos de ejemplo, nunca la de la aplicación.
@@ -29,5 +38,5 @@ Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corri
 ## Tests
 
 ```bash
-cd services/api && uv run pytest tests/test_weekly_performance.py tests/test_reporting.py tests/test_pipeline_resilience.py
+cd services/api && uv run pytest tests/test_weekly_performance.py tests/test_reporting.py tests/test_pipeline_resilience.py tests/test_pipeline_ticket.py
 ```

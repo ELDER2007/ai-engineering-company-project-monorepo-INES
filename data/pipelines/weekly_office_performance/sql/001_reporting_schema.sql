@@ -30,12 +30,13 @@ create table if not exists reporting.pipeline_runs (
   started_at timestamptz not null,
   finished_at timestamptz,
   events_read integer not null default 0,
-  window_events_total integer not null default 0,
+  window_events_total integer,            -- null = unknown (its optional task failed), never read as zero
   rejected_count integer not null default 0,
   rows_written integer not null default 0,
   rows_changed integer not null default 0,
   rows_deleted integer not null default 0,
-  error text
+  error text,
+  warnings text                           -- failures of optional tasks: recorded, the run continued
 );
 
 -- The lock against concurrent runs: at most one `Running` run per flow and week, enforced by the database.
