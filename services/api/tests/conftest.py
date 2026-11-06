@@ -6,6 +6,22 @@ import os
 
 os.environ.setdefault("PIPELINE_RETRIES", "0")  # the pipeline's retry back-off (5/30/120 s) would make failure tests take minutes
 
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_prefect_results(tmp_path_factory):
+    """Keep the results Prefect caches (the pipeline's one-hour cache) in a folder of this test session.
+
+    ``prefect_test_harness`` isolates Prefect's database but NOT its result storage, which defaults to
+    ``~/.prefect/storage``: a cached extraction from an earlier session or a demo run would be served to a test whose
+    temporary path happens to repeat, and the cache tests would fail depending on what ran before."""
+    from prefect.settings import PREFECT_LOCAL_STORAGE_PATH, temporary_settings
+
+    with temporary_settings({PREFECT_LOCAL_STORAGE_PATH: str(tmp_path_factory.mktemp("prefect-results"))}):
+        yield
+
 import os
 import time
 import base64

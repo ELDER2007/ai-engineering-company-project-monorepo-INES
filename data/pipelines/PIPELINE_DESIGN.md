@@ -177,7 +177,7 @@ Las etapas de extracción, transformación y carga están separadas por tasks de
 En nuestro caso `telemetry_events` es inmutable (solo `INSERT`), pero el diseño no puede asumir que siempre será así ni que los datos de la semana estén completos. La estrategia, concreta, para no duplicar:
 
 1. **Clave natural en el destino:** `unique (office, programme_id, week_start)`. Una fila representa una oficina, un programa y una semana; hay una sola, siempre.
-2. **Reemplazo, no acumulación:** la carga es `INSERT ... ON CONFLICT (office, programme_id, week_start) DO UPDATE SET <los 4 KPIs> = EXCLUDED.<...>, computed_at = EXCLUDED.computed_at`. Nunca `kpi = kpi + nuevo`: sumar sobre lo existente duplicaría las cifras en cada reejecución.
+2. **Reemplazo, no acumulación:** la carga es `INSERT ... ON CONFLICT (office, programme_id, week_start) DO UPDATE SET <los 4 KPIs> = EXCLUDED.<...>, computed_at = EXCLUDED.computed_at WHERE <algún KPI IS DISTINCT FROM el nuevo>`. El `WHERE` hace que repetir la corrida sea un *no-op* real: si nada cambió, la fila ni se toca (tampoco `computed_at`). Nunca `kpi = kpi + nuevo`: sumar sobre lo existente duplicaría las cifras en cada reejecución.
 3. **Recalcular la ventana completa**, no solo "lo nuevo desde la última vez" (sin *watermark*). Así cubre los tres casos de actualización: evento tardío que cambia una semana pasada, reenvío de un lote, y (si un día la fuente permitiera editar) un registro modificado: la próxima corrida recalcula desde la fuente tal como está.
 4. **Deduplicación defensiva en la transformación:** antes de agregar se cuenta una sola vez cada pareja (`event_type`, `order_id`). La fuente ya garantiza `event_id` único; esto protege si un mismo pedido llegara con dos `event_id` distintos.
 5. **Filas que dejan de existir:** si tras recalcular una combinación oficina/programa ya no tiene eventos válidos, su fila previa se borra de esa semana (un `DELETE` de las claves de la ventana que no están en el resultado, en la misma transacción que el upsert). Sin esto, un valor viejo se quedaría para siempre.
@@ -307,7 +307,7 @@ Reglas de negocio sobre fallos:
 ### 5.1 Idempotencia
 
 - La ventana es determinista: `[week_start, week_start+7d)` en UTC. Mismo `week_start` + mismos eventos de origen = mismo resultado.
-- La carga es `INSERT ... ON CONFLICT (office, programme_id, week_start) DO UPDATE`: actualiza los 4 KPIs y `computed_at`, nunca inserta un duplicado ni suma sobre lo anterior (los valores se **reemplazan**, no se acumulan).
+- La carga es `INSERT ... ON CONFLICT (office, programme_id, week_start) DO UPDATE ... WHERE <algún KPI cambió>`: reemplaza los 4 KPIs (y `computed_at`) solo si cambiaron, nunca inserta un duplicado ni suma sobre lo anterior (los valores se **reemplazan**, no se acumulan).
 - Se recalcula la semana completa, no de forma incremental, porque los eventos pueden llegar tarde; el recálculo corrige la fila en lugar de duplicar.
 - El pipeline es de solo lectura sobre `telemetry_events`: repetirlo no altera la fuente.
 
@@ -320,7 +320,7 @@ Reglas de negocio sobre fallos:
 | Los datos ya cargados no se corrompen | Un fallo a mitad de carga (conexión caída, error de constraint, proceso muerto) hace *rollback* de toda la transacción: la tabla queda exactamente como estaba antes del intento. Nunca hay una semana a medias, y comparar oficinas sigue siendo válido. |
 | No se duplican | `unique (office, programme_id, week_start)` lo impone la propia base de datos, no el código. Aunque dos corridas escribieran a la vez, la segunda actualiza la fila en lugar de insertar otra. |
 | Repetir no suma | `ON CONFLICT ... DO UPDATE SET kpi = EXCLUDED.kpi` **reemplaza**. Nunca `kpi = kpi + nuevo`. |
-| Repetir da lo mismo | La ventana `[week_start, week_start+7d)` es determinista y se recalcula desde la fuente; mismos eventos ⇒ mismas filas. |
+| Repetir da lo mismo, exactamente | La ventana `[week_start, week_start+7d)` es determinista y se recalcula desde la fuente; mismos eventos ⇒ mismas filas. Además el `UPSERT` solo actualiza si algún KPI cambió: tras dos corridas la tabla es **idéntica**, `id` y `computed_at` incluidos. |
 | No quedan filas viejas | En la misma transacción se borran las filas de esa semana que ya no aparecen en el resultado. |
 | La carga se verifica | Dentro de la transacción, un `SELECT count(*)` de la semana debe igualar las filas calculadas; si no, *rollback* y la corrida falla. |
 
@@ -330,7 +330,7 @@ Qué ocurre según *dónde* falla (y qué hace la siguiente corrida):
 | --- | --- | --- |
 | En extracción o transformación | Sin cambios (aún no se escribió nada) | Recalcula y carga normalmente |
 | Durante la carga, antes del *commit* | Sin cambios (*rollback*) | Recalcula y carga normalmente |
-| El *commit* se envió pero la respuesta se perdió (timeout) | Puede estar ya cargada, correcta y completa | El reintento hace el mismo *upsert*: valores idénticos, sin duplicados; solo cambia `computed_at` |
+| El *commit* se envió pero la respuesta se perdió (timeout) | Puede estar ya cargada, correcta y completa | El reintento hace el mismo *upsert*: valores idénticos, sin duplicados y sin tocar la fila |
 | Tras el *commit*, antes de cerrar el log | Correcta | La fila de log queda `Running`; la siguiente corrida la marca `Crashed` y vuelve a cargar los mismos valores |
 
 Los 3 reintentos automáticos de Prefect sobre la carga son seguros precisamente porque la carga es idempotente.
@@ -365,7 +365,7 @@ Cada corrida es **una fila** en `reporting.pipeline_runs`, creada como `Running`
 
 **Lo que el log no guarda a propósito:** el detalle de cada evento rechazado (queda en el log de Prefect con su motivo, sin datos personales) y cualquier dato del evento. Si Elena necesita investigar rechazos, se añade una tabla de detalle más adelante.
 
-**Trazabilidad de cada número:** el `computed_at` de cada fila del reporte cae dentro de la ventana `started_at`–`finished_at` de exactamente una corrida. **Conciliación (task `reconcile`):** `events_read = válidos + rechazados` y la suma de los conteos por fila iguala los eventos válidos de cada tipo; si no cuadra, la corrida falla: un reporte que no concilia no se publica.
+**Trazabilidad de cada número:** el `computed_at` de cada fila del reporte cae dentro de la ventana `started_at`–`finished_at` de exactamente una corrida: la última que la creó o la cambió (una corrida que no cambia nada no toca la fila). **Conciliación (task `reconcile`):** `events_read = válidos + rechazados` y la suma de los conteos por fila iguala los eventos válidos de cada tipo; si no cuadra, la corrida falla: un reporte que no concilia no se publica.
 
 ### 5.3 Recuperabilidad
 
@@ -517,7 +517,7 @@ Nombre exacto de la sección *Destination table* del briefing:
 
 ## 8b. Frescura y observabilidad
 
-- **Frescura:** el reporte de la semana N se considera fresco si `computed_at` es del lunes N+1 antes de las 06:00 UTC.
+- **Frescura:** el reporte de la semana N se considera fresco si existe una corrida `Completed` de esa semana con `finished_at` el lunes N+1 antes de las 06:00 UTC. Se mide con el log y no con `computed_at`, porque una corrida que no cambia nada no toca las filas.
 - **Señal de fallo:** si el último run de la semana está en `Failed`, `GET /reporting/pipeline-runs/latest` lo muestra; la alerta (correo/Slack desde Prefect) queda para la Parte 3.
 - **Calidad:** `rejected_count` y `events_read` por run permiten detectar semanas con telemetría anómala (p. ej. muchos eventos rechazados o cero eventos).
 
@@ -556,7 +556,7 @@ Borrador escrito antes del diseño. Son 10 preguntas (3 de idempotencia, 3 de ob
 **I-2. Reintento tras un fallo: ¿qué pasa si muere a mitad de la carga?**
 - *Ejemplo:* la corrida del lunes calcula 6 filas (3 de Valencia y 3 de Miami) y la conexión se cae después de escribir 4.
 - *Pista:* al reintentar, cuenta las filas de esa semana: deben ser 6, no 10.
-- *Respuesta:* la carga es una sola transacción, así que las 4 filas nunca llegan a confirmarse (*rollback*). El reintento recalcula la ventana y hace `UPSERT` por `(office, programme_id, week_start)` con reemplazo. Resultado idéntico al de una corrida limpia, salvo `computed_at` (sección 5.1b). Verificación: el conteo de filas de la semana debe igualar las calculadas dentro de la misma transacción.
+- *Respuesta:* la carga es una sola transacción, así que las 4 filas nunca llegan a confirmarse (*rollback*). El reintento recalcula la ventana y hace `UPSERT` por `(office, programme_id, week_start)` con reemplazo. Resultado idéntico al de una corrida limpia (sección 5.1b). Verificación: el conteo de filas de la semana debe igualar las calculadas dentro de la misma transacción.
 
 **I-3. Eventos tardíos: ¿cómo recalculo una semana ya publicada sin inflar las cifras ni perder el rastro?**
 - *Ejemplo:* Elena registra una entrega el domingo a las 20:10 UTC, pero su portátil estaba sin conexión; el evento llega el martes, con la semana ya publicada el lunes.

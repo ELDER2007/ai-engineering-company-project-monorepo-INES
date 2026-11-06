@@ -153,10 +153,17 @@ def load_week(target: Engine, rows: list[wp.WeeklyRow], week_start: date) -> Loa
                     for r in rows
                 ]
             )
+            # IDEMPOTENT UPSERT on the briefing's unique constraint (office, programme_id, week_start):
+            #  - no row for that key yet  -> INSERT;
+            #  - a row exists             -> REPLACE its KPIs (never add to them), but ONLY IF one of them differs.
+            # The WHERE makes a repeated run a true no-op: the row (id and computed_at included) is not even touched, so
+            # the table after two runs over the same data is identical to the table after one. ``computed_at`` therefore
+            # means "when these values were last computed or changed".
             connection.execute(
                 statement.on_conflict_do_update(
                     index_elements=list(storage.UPSERT_CONFLICT_COLUMNS),
                     set_={c: statement.excluded[c] for c in (*_KPI_COLUMNS, "computed_at")},
+                    where=or_(*[_perf.c[c].is_distinct_from(statement.excluded[c]) for c in _KPI_COLUMNS]),
                 )
             )
 
