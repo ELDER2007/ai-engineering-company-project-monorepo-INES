@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+os.environ.setdefault("PIPELINE_ENV_FILE", "/nonexistent/.env")  # the pipeline must not read a developer's real services/api/.env in tests
 os.environ.setdefault("PIPELINE_RETRIES", "0")  # the pipeline's retry back-off (5/30/120 s) would make failure tests take minutes
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy import (
@@ -119,8 +120,21 @@ def app_local_url() -> str:
     return f"{_SQLITE_PREFIX}{_app_local_path()}"
 
 
+@lru_cache(maxsize=1)
+def load_api_env() -> None:
+    """Read the file the API itself reads (``services/api/.env``, or PIPELINE_ENV_FILE) so the pipeline sees the same
+    DATABASE_URL as the API. Variables already set in the environment win. Without python-dotenv or without the file,
+    nothing happens."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(os.environ.get("PIPELINE_ENV_FILE") or Path(__file__).resolve().parents[3] / "services" / "api" / ".env", override=False)
+
+
 def database_configured() -> bool:
-    """True when a real database was configured through the environment (DATABASE_URL or TELEMETRY_DATABASE_URL)."""
+    """True when a real database was configured through the environment or the API's .env (DATABASE_URL or TELEMETRY_DATABASE_URL)."""
+    load_api_env()
     return bool(os.environ.get("TELEMETRY_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip())
 
 
@@ -148,6 +162,7 @@ def demo_url() -> str:
 
 def database_url(env: str = "DATABASE_URL") -> str:
     """Connection string: ``env``, else DATABASE_URL, else the API's local SQLite file."""
+    load_api_env()
     raw = os.environ.get(env, "").strip() or os.environ.get("DATABASE_URL", "").strip()
     if not raw:
         return app_local_url()

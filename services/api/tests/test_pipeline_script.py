@@ -19,7 +19,7 @@ DESIGN = (REPO / "data" / "pipelines" / "PIPELINE_DESIGN.md").read_text(encoding
 def clean_env(tmp_path, **extra):
     """A fresh checkout: no database configured, no local telemetry, outputs in a temp folder."""
     env = {k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "TELEMETRY_DATABASE_URL", "REPORTING_DATABASE_URL", "PIPELINE_ENVIRONMENT"}}
-    env.update(PIPELINE_LOCAL_DB=str(tmp_path / "no-such-app.sqlite"), PIPELINE_DEMO_DB=str(tmp_path / "demo.sqlite"),
+    env.update(PIPELINE_ENV_FILE=str(tmp_path / "no.env"), PIPELINE_LOCAL_DB=str(tmp_path / "no-such-app.sqlite"), PIPELINE_DEMO_DB=str(tmp_path / "demo.sqlite"),
                PIPELINE_DATA_DIR=str(tmp_path / "data"), **extra)
     return env
 
@@ -108,3 +108,35 @@ def test_the_design_document_gives_the_command_to_run_it():
     assert "python data/pipelines/pipeline.py --trigger scheduled" in DESIGN
     assert "pipeline.py" in PIPELINE.read_text(encoding="utf-8").split('"""')[1]  # and the script documents itself at the top
     assert "0 5 * * 1" in PIPELINE.read_text(encoding="utf-8").split('"""')[1]
+
+
+def test_the_pipeline_reads_the_same_env_file_as_the_api(tmp_path, monkeypatch):
+    """If services/api/.env holds the DATABASE_URL, the API uses that database: the pipeline must see it too, not silently run on the demo."""
+    from data.pipelines.weekly_office_performance import storage
+
+    env_file = tmp_path / "api.env"
+    env_file.write_text("DATABASE_URL=postgresql://user:secret@db.example.com:6543/postgres\n")
+    monkeypatch.setenv("PIPELINE_ENV_FILE", str(env_file))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("TELEMETRY_DATABASE_URL", raising=False)
+    storage.load_api_env.cache_clear()
+    try:
+        assert storage.database_configured() is True
+        assert storage.database_url().startswith("postgresql+psycopg2://user:secret@db.example.com")
+    finally:
+        monkeypatch.delenv("DATABASE_URL", raising=False)  # what load_dotenv put into the process
+        storage.load_api_env.cache_clear()
+
+
+def test_a_variable_already_in_the_environment_wins_over_the_env_file(tmp_path, monkeypatch):
+    from data.pipelines.weekly_office_performance import storage
+
+    env_file = tmp_path / "api.env"
+    env_file.write_text("DATABASE_URL=sqlite:///from-file.sqlite\n")
+    monkeypatch.setenv("PIPELINE_ENV_FILE", str(env_file))
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///from-environment.sqlite")
+    storage.load_api_env.cache_clear()
+    try:
+        assert storage.database_url() == "sqlite:///from-environment.sqlite"
+    finally:
+        storage.load_api_env.cache_clear()
