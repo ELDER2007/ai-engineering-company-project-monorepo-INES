@@ -19,8 +19,8 @@ It turns the telemetry of one closed ISO week into the "Weekly Performance Repor
 Resilience (the four requirements of the ticket):
 
 * PARTIAL FAILURES. Tasks are CRITICAL (their failure stops the run: there is no honest report without them) or
-  OPTIONAL (``count_window_events``, ``save_raw_snapshot``, ``save_eval_report``: a failure is logged in the run's
-  ``warnings`` and the flow continues). Whatever happens, the run is closed in the execution log.
+  OPTIONAL (``count_window_events``, ``save_raw_snapshot``, ``save_eval_report``, called with ``return_state=True``: a failure is
+  logged in the run's ``warnings`` and the flow continues). Whatever happens, the run is closed in the execution log.
 * RETRIES. Every task that touches the database (``extract_events``, ``load_weekly_performance``, the run log and the
   optional count) retries with a back-off (5 s, 30 s, 2 min) to absorb transient failures.
 * CACHE. A task that completed less than an hour ago is not run again: ``extract_events`` (the expensive read) and
@@ -94,7 +94,7 @@ def _extract_cache_key(_context: Any, parameters: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------- critical tasks: the run log
 
 
-@task(cache_policy=NO_CACHE, **RETRY)
+@task(tags=["log"], cache_policy=NO_CACHE, **RETRY)
 def start_pipeline_run(target: Engine, trigger: str, week_start: date, environment: str) -> tuple[str, bool]:
     """Open the run as ``Running``. ``(run_id, False)`` means another run of this week is active: this one is ``Skipped``."""
     return repository.start_run(
@@ -103,7 +103,7 @@ def start_pipeline_run(target: Engine, trigger: str, week_start: date, environme
     )
 
 
-@task(cache_policy=NO_CACHE, **RETRY)
+@task(tags=["log"], cache_policy=NO_CACHE, **RETRY)
 def finish_pipeline_run(target: Engine, run_id: str, fields: dict[str, Any]) -> None:
     repository.finish_run(target, run_id, **fields)
 
@@ -111,12 +111,12 @@ def finish_pipeline_run(target: Engine, run_id: str, fields: dict[str, Any]) -> 
 # --------------------------------------------------------------------------- critical tasks: extract
 
 
-@task(cache_policy=NO_CACHE)
+@task(tags=["extract"], cache_policy=NO_CACHE)
 def resolve_week_window(week_start: date | None) -> tuple[date, datetime, datetime]:
     return wp.resolve_week_window(week_start)
 
 
-@task(cache_key_fn=_extract_cache_key, cache_expiration=CACHE_TTL, persist_result=True, **RETRY)
+@task(tags=["extract"], cache_key_fn=_extract_cache_key, cache_expiration=CACHE_TTL, persist_result=True, **RETRY)
 def extract_events(source: Engine, start: datetime, end: datetime, environment: str) -> list[wp.TelemetryEvent]:
     """The expensive read, cached for an hour. Read-only: never writes to ``telemetry_events``."""
     return repository.extract(source, start, end, environment)
@@ -125,13 +125,13 @@ def extract_events(source: Engine, start: datetime, end: datetime, environment: 
 # --------------------------------------------------------------------------- optional tasks (a failure is a warning)
 
 
-@task(cache_policy=NO_CACHE, **RETRY_LIGHT)
+@task(tags=["extract", "optional"], cache_policy=NO_CACHE, **RETRY_LIGHT)
 def count_window_events(source: Engine, start: datetime, end: datetime, environment: str) -> int:
     """OPTIONAL. Liveness signal (events of any type in the window). If it fails the report is still correct; the count stays unknown."""
     return repository.count_window_events(source, start, end, environment)
 
 
-@task(cache_policy=NO_CACHE)
+@task(tags=["extract", "optional"], cache_policy=NO_CACHE)
 def save_raw_snapshot(events: list[wp.TelemetryEvent], week_start: date, environment: str) -> str:
     """OPTIONAL. Keep the events this run read in ``data/raw/`` (JSON lines), to trace a number of the report to its events."""
     path = _dir("raw") / f"weekly_events_{week_start}_{environment}.jsonl"
@@ -144,7 +144,7 @@ def save_raw_snapshot(events: list[wp.TelemetryEvent], week_start: date, environ
     return str(path)
 
 
-@task(cache_policy=NO_CACHE)
+@task(tags=["load", "optional"], cache_policy=NO_CACHE)
 def save_eval_report(report: dict[str, Any]) -> str:
     """OPTIONAL. Write the validation report of the run to ``data/eval/``."""
     path = _dir("eval") / f"run_{report['week_start']}_{report['run_id'][:8]}.json"
@@ -160,11 +160,11 @@ def _json_default(value: Any) -> Any:
     raise TypeError(f"not serialisable: {type(value)}")
 
 
-def optional(run_task: Callable[..., Any], *args: Any, label: str, warnings: list[str], default: Any = None) -> Any:
-    """Run an OPTIONAL task: if it fails, record a warning and return ``default`` so the flow goes on.
+def settled(state: Any, *, label: str, warnings: list[str], default: Any = None) -> Any:
+    """Read the state of an OPTIONAL task that was called with ``return_state=True``.
 
-    ``return_state=True`` makes Prefect hand back the task's state instead of raising its error."""
-    state = run_task(*args, return_state=True)
+    Prefect hands back the task's state instead of raising its error, so a failure here is a warning, not the end of
+    the run: record it and return ``default``. The call site, in the flow, is where ``return_state=True`` is written."""
     if state.is_completed():
         return state.result()
     error = state.result(raise_on_failure=False)
@@ -176,7 +176,7 @@ def optional(run_task: Callable[..., Any], *args: Any, label: str, warnings: lis
 # --------------------------------------------------------------------------- critical tasks: transform and load
 
 
-@task(cache_policy=NO_CACHE)
+@task(tags=["transform"], cache_policy=NO_CACHE)
 def validate_events(events: list[wp.TelemetryEvent]) -> wp.ValidationResult:
     result = wp.validate_events(events)
     logger = get_run_logger()
@@ -185,23 +185,23 @@ def validate_events(events: list[wp.TelemetryEvent]) -> wp.ValidationResult:
     return result
 
 
-@task(cache_policy=NO_CACHE)
+@task(tags=["transform"], cache_policy=NO_CACHE)
 def check_currency_consistency(events: list[wp.CleanEvent]) -> None:
     wp.check_currency_consistency(events)
 
 
-@task(cache_policy=INPUTS, cache_expiration=CACHE_TTL, persist_result=True)
+@task(tags=["transform"], cache_policy=INPUTS, cache_expiration=CACHE_TTL, persist_result=True)
 def aggregate_by_office_programme(events: list[wp.CleanEvent], week_start: date) -> wp.Aggregation:
     """The transformation, cached for an hour by its inputs: same events and week give the same rows, so reuse is safe."""
     return wp.aggregate_by_office_programme(events, week_start)
 
 
-@task(cache_policy=NO_CACHE)
+@task(tags=["transform"], cache_policy=NO_CACHE)
 def reconcile(aggregation: wp.Aggregation, events_read: int, rejected_count: int, valid_count: int) -> dict[str, Any]:
     return wp.reconcile(aggregation, events_read=events_read, rejected_count=rejected_count, valid_count=valid_count)
 
 
-@task(cache_policy=NO_CACHE, **RETRY)
+@task(tags=["load"], cache_policy=NO_CACHE, **RETRY)
 def load_weekly_performance(target: Engine, rows: list[wp.WeeklyRow], week_start: date) -> repository.LoadResult:
     """ONE transaction: replace the week (upsert + delete stale + verify). Never cached; safe to retry: it is idempotent."""
     return repository.load_week(target, rows, week_start)
@@ -254,8 +254,11 @@ def weekly_office_performance_flow(
     try:
         events = extract(source, start, end, environment)  # critical
         fields["events_read"] = len(events)
-        fields["window_events_total"] = optional(count_window_events, source, start, end, environment, label="count_window_events", warnings=warnings)
-        report["raw_snapshot"] = optional(save_raw_snapshot, events, week, environment, label="save_raw_snapshot", warnings=warnings)
+        # OPTIONAL steps are called with return_state=True: if one fails, the main extract -> transform -> load goes on
+        count_state = count_window_events(source, start, end, environment, return_state=True)
+        fields["window_events_total"] = settled(count_state, label="count_window_events", warnings=warnings)
+        snapshot_state = save_raw_snapshot(events, week, environment, return_state=True)
+        report["raw_snapshot"] = settled(snapshot_state, label="save_raw_snapshot", warnings=warnings)
 
         checked = validate_events(events)  # critical from here to the load
         fields["rejected_count"] = len(checked.rejected)
@@ -280,7 +283,8 @@ def weekly_office_performance_flow(
 
     report.update(state=fields["state"], error=fields["error"], warnings=list(warnings),
                   counts={k: v for k, v in fields.items() if k not in ("state", "error")})
-    optional(save_eval_report, report, label="save_eval_report", warnings=warnings)
+    eval_state = save_eval_report(report, return_state=True)  # optional too
+    settled(eval_state, label="save_eval_report", warnings=warnings)
     fields["warnings"] = "; ".join(warnings) or None
     finish_pipeline_run(target, run_id, fields)
     if raised is not None:
