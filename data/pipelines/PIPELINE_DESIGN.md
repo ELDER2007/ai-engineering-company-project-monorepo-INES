@@ -240,6 +240,8 @@ Reglas: un dato que falla queda como **desconocido, nunca como cero** (`window_e
 
 ### 4.2c Reintentos
 
+**Por qué 3 reintentos (4 intentos en total, 155 s de espera como máximo):** los fallos de una base de datos tras un *pooler* son breves: una conexión inactiva ya cerrada (segundos), un *pooler* saturado (segundos o un minuto) o una conmutación por fallo corta (un par de minutos). Cada espera cubre uno de esos casos y crece para no martillear una base que se recupera. Más reintentos no ayudan: una base caída tras ~2,5 minutos ya no es transitoria (credenciales, esquema, caída real) y reintentar solo escondería el fallo; además la espera total debe quedar muy por debajo de la hora tras la cual una corrida abierta se considera muerta y dentro del objetivo de frescura de las 06:00 UTC. Reintentar es seguro porque todas las tasks son idempotentes. La justificación está también en un comentario del código (`pipeline.py`).
+
 Toda task que toca la base de datos reintenta con espera creciente (5 s, 30 s y 2 min): `extract_events`, `load_weekly_performance`, `start_pipeline_run` y `finish_pipeline_run` (3 reintentos), y `count_window_events` (1 reintento, porque es opcional y no debe retrasar la corrida). Las tasks puras no reintentan: repetirlas no arregla un error de datos.
 
 ### 4.2d Caché de una hora
@@ -249,7 +251,7 @@ Una task que ya terminó bien hace menos de una hora no se repite (`cache_expira
 | Task | ¿Caché? | Por qué |
 | --- | --- | --- |
 | `extract_events` | Sí, clave = base de datos + entorno + ventana | Es la lectura cara. Tras una carga fallida, reintentar no vuelve a leer la fuente |
-| `aggregate_by_office_programme` | Sí, clave = sus datos de entrada | Misma entrada, mismo resultado: reutilizar es siempre seguro |
+| `aggregate_by_office_programme` | Sí, `cache_key_fn`: clave = semana + huella (SHA-256) del contenido de los eventos, ordenados | Es una función pura: mismos eventos y misma semana, mismas filas. Si cambia un solo evento, cambia la clave y se recalcula |
 | `load_weekly_performance`, `start/finish_pipeline_run`, `reconcile`, `check_currency_consistency` | **Nunca** | Actúan sobre el mundo o son comprobaciones: saltárselas sería peligroso |
 
 Solo se guardan en caché las tasks que terminaron `Completed`: un fallo nunca se reutiliza.
