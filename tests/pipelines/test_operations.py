@@ -381,3 +381,63 @@ def test_a_run_of_another_environment_replaces_the_whole_week_as_the_readme_warn
     assert run("development").state == "Completed" and rows() == 0  # this database has none of `development`: the week is replaced by nothing
     assert run("production").state == "Completed" and rows() == 5  # and the last run decides again
 
+
+# ---------------------------------------------------------------- the database roles of least privilege (sql/002_roles.sql)
+
+ROLES_SQL = (REPO / "data" / "pipelines" / "weekly_office_performance" / "sql" / "002_roles.sql").read_text(encoding="utf-8")
+GRANTS = [line for line in ROLES_SQL.splitlines() if line.lower().startswith(("grant ", "revoke ", "create role "))]
+
+
+def test_the_roles_script_gives_the_reader_only_a_select_on_telemetry():
+    reader = [g for g in GRANTS if "pipeline_reader" in g]
+    assert "grant select on public.telemetry_events to pipeline_reader;" in reader
+    assert not any(re.search(r"\b(insert|update|delete|truncate|all)\b", g, re.IGNORECASE) for g in reader if g.lower().startswith("grant"))
+
+
+def test_the_roles_script_gives_the_writer_the_two_reporting_tables_and_no_telemetry():
+    writer = [g for g in GRANTS if "pipeline_writer" in g and g.lower().startswith("grant")]
+    assert any("reporting.weekly_office_program_performance" in g and "insert" in g and "delete" in g for g in writer)
+    assert any("reporting.pipeline_runs" in g and "insert" in g for g in writer)
+    assert not any("telemetry_events" in g for g in writer)  # it must not be able to read the telemetry, let alone write it
+    assert not any(re.search(r"\b(create|all privileges)\b", g, re.IGNORECASE) for g in writer)  # and it cannot create anything
+
+
+def test_the_roles_script_holds_placeholders_and_never_a_real_password():
+    passwords = re.findall(r"password '([^']*)'", ROLES_SQL)
+    assert len(passwords) == 2 and all(p.startswith("CHANGE-ME") for p in passwords)
+    assert "sql/002_roles.sql" in DESIGN  # documented in the design
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("PIPELINE_TEST_ADMIN_URL"),
+                    reason="needs a throw-away PostgreSQL: PIPELINE_TEST_ADMIN_URL=postgresql://postgres:...@localhost:PORT/postgres")
+def test_a_run_needs_no_privilege_to_create_a_schema_when_the_reporting_schema_already_exists():
+    """The real thing, against PostgreSQL: with the role of 002_roles.sql (no right to create anything), preparing the
+    reporting schema must not fail. ``create schema if not exists`` fails for it even when the schema is there."""
+    import os
+    import uuid
+
+    from sqlalchemy import create_engine, text
+
+    admin_url = os.environ["PIPELINE_TEST_ADMIN_URL"].replace("postgresql://", "postgresql+psycopg2://", 1)
+    admin = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    role, password = f"pipeline_test_{uuid.uuid4().hex[:8]}", "test-only-password"
+    try:
+        storage.create_reporting_schema(admin)  # the administrator creates the schema and its tables
+        with admin.connect() as connection:
+            connection.execute(text(f"create role {role} login password '{password}'"))
+            connection.execute(text(f"grant usage on schema reporting to {role}"))
+            for table in ("weekly_office_program_performance", "pipeline_runs"):
+                connection.execute(text(f"grant select, insert, update, delete on reporting.{table} to {role}"))
+        restricted = create_engine(admin.url.set(username=role, password=password))
+        try:
+            storage.create_reporting_schema(restricted)  # must not raise
+            with restricted.connect() as connection:
+                assert connection.execute(text("select count(*) from reporting.pipeline_runs")).scalar() is not None
+        finally:
+            restricted.dispose()
+    finally:
+        with admin.connect() as connection:
+            connection.execute(text(f"drop owned by {role}"))
+            connection.execute(text(f"drop role if exists {role}"))
+        admin.dispose()
+

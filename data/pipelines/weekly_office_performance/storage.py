@@ -203,8 +203,15 @@ def create_reporting_schema(engine: Engine) -> None:
     """Create the ``reporting`` schema and its tables if missing (idempotent).
 
     On PostgreSQL the reference DDL is ``sql/001_reporting_schema.sql``; this mirrors it.
+
+    The schema is created ONLY when it does not exist. ``create schema if not exists`` needs the privilege to create schemas
+    in the database even when the schema is already there, so running it on every run would make a role with least privilege
+    (``sql/002_roles.sql``: it can read and write the two tables and nothing else) fail with "permission denied for database".
+    ``create_all`` only creates the tables that are missing, so with them in place it needs no privilege either.
     """
     with engine.begin() as connection:
         if engine.dialect.name == "postgresql":
-            connection.execute(text(f"create schema if not exists {REPORTING_SCHEMA}"))
+            exists = connection.execute(text("select 1 from pg_namespace where nspname = :name"), {"name": REPORTING_SCHEMA}).first()
+            if exists is None:
+                connection.execute(text(f"create schema if not exists {REPORTING_SCHEMA}"))
     metadata.create_all(engine)

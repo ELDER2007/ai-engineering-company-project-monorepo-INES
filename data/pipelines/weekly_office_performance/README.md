@@ -61,6 +61,19 @@ Todo esto es **opcional**: sin nada de esto, el comando de arriba funciona igual
 
 Qué está comprobado y qué no, en `../PIPELINE_DESIGN.md` (secciones 4.5, 4.6 y 8b): los tests usan un servidor de Prefect temporal y un *webhook* local; no se ha registrado en un servidor real ni se ha enviado un aviso a un Slack real.
 
+## Roles de la base de datos (mínimo privilegio): paso a paso para quien administre Supabase
+
+`sql/002_roles.sql` crea dos roles: **`pipeline_reader`** (solo lee `telemetry_events`) y **`pipeline_writer`** (solo lee y escribe las dos tablas de `reporting`). Con ellos, el pipeline no puede tocar la telemetría ni por error.
+
+1. **Antes de empezar:** comprueba que el esquema `reporting` y sus tablas existen (se crean con `sql/001_reporting_schema.sql` o con una primera corrida del pipeline hecha con tu usuario administrador).
+2. **Ejecuta el script:** Supabase → *SQL Editor* → pega el contenido de `sql/002_roles.sql`. **Antes de ejecutarlo, cambia las dos contraseñas** (`CHANGE-ME-...`) por contraseñas largas y distintas. No las pegues en el chat ni las guardes en el repositorio.
+3. **Comprueba el resultado:** ejecuta la consulta de comprobación que lleva el script al final: `pipeline_reader` debe tener solo `SELECT` sobre `telemetry_events`, y `pipeline_writer` solo `SELECT, INSERT, UPDATE, DELETE` sobre las dos tablas de `reporting`.
+4. **Revisa la seguridad por filas (RLS):** si `telemetry_events` tiene RLS activada, el lector verá 0 filas sin avisar. Compruébalo con `select relrowsecurity from pg_class where oid = 'public.telemetry_events'::regclass;`; si sale `true`, hace falta una política que le permita leer.
+5. **Obtén las dos cadenas de conexión:** Supabase → *Connect* → *Transaction pooler*. En el pooler, el usuario se escribe `rol.ID_DEL_PROYECTO` (por ejemplo `pipeline_writer.abcdefgh`); copia la cadena que muestra Supabase y sustituye usuario y contraseña. Una cadena para el lector y otra para el escritor.
+6. **Úsalas:** `TELEMETRY_DATABASE_URL` = la del lector y `REPORTING_DATABASE_URL` = la del escritor (o, con los `Secret` blocks, `TELEMETRY_DATABASE_URL`/`REPORTING_DATABASE_URL` en el entorno al ejecutar `python -m data.pipelines.weekly_office_performance.blocks`). Prueba con `python data/pipelines/pipeline.py --environment development --week-start 2026-10-26`.
+
+**Aviso:** la API del backoffice sigue usando su propia conexión (`DATABASE_URL`) para leer el reporte; estos roles son solo para el pipeline.
+
 ## Tests
 
 Tests del pipeline (en la raíz del proyecto, no necesitan la API):
