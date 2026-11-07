@@ -5,7 +5,7 @@
 // Optional: E2E_SCREENSHOTS=/some/folder saves a picture of the page.
 // Covers: the menu link, the title, the four KPIs of the briefing with its names, the period the numbers cover, that what the page shows is
 // what the API answers (the totals), that euros and dollars are never added together, that it reads without technical words, the move between
-// weeks, and that nothing fails in the browser.
+// weeks, how fresh and how complete the data is (the page says what the last run says), and that nothing fails in the browser.
 import { chromium } from "playwright";
 
 const APP = process.env.E2E_APP_URL ?? "http://localhost:5174";
@@ -97,7 +97,29 @@ await page.getByRole("button", { name: "Ir a la última semana calculada" }).cli
 await page.waitForFunction((first) => document.querySelector('[role="status"]')?.textContent?.replace(/\s+/g, " ").trim() === first, before);
 ok(plain(await page.getByRole("status").textContent()) === before, "can come back to the latest computed week");
 
-// 7. nothing failed
+// 7. how fresh and how complete the data is: what the page says matches what the last run says (read-only)
+const run = await page.evaluate(async (t) => {
+  const r = await fetch("/api/reporting/pipeline-runs/latest", { headers: { Authorization: `Bearer ${t}` } });
+  return r.ok ? r.json() : null;
+}, token);
+const mainText = plain(await page.locator("main").textContent());
+if (run === null) {
+  ok(mainText.includes("El proceso que calcula estos datos todavía no se ha ejecutado."), "with no run at all, says the process has not run yet");
+} else {
+  const days = run.finished_at ? Math.floor((Date.now() - new Date(run.finished_at).getTime()) / 86_400_000) : 0;
+  const expected =
+    run.state === "Completed" ? (days >= 8 ? `Los datos llevan ${days} días sin actualizarse` : "Datos actualizados")
+    : run.state === "Failed" || run.state === "Crashed" ? "La última actualización de los datos no terminó bien"
+    : "Los datos se están actualizando en este momento";
+  ok(mainText.includes(expected), `says how fresh the data is, as the last run (${run.state}) implies: "${expected}…"`);
+  const notes = (run.warnings ?? "").split("; ").filter((note) => note.startsWith("data_health:"));
+  const forThisWeek = run.week_start === answer.week_start ? notes.length : 0; // the latest run only speaks for the week it computed
+  const warnings = await page.getByLabel("Avisos sobre los datos").locator("li").count();
+  ok(warnings === forThisWeek, `shows ${forThisWeek} data warning(s) for this week, as the run's notes imply (${warnings} shown)`);
+  ok(!/data_health|capture_silent|volume_drop/.test(mainText), "the warnings never show the technical codes");
+}
+
+// 8. nothing failed
 ok(calls.every((c) => c.status === 200), "every call of the page to the API answered 200");
 ok(problems.length === 0, `no error in the browser${problems.length ? `: ${problems.slice(0, 3).join(" | ")}` : ""}`);
 

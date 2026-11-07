@@ -103,7 +103,10 @@ it is never reported as a failed sign-up.
   material por oficina/programa", "Kits entregados", "Frecuencia de escasez" and "Frecuencia de variación de costo" —
   each with its name and its definition from the briefing, a total and a table per office and programme, for one
   week at a time (the latest computed one at first, with buttons to move between weeks) and with the period it covers
-  and when the data was last updated. Euros and dollars are never added together. Plain Spanish, no codes or jargon.
+  and when the data was last updated. It also says, in plain words, when the process that computes the numbers has never
+  run or has not updated them for 8 days or more, and warns when the week shown may not have been collected (no activity
+  recorded, or far less than usual: the `data_health` notes of the last run, shown only for the week that run computed).
+  Euros and dollars are never added together. Plain Spanish, no codes or jargon.
   It reads `GET /reporting/weekly-office-program-performance` (the rows the pipeline writes in
   `reporting.weekly_office_program_performance`) and `GET /reporting/pipeline-runs/latest`, any logged-in user.
   The calls are in `src/lib/reporting.ts`, where the four KPIs are defined; the page is `src/views/BusinessPerformancePage.tsx`.
@@ -206,7 +209,8 @@ With the API and the backoffice running (`npm run dev`, or `npm run build && npm
   `NEXT_PUBLIC_TELEMETRY_ENDPOINT`). **Writes** orders: development database only.
 
 - `npm run e2e:reporting` — the business dashboard (`/reporting`): the four KPIs, the period, that what the page shows is what
-  the API answers, that euros and dollars are not added, and the move between weeks. Needs at least one week computed by the
+  the API answers, that euros and dollars are not added, the move between weeks, and that what it says about how fresh and
+  how complete the data is matches the last run. Needs at least one week computed by the
   pipeline (`python data/pipelines/pipeline.py`); read-only. `E2E_SCREENSHOTS=<folder>` saves a picture of the page.
 
 The first five pass against `next dev` and against the production build. See the header of each file in `e2e/`.
