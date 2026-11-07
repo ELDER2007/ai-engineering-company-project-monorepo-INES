@@ -92,7 +92,7 @@ def test_every_field_of_the_log_table_is_described_in_the_design_document():
 def test_what_the_implementation_table_says_is_done_exists_in_the_code():
     table = DESIGN[DESIGN.index("## Implementación del diseño"): DESIGN.index("## Estado Actual")]
     assert "✅" in table and "⏳" in table  # it says what is done and what is not
-    for name in ("mark_run_crashed", "weekly_office_performance_flow", "extract_events", "load_weekly_performance"):
+    for name in ("mark_run_crashed", "weekly_office_performance_flow", "extract_kpi_events", "load_weekly_performance"):
         assert hasattr(pipeline, name)
     assert re.search(r"Secret.*Pendiente|Pendiente.*Secret", table)  # the blocks are not claimed as implemented
     assert not any(hasattr(pipeline, n) for n in ("Secret", "load_block"))  # ...and indeed they are not

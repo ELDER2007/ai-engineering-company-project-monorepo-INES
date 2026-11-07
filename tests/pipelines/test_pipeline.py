@@ -96,7 +96,7 @@ def variance(order_id, office="valencia", programme="ventas-b2b"):
 
 def clean(events) -> list[wp.CleanEvent]:
     """What the validation task hands to the KPI tasks: the valid events, cleaned."""
-    result = run(pipeline.validate_events, events)
+    result = run(pipeline.validate_kpi_events, events)
     assert result.rejected == [], "the test data must be valid"
     return result.valid
 
@@ -229,11 +229,11 @@ def test_the_four_kpis_match_the_definitions_of_the_briefing_for_a_known_input_c
     ]
 
 
-# ---------------------------------------------------------------- validate_events: defensive behaviour on invalid or malformed input
+# ---------------------------------------------------------------- validate_kpi_events: defensive behaviour on invalid or malformed input
 
 
 def reasons(events):
-    result = run(pipeline.validate_events, events)
+    result = run(pipeline.validate_kpi_events, events)
     return result.valid, [r.reason for r in result.rejected]
 
 
@@ -276,7 +276,7 @@ def test_validation_falls_back_to_unit_cost_times_quantity_when_there_is_no_tota
 
 def test_validation_keeps_the_good_events_of_a_batch_and_counts_the_bad_ones_by_reason():
     batch = [outbound("ok-1"), telemetry_event(wp.OUTBOUND, office=None), outbound("ok-2"), telemetry_event(wp.INBOUND), outbound("ok-3", programme="")]
-    result = run(pipeline.validate_events, batch)
+    result = run(pipeline.validate_kpi_events, batch)
     assert [e.order_id for e in result.valid] == ["ok-1", "ok-2"]
     assert result.rejected_by_reason() == {"missing or unknown office": 1, "inbound_order_created without a valid cost": 1, "missing programme_id": 1}
 
@@ -287,7 +287,7 @@ def test_validation_normalises_office_and_currency_spelling_and_whitespace():
 
 
 def test_validation_of_no_events_is_nothing_valid_and_nothing_rejected():
-    result = run(pipeline.validate_events, [])
+    result = run(pipeline.validate_kpi_events, [])
     assert result.valid == [] and result.rejected == []
 
 
@@ -348,7 +348,7 @@ def test_each_row_carries_the_currency_of_its_office():
     assert {r.office: r.currency for r in rows} == {"valencia": "EUR", "miami": "USD"}
 
 
-# ---------------------------------------------------------------- reconcile: the report must add up to its events
+# ---------------------------------------------------------------- reconcile_weekly_kpis: the report must add up to its events
 
 
 def reconcile_inputs(raw):
@@ -361,24 +361,24 @@ def reconcile_inputs(raw):
 
 def test_a_report_that_adds_up_to_its_events_reconciles():
     rows, unique = reconcile_inputs([inbound("in-1", 1000), outbound("out-1"), shortage("out-1"), variance("in-1")])
-    proof = run(pipeline.reconcile, rows, unique.events, unique.duplicates_removed, 4, 0, 4)
+    proof = run(pipeline.reconcile_weekly_kpis, rows, unique.events, unique.duplicates_removed, 4, 0, 4)
     assert proof["ok"] and proof["unique"] == 4
 
 
 def test_a_report_that_lost_a_row_is_refused():
     rows, unique = reconcile_inputs([outbound("out-1"), outbound("out-2", "miami", "liderazgo-basico")])
     with pytest.raises(wp.ReconciliationError, match="outbound_order_created"):
-        run(pipeline.reconcile, rows[:-1], unique.events, unique.duplicates_removed, 2, 0, 2)
+        run(pipeline.reconcile_weekly_kpis, rows[:-1], unique.events, unique.duplicates_removed, 2, 0, 2)
 
 
 def test_a_report_with_a_wrong_cost_is_refused():
     rows, unique = reconcile_inputs([inbound("in-1", 1000)])
     tampered = [wp.WeeklyRow(r.office, r.programme_id, r.week_start, r.total_material_cost + 1, 0, 0, 0, r.currency) for r in rows]
     with pytest.raises(wp.ReconciliationError, match="total cost"):
-        run(pipeline.reconcile, tampered, unique.events, unique.duplicates_removed, 1, 0, 1)
+        run(pipeline.reconcile_weekly_kpis, tampered, unique.events, unique.duplicates_removed, 1, 0, 1)
 
 
 def test_events_that_are_neither_valid_nor_rejected_make_the_report_refuse_to_publish():
     rows, unique = reconcile_inputs([outbound("out-1")])
     with pytest.raises(wp.ReconciliationError, match="events_read"):
-        run(pipeline.reconcile, rows, unique.events, unique.duplicates_removed, 5, 0, 1)  # 4 events are unaccounted for
+        run(pipeline.reconcile_weekly_kpis, rows, unique.events, unique.duplicates_removed, 5, 0, 1)  # 4 events are unaccounted for

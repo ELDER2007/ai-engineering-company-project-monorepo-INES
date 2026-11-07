@@ -16,7 +16,7 @@ from sqlalchemy import create_engine
 from data.pipelines import pipeline
 from data.process import weekly_performance as wp
 
-DATABASE_TASKS = ["start_pipeline_run", "finish_pipeline_run", "extract_events", "count_window_events", "load_weekly_performance"]
+DATABASE_TASKS = ["start_pipeline_run", "finish_pipeline_run", "extract_kpi_events", "count_window_events", "load_weekly_performance"]
 SOURCE = inspect.getsource(pipeline)
 
 
@@ -36,9 +36,9 @@ def test_every_task_that_touches_the_database_spells_out_retries_and_retry_delay
     assert "retries" in keywords and "retry_delay_seconds" in keywords
 
 
-@pytest.mark.parametrize("name", ["resolve_week_window", "validate_events", "check_currency_consistency", "deduplicate_events",
+@pytest.mark.parametrize("name", ["resolve_week_window", "validate_kpi_events", "check_currency_consistency", "deduplicate_events",
                                   "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events", "build_weekly_kpi_rows",
-                                  "reconcile", "save_raw_snapshot", "save_eval_report"])
+                                  "reconcile_weekly_kpis", "save_raw_snapshot", "save_eval_report"])
 def test_the_tasks_that_do_not_touch_an_external_service_have_no_retries(name):
     assert "retries" not in _decorator_keywords(name)
 

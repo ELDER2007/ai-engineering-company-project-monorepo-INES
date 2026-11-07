@@ -21,11 +21,11 @@ It turns the telemetry of one closed ISO week into the "Weekly Performance Repor
 
     The main flow (weekly_office_performance_flow) only COORDINATES; every phase is a SUBFLOW of its own:
 
-    EXTRACT    extract_kpi_events_subflow       -> extract_events
-    TRANSFORM  transform_weekly_kpis_subflow    -> validate_events, check_currency_consistency, deduplicate_events,
+    EXTRACT    extract_kpi_events_subflow       -> extract_kpi_events
+    TRANSFORM  transform_weekly_kpis_subflow    -> validate_kpi_events, check_currency_consistency, deduplicate_events,
                                                    calculate_total_material_cost, count_kits_delivered,
                                                    count_shortage_events, count_cost_variance_events (one per KPI),
-                                                   build_weekly_kpi_rows, reconcile
+                                                   build_weekly_kpi_rows, reconcile_weekly_kpis
     LOAD       load_weekly_office_program_performance_subflow -> load_weekly_performance (ONE transaction)
     OPTIONAL   window_liveness_count_subflow, raw_events_snapshot_subflow, validation_report_subflow
                (called with return_state=True: their failure is a warning)
@@ -36,9 +36,9 @@ Resilience (the four requirements of the ticket):
 * PARTIAL FAILURES. Tasks are CRITICAL (their failure stops the run: there is no honest report without them) or
   OPTIONAL (``count_window_events``, ``save_raw_snapshot``, ``save_eval_report``, called with ``return_state=True``: a failure is
   logged in the run's ``warnings`` and the flow continues). Whatever happens, the run is closed in the execution log.
-* RETRIES. Every task that touches the database (``extract_events``, ``load_weekly_performance``, the run log and the
+* RETRIES. Every task that touches the database (``extract_kpi_events``, ``load_weekly_performance``, the run log and the
   optional count) retries with a back-off (5 s, 30 s, 2 min) to absorb transient failures. Why 3: see ``RETRIES`` below.
-* CACHE. A task that completed less than an hour ago is not run again: ``extract_events`` (the expensive read) and
+* CACHE. A task that completed less than an hour ago is not run again: ``extract_kpi_events`` (the expensive read) and
   the four KPI tasks (each with its ``cache_key_fn`` and ``cache_expiration``) reuse their result for one hour, so rerunning after a failed load does not read the
   source again. The load, the log and the checks are NEVER cached: they must act every time. ``refresh=True`` (the
   manual trigger and ``--refresh``) bypasses the cache, to pick up late events.
@@ -169,7 +169,7 @@ def resolve_week_window(week_start: date | None) -> tuple[date, datetime, dateti
 
 
 @task(tags=["extract"], cache_key_fn=_extract_cache_key, cache_expiration=CACHE_TTL, persist_result=True, retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
-def extract_events(source: Engine, start: datetime, end: datetime, environment: str) -> list[wp.TelemetryEvent]:
+def extract_kpi_events(source: Engine, start: datetime, end: datetime, environment: str) -> list[wp.TelemetryEvent]:
     """The expensive read, cached for an hour. Read-only: never writes to ``telemetry_events``."""
     return repository.extract(source, start, end, environment)
 
@@ -229,7 +229,7 @@ def settled(state: Any, *, label: str, warnings: list[str], default: Any = None)
 
 
 @task(tags=["transform"], cache_policy=NO_CACHE)
-def validate_events(events: list[wp.TelemetryEvent]) -> wp.ValidationResult:
+def validate_kpi_events(events: list[wp.TelemetryEvent]) -> wp.ValidationResult:
     result = wp.validate_events(events)
     logger = get_run_logger()
     for reason, count in result.rejected_by_reason().items():
@@ -300,7 +300,7 @@ def build_weekly_kpi_rows(
 
 
 @task(tags=["transform"], cache_policy=NO_CACHE)
-def reconcile(
+def reconcile_weekly_kpis(
     rows: list[wp.WeeklyRow], events: list[wp.CleanEvent], duplicates_removed: int, events_read: int, rejected_count: int, valid_count: int
 ) -> dict[str, Any]:
     """Prove the report adds up to the events it came from; raise (and so stop the run) when it does not."""
@@ -355,7 +355,7 @@ class TransformationResult:
 def extract_kpi_events_subflow(source: Engine, start: datetime, end: datetime, environment: str, refresh: bool = False) -> ExtractionResult:
     """PHASE 1, EXTRACT: read, from ``telemetry_events`` (read-only), the events behind the four KPIs of the window
     ``[start, end)`` in one telemetry environment. ``refresh=True`` ignores the one-hour cache."""
-    extract = extract_events.with_options(refresh_cache=True) if refresh else extract_events
+    extract = extract_kpi_events.with_options(refresh_cache=True) if refresh else extract_kpi_events
     events = extract(source, start, end, environment)
     return ExtractionResult(events=events, events_read=len(events))
 
@@ -366,7 +366,7 @@ def transform_weekly_kpis_subflow(events: list[wp.TelemetryEvent], week_start: d
     ``total_material_cost``, ``kits_delivered_count``, ``shortage_events_count`` and ``cost_variance_events_count``.
     Validate, check the currencies, count each order once, compute the four KPIs, put them in rows and prove the numbers
     add up. Pure: it touches no database. ``refresh=True`` ignores the one-hour cache."""
-    checked = validate_events(events)
+    checked = validate_kpi_events(events)
     check_currency_consistency(checked.valid)
     unique = deduplicate_events(checked.valid)
     total_material_cost = calculate_total_material_cost(unique.events, refresh)
@@ -374,7 +374,7 @@ def transform_weekly_kpis_subflow(events: list[wp.TelemetryEvent], week_start: d
     shortage_events = count_shortage_events(unique.events, refresh)
     cost_variance_events = count_cost_variance_events(unique.events, refresh)
     rows = build_weekly_kpi_rows(week_start, total_material_cost, kits_delivered, shortage_events, cost_variance_events)
-    reconciliation = reconcile(rows, unique.events, unique.duplicates_removed, len(events), len(checked.rejected), len(checked.valid))
+    reconciliation = reconcile_weekly_kpis(rows, unique.events, unique.duplicates_removed, len(events), len(checked.rejected), len(checked.valid))
     return TransformationResult(
         rows=rows, valid_count=len(checked.valid), rejected_count=len(checked.rejected),
         rejected_by_reason=checked.rejected_by_reason(), reconciliation=reconciliation,

@@ -19,9 +19,9 @@ SUBFLOWS = {name: obj for name, obj in vars(pipeline).items() if isinstance(obj,
 
 PHASE_SUBFLOWS = ["extract_kpi_events_subflow", "transform_weekly_kpis_subflow", "load_weekly_office_program_performance_subflow"]
 OPTIONAL_SUBFLOWS = {"window_liveness_count_subflow", "raw_events_snapshot_subflow", "validation_report_subflow"}
-STAGE = {"extract": {"resolve_week_window", "extract_events", "count_window_events", "save_raw_snapshot"},
-         "transform": {"validate_events", "check_currency_consistency", "deduplicate_events", "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events",
-                       "build_weekly_kpi_rows", "reconcile"},
+STAGE = {"extract": {"resolve_week_window", "extract_kpi_events", "count_window_events", "save_raw_snapshot"},
+         "transform": {"validate_kpi_events", "check_currency_consistency", "deduplicate_events", "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events",
+                       "build_weekly_kpi_rows", "reconcile_weekly_kpis"},
          "load": {"load_weekly_performance", "save_eval_report"}}
 OPTIONAL_TASKS = {"count_window_events", "save_raw_snapshot", "save_eval_report"}
 COORDINATION_TASKS = {"resolve_week_window", "start_pipeline_run", "finish_pipeline_run"}  # the main flow may call these itself
@@ -69,13 +69,13 @@ def test_the_main_flow_only_coordinates_it_calls_no_task_of_a_phase():
 
 
 def test_each_phase_subflow_calls_the_tasks_of_its_own_phase_in_order():
-    aliases = {"extract": "extract_events"}  # the local alias the extraction subflow uses for its refresh option
+    aliases = {"extract": "extract_kpi_events"}  # the local alias the extraction subflow uses for its refresh option
     of = lambda name: [c for c in _called_names(_ast(SUBFLOWS[name]), aliases) if c in TASKS]  # noqa: E731
-    assert of("extract_kpi_events_subflow") == ["extract_events"]
+    assert of("extract_kpi_events_subflow") == ["extract_kpi_events"]
     assert of("transform_weekly_kpis_subflow") == [
-        "validate_events", "check_currency_consistency", "deduplicate_events",
+        "validate_kpi_events", "check_currency_consistency", "deduplicate_events",
         "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events",  # one per KPI
-        "build_weekly_kpi_rows", "reconcile"]
+        "build_weekly_kpi_rows", "reconcile_weekly_kpis"]
     assert of("load_weekly_office_program_performance_subflow") == ["load_weekly_performance"]
 
 

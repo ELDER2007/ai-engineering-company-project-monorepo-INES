@@ -49,9 +49,9 @@ def latest(target):
 
 def test_the_optional_and_the_critical_tasks_are_the_ones_the_design_says():
     optional = {"count_window_events", "save_raw_snapshot", "save_eval_report"}
-    critical = {"start_pipeline_run", "resolve_week_window", "extract_events", "validate_events", "check_currency_consistency",
+    critical = {"start_pipeline_run", "resolve_week_window", "extract_kpi_events", "validate_kpi_events", "check_currency_consistency",
                 "deduplicate_events", "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events",
-                "count_cost_variance_events", "build_weekly_kpi_rows", "reconcile", "load_weekly_performance", "finish_pipeline_run"}
+                "count_cost_variance_events", "build_weekly_kpi_rows", "reconcile_weekly_kpis", "load_weekly_performance", "finish_pipeline_run"}
     assert all(hasattr(pipeline, name) for name in optional | critical)
     assert optional.isdisjoint(critical)
 
@@ -150,9 +150,9 @@ def test_every_task_that_touches_the_database_is_configured_with_retries():
     """Checked in a fresh interpreter, because the test suite switches retries off."""
     code = (
         "from data.pipelines import pipeline as p;"
-        "t=[p.extract_events,p.load_weekly_performance,p.start_pipeline_run,p.finish_pipeline_run];"
+        "t=[p.extract_kpi_events,p.load_weekly_performance,p.start_pipeline_run,p.finish_pipeline_run];"
         "print([x.retries for x in t], [x.retry_delay_seconds for x in t][0], p.count_window_events.retries,"
-        " p.validate_events.retries, p.calculate_total_material_cost.retries)"
+        " p.validate_kpi_events.retries, p.calculate_total_material_cost.retries)"
     )
     env = {k: v for k, v in os.environ.items() if k != "PIPELINE_RETRIES"}
     out = subprocess.run([sys.executable, "-c", code], cwd=REPO, env=env, capture_output=True, text=True, timeout=120)
@@ -170,7 +170,7 @@ def test_a_transient_failure_of_the_extraction_is_absorbed_by_the_retries(engine
         return original(*args, **kwargs)
 
     monkeypatch.setattr(repository, "extract", flaky)
-    monkeypatch.setattr(pipeline, "extract_events", pipeline.extract_events.with_options(retries=2, retry_delay_seconds=0))
+    monkeypatch.setattr(pipeline, "extract_kpi_events", pipeline.extract_kpi_events.with_options(retries=2, retry_delay_seconds=0))
     assert run(engines).state == "Completed" and len(calls) == 3 and len(rows(engines[1])) == 5
 
 
@@ -196,7 +196,7 @@ def test_a_failure_that_never_recovers_ends_failed_after_using_every_retry(engin
         raise ConnectionError("down")
 
     monkeypatch.setattr(repository, "extract", always)
-    monkeypatch.setattr(pipeline, "extract_events", pipeline.extract_events.with_options(retries=2, retry_delay_seconds=0))
+    monkeypatch.setattr(pipeline, "extract_kpi_events", pipeline.extract_kpi_events.with_options(retries=2, retry_delay_seconds=0))
     with pytest.raises(ConnectionError):
         run(engines)
     assert len(calls) == 3 and latest(engines[1]).state == "Failed"
@@ -235,13 +235,13 @@ def test_main_returns_zero_when_it_works_and_one_when_it_fails(tmp_path, monkeyp
 
 def test_the_cache_lasts_one_hour_and_covers_only_the_tasks_that_can_safely_be_reused():
     assert pipeline.CACHE_TTL == timedelta(hours=1)
-    assert pipeline.extract_events.cache_expiration == pipeline.CACHE_TTL
+    assert pipeline.extract_kpi_events.cache_expiration == pipeline.CACHE_TTL
     for kpi_task in (pipeline.calculate_total_material_cost, pipeline.count_kits_delivered, pipeline.count_shortage_events,
                      pipeline.count_cost_variance_events):
         assert kpi_task.cache_expiration == pipeline.CACHE_TTL
     # the load and the log act on the world every time: they must never be skipped
     for never_cached in (pipeline.load_weekly_performance, pipeline.start_pipeline_run, pipeline.finish_pipeline_run,
-                         pipeline.reconcile, pipeline.check_currency_consistency):
+                         pipeline.reconcile_weekly_kpis, pipeline.check_currency_consistency):
         assert never_cached.cache_policy is NO_CACHE
 
 
@@ -317,7 +317,7 @@ def test_the_cache_expires(engines, monkeypatch):
     import time
 
     extractions = spy(monkeypatch, repository, "extract")
-    monkeypatch.setattr(pipeline, "extract_events", pipeline.extract_events.with_options(cache_expiration=timedelta(milliseconds=50)))
+    monkeypatch.setattr(pipeline, "extract_kpi_events", pipeline.extract_kpi_events.with_options(cache_expiration=timedelta(milliseconds=50)))
     run(engines, refresh=False)
     time.sleep(0.3)
     run(engines, refresh=False)

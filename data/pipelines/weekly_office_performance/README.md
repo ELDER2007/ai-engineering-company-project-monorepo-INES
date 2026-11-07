@@ -16,9 +16,9 @@ Pipeline Prefect del "Reporte Semanal de Desempeño por Oficina y Programa". Esp
 | Requisito | Cómo se cumple |
 | --- | --- |
 | Tolera fallos parciales | Tasks **opcionales** (`count_window_events`, `save_raw_snapshot`, `save_eval_report`): si fallan se anota en `warnings` y la corrida sigue. Las críticas la detienen |
-| Reintentos en servicios externos | `extract_events`, `load_weekly_performance` y el log reintentan 3 veces (5 s, 30 s, 2 min) |
+| Reintentos en servicios externos | `extract_kpi_events`, `load_weekly_performance` y el log reintentan 3 veces (5 s, 30 s, 2 min) |
 | Corre como script | `python data/pipelines/pipeline.py ...` (código de salida 0 / 1) |
-| No repite lo que corrió hace menos de 1 h | Caché de 1 h en `extract_events` y `aggregate_by_office_programme`; `--refresh` la salta. La carga nunca se cachea |
+| No repite lo que corrió hace menos de 1 h | Caché de 1 h en `extract_kpi_events` y en las 4 tasks de KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`); `--refresh` la salta. La carga nunca se cachea |
 
 ## Probarlo (desde la raíz del repo)
 
@@ -45,7 +45,7 @@ Tests del pipeline (en la raíz del proyecto, no necesitan la API):
 python -m pytest tests/pipelines                       # todos
 python -m pytest tests/pipelines/test_pipeline.py      # unitarios de las tasks de transformación (sin base de datos, 1-2 s)
 python -m pytest tests/pipelines/test_subflows.py      # cada subflow por separado
-python -m pytest tests/pipelines/test_cli.py           # el comando python data/pipelines/pipeline.py y su documentación
+python -m pytest tests/pipelines/test_cli.py           # la línea de comandos del pipeline y su documentación
 ```
 
 Tests de comportamiento del pipeline y de sus endpoints (necesitan la API):

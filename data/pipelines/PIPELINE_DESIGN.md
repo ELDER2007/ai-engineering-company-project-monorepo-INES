@@ -24,6 +24,7 @@ Lo que este documento especifica y dónde está en el código. Lo que no está i
 | Roles de base de datos separados, lectura y escritura (4.5) | ⏳ Recomendado | No aplicado: se usa una sola conexión |
 | *Deployment* de Prefect con los crons del lunes y del jueves (4.6) | ⏳ **Pendiente** | Documentado y ejecutable con el script; ningún programador lo lanza solo |
 | **Subflows** por fase (4.3) y sus primeros tests en `tests/pipelines/` | ✅ Parte 3 | `extract_kpi_events_subflow`, `transform_weekly_kpis_subflow`, `load_weekly_office_program_performance_subflow` y 3 opcionales |
+| **Dashboard de negocio** (`/reporting` en el backoffice, 8.6) | ✅ Parte 3 | Lo lee el liderazgo: los 4 KPIs con el nombre del briefing, la semana que cubren y euros y dólares por separado |
 | Alertas por Slack o correo (8b) y *flow* de *backfill* | ⏳ Pendiente | No los pide el ticket de la Parte 3 |
 | Conciliación contra las tablas de inventario, historial de valores pasados (anexo, I-3 y R-2) | ⏳ v2 | Límites conocidos, no se han implementado |
 
@@ -164,14 +165,14 @@ flowchart LR
 
     subgraph EXT["1. EXTRACCIÓN"]
         E1["resolve_week_window<br/>[lunes 00:00, +7d) UTC"]
-        E2["extract_events<br/>inbound_order_created · outbound_order_created<br/>stock_threshold_triggered · kit_cost_variance_detected<br/>+ ventana por timestamp"]
+        E2["extract_kpi_events<br/>inbound_order_created · outbound_order_created<br/>stock_threshold_triggered · kit_cost_variance_detected<br/>+ ventana por timestamp"]
     end
 
     subgraph TRF["2. TRANSFORMACIÓN"]
-        T1["validate_events<br/>rechaza incompletos"]
+        T1["validate_kpi_events<br/>rechaza incompletos"]
         T2["check_currency_consistency<br/>valencia=EUR, miami=USD"]
         T3["una task por KPI:<br/>calculate_total_material_cost · count_kits_delivered<br/>count_shortage_events · count_cost_variance_events"]
-        T4["reconcile<br/>conteos = eventos válidos"]
+        T4["reconcile_weekly_kpis<br/>conteos = eventos válidos"]
     end
 
     subgraph LD["3. CARGA"]
@@ -217,8 +218,8 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 | Concepto del diseño | Concepto de Prefect | En este pipeline |
 | --- | --- | --- |
 | El pipeline completo de una semana | **Flow** | `weekly_office_performance_flow(week_start, trigger)` |
-| Etapa de **extracción** | **Tasks** | `resolve_week_window`, `extract_events` |
-| Etapa de **transformación** | **Tasks** | `validate_events`, `check_currency_consistency`, `deduplicate_events`, una task por KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`), `build_weekly_kpi_rows`, `reconcile` |
+| Etapa de **extracción** | **Tasks** | `resolve_week_window`, `extract_kpi_events` |
+| Etapa de **transformación** | **Tasks** | `validate_kpi_events`, `check_currency_consistency`, `deduplicate_events`, una task por KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`), `build_weekly_kpi_rows`, `reconcile_weekly_kpis` |
 | Etapa de **carga** | **Tasks** | `load_weekly_performance`, `finish_pipeline_run` |
 | Resultado de una corrida | **State** | `Running`, `Completed`, `Failed` (+ `Crashed`, `AwaitingRetry`) |
 | Conexión a Supabase / PostgreSQL | **Blocks** (`Secret`) | `telemetry-db-url`, `reporting-db-url` |
@@ -240,8 +241,8 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 | --- | --- | --- | --- | --- |
 | — | 0 | `start_pipeline_run` | Si ya hay una corrida `Running` reciente de esa semana, termina como `Skipped`; si no, inserta la corrida con estado `Running` **antes** de tocar datos | no |
 | **Extracción** | 1 | `resolve_week_window` | Normaliza a lunes UTC y calcula `[start, end)` | no |
-| **Extracción** | 2 | `extract_events` | Query de solo lectura a `telemetry_events` (4 tipos, ventana) | sí (3, backoff) |
-| **Transformación** | 3 | `validate_events` | Descarta eventos sin `office`, `programme_id`, `currency` o (en entradas) `total_cost_minor` válido; cuenta rechazados | no |
+| **Extracción** | 2 | `extract_kpi_events` | Query de solo lectura a `telemetry_events` (4 tipos, ventana) | sí (3, backoff) |
+| **Transformación** | 3 | `validate_kpi_events` | Descarta eventos sin `office`, `programme_id`, `currency` o (en entradas) `total_cost_minor` válido; cuenta rechazados | no |
 | **Transformación** | 4 | `check_currency_consistency` | Verifica `EUR`↔valencia y `USD`↔miami; falla si se mezclan | no |
 | **Transformación** | 5 | `deduplicate_events` | Cuenta cada (`event_type`, `order_id`) una sola vez | no |
 | **Transformación** | 6 | `calculate_total_material_cost` | **KPI `total_material_cost`**: suma del costo de las entradas de cada oficina y programa, en la moneda de la oficina | no (caché 1 h) |
@@ -249,7 +250,7 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 | **Transformación** | 8 | `count_shortage_events` | **KPI `shortage_events_count`**: número de `stock_threshold_triggered` | no (caché 1 h) |
 | **Transformación** | 9 | `count_cost_variance_events` | **KPI `cost_variance_events_count`**: número de `kit_cost_variance_detected` | no (caché 1 h) |
 | **Transformación** | 10 | `build_weekly_kpi_rows` | Junta los cuatro KPIs: una fila de `weekly_office_program_performance` por oficina y programa | no |
-| **Transformación** | 11 | `reconcile` | Comprueba que los conteos agregados = eventos válidos de cada tipo; si no cuadra, falla | no |
+| **Transformación** | 11 | `reconcile_weekly_kpis` | Comprueba que los conteos agregados = eventos válidos de cada tipo; si no cuadra, falla | no |
 | **Carga** | 12 | `load_weekly_performance` | En **una transacción**: UPSERT por la clave única (reemplazo) + borrado de las filas de esa semana que ya no tienen eventos | sí (3, backoff) |
 | — | 13 | `finish_pipeline_run` | Actualiza la fila de log: estado final, conteos, error (alimenta `/pipeline-runs/latest`) | sí (3) |
 
@@ -262,7 +263,7 @@ Un fallo no tumba siempre toda la corrida: depende de si la task es imprescindib
 
 | Tipo | Tasks | Si fallan |
 | --- | --- | --- |
-| **Crítica** | `start_pipeline_run`, `resolve_week_window`, `extract_events`, `validate_events`, `check_currency_consistency`, `deduplicate_events`, `calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`, `build_weekly_kpi_rows`, `reconcile`, `load_weekly_performance`, `finish_pipeline_run` | La corrida se detiene, queda `Failed` en el log y no se carga nada (o se hace *rollback*) |
+| **Crítica** | `start_pipeline_run`, `resolve_week_window`, `extract_kpi_events`, `validate_kpi_events`, `check_currency_consistency`, `deduplicate_events`, `calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`, `build_weekly_kpi_rows`, `reconcile_weekly_kpis`, `load_weekly_performance`, `finish_pipeline_run` | La corrida se detiene, queda `Failed` en el log y no se carga nada (o se hace *rollback*) |
 | **Opcional** | `count_window_events` (señal de vida), `save_raw_snapshot` (copia en `data/raw/`), `save_eval_report` (informe en `data/eval/`) | Se anota en el campo `warnings` del log y la corrida **continúa y termina `Completed`** |
 
 Reglas: un dato que falla queda como **desconocido, nunca como cero** (`window_events_total` es `null` si su task falló). En Prefect las opcionales se llaman con `return_state=True`, que devuelve el estado de la task en lugar de lanzar su error.
@@ -271,7 +272,7 @@ Reglas: un dato que falla queda como **desconocido, nunca como cero** (`window_e
 
 **Por qué 3 reintentos (4 intentos en total, 155 s de espera como máximo):** los fallos de una base de datos tras un *pooler* son breves: una conexión inactiva ya cerrada (segundos), un *pooler* saturado (segundos o un minuto) o una conmutación por fallo corta (un par de minutos). Cada espera cubre uno de esos casos y crece para no martillear una base que se recupera. Más reintentos no ayudan: una base caída tras ~2,5 minutos ya no es transitoria (credenciales, esquema, caída real) y reintentar solo escondería el fallo; además la espera total debe quedar muy por debajo de la hora tras la cual una corrida abierta se considera muerta y dentro del objetivo de frescura de las 06:00 UTC. Reintentar es seguro porque todas las tasks son idempotentes. La justificación está también en un comentario del código (`pipeline.py`).
 
-Toda task que toca la base de datos reintenta con espera creciente (5 s, 30 s y 2 min): `extract_events`, `load_weekly_performance`, `start_pipeline_run` y `finish_pipeline_run` (3 reintentos), y `count_window_events` (1 reintento, porque es opcional y no debe retrasar la corrida). Las tasks puras no reintentan: repetirlas no arregla un error de datos.
+Toda task que toca la base de datos reintenta con espera creciente (5 s, 30 s y 2 min): `extract_kpi_events`, `load_weekly_performance`, `start_pipeline_run` y `finish_pipeline_run` (3 reintentos), y `count_window_events` (1 reintento, porque es opcional y no debe retrasar la corrida). Las tasks puras no reintentan: repetirlas no arregla un error de datos.
 
 ### 4.2d Caché de una hora
 
@@ -279,9 +280,9 @@ Una task que ya terminó bien hace menos de una hora no se repite (`cache_expira
 
 | Task | ¿Caché? | Por qué |
 | --- | --- | --- |
-| `extract_events` | Sí, clave = base de datos + entorno + ventana | Es la lectura cara. Tras una carga fallida, reintentar no vuelve a leer la fuente |
+| `extract_kpi_events` | Sí, clave = base de datos + entorno + ventana | Es la lectura cara. Tras una carga fallida, reintentar no vuelve a leer la fuente |
 | Las 4 tasks de KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`) | Sí, `cache_key_fn`: clave = el KPI + huella (SHA-256) del contenido de los eventos, ordenados | Son funciones puras: mismos eventos, mismos números. Si cambia un solo evento, cambia la clave y se recalcula; un KPI nunca reutiliza el resultado de otro |
-| `load_weekly_performance`, `start/finish_pipeline_run`, `reconcile`, `check_currency_consistency` | **Nunca** | Actúan sobre el mundo o son comprobaciones: saltárselas sería peligroso |
+| `load_weekly_performance`, `start/finish_pipeline_run`, `reconcile_weekly_kpis`, `check_currency_consistency` | **Nunca** | Actúan sobre el mundo o son comprobaciones: saltárselas sería peligroso |
 
 Solo se guardan en caché las tasks que terminaron `Completed`: un fallo nunca se reutiliza.
 
@@ -304,8 +305,8 @@ El flow principal ya **no contiene la lógica de las fases: las coordina**. Cada
 
 | Subflow | Fase | Entradas → salida | Tasks que contiene |
 | --- | --- | --- | --- |
-| `extract_kpi_events_subflow` | Extracción | `source`, `start`, `end`, `environment`, `refresh` → `ExtractionResult` (los eventos de los 4 KPIs y cuántos) | `extract_events` |
-| `transform_weekly_kpis_subflow` | Transformación | `events`, `week_start`, `refresh` → `TransformationResult` (las filas con `total_material_cost`, `kits_delivered_count`, `shortage_events_count` y `cost_variance_events_count`, y la evidencia) | `validate_events`, `check_currency_consistency`, `deduplicate_events`, `calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`, `build_weekly_kpi_rows`, `reconcile` |
+| `extract_kpi_events_subflow` | Extracción | `source`, `start`, `end`, `environment`, `refresh` → `ExtractionResult` (los eventos de los 4 KPIs y cuántos) | `extract_kpi_events` |
+| `transform_weekly_kpis_subflow` | Transformación | `events`, `week_start`, `refresh` → `TransformationResult` (las filas con `total_material_cost`, `kits_delivered_count`, `shortage_events_count` y `cost_variance_events_count`, y la evidencia) | `validate_kpi_events`, `check_currency_consistency`, `deduplicate_events`, `calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`, `build_weekly_kpi_rows`, `reconcile_weekly_kpis` |
 | `load_weekly_office_program_performance_subflow` | Carga | `target`, `rows`, `week_start` → `LoadResult` | `load_weekly_performance` |
 | `window_liveness_count_subflow` *(opcional)* | Extracción | `source`, `start`, `end`, `environment` → `int` | `count_window_events` |
 | `raw_events_snapshot_subflow` *(opcional)* | Extracción | `events`, `week_start`, `environment` → ruta del archivo | `save_raw_snapshot` |
@@ -323,7 +324,7 @@ El flow principal ya **no contiene la lógica de las fases: las coordina**. Cada
 | --- | --- | --- |
 | `Scheduled` / `Pending` | El deployment espera al lunes 05:00 UTC | Nada: es el estado normal entre corridas |
 | **`Running`** | El flow está ejecutando sus tasks | La fila de `pipeline_runs` se crea en `Running` |
-| `AwaitingRetry` (task) | `extract_events` o `load_weekly_performance` falló y espera su reintento | Prefect reintenta con espera creciente (5 s, 30 s, 2 min) |
+| `AwaitingRetry` (task) | `extract_kpi_events` o `load_weekly_performance` falló y espera su reintento | Prefect reintenta con espera creciente (5 s, 30 s, 2 min) |
 | **`Completed`** | Todas las tasks terminaron bien (también con 0 filas escritas) | El log pasa a `Completed` |
 | **`Failed`** | Una task agotó sus reintentos o lanzó un error de negocio (p. ej. mezcla de monedas) | El flow captura la excepción, escribe `Failed` + `error` en el log y la relanza, así que la corrida de Prefect también queda `Failed` |
 | `Crashed` | El proceso o la infraestructura murieron | El hook `on_crashed` intenta marcar el log `Crashed`; si ni eso fue posible, la siguiente corrida marca como `Crashed` cualquier `Running` de más de 1 h |
@@ -331,14 +332,14 @@ El flow principal ya **no contiene la lógica de las fases: las coordina**. Cada
 Aclaración: `reporting.pipeline_runs.state` es el estado **de auditoría** del pipeline, derivado del state final de Prefect. `Skipped` es solo nuestro (no existe en Prefect): el flow de Prefect termina `Completed` tras salir pronto, y el log dice `Skipped`.
 
 Reglas de negocio sobre fallos:
-- Un evento rechazado en `validate_events` **no** hace fallar el flow; se cuenta en `rejected_count`.
+- Un evento rechazado en `validate_kpi_events` **no** hace fallar el flow; se cuenta en `rejected_count`.
 - La mezcla de monedas y una conciliación que no cuadra **sí** lo hacen fallar.
 
 ### 4.5 Blocks (configuración y credenciales)
 
 | Block | Tipo | Contenido | Quién lo usa |
 | --- | --- | --- | --- |
-| `telemetry-db-url` | `Secret` | URI de conexión a la base de Supabase (Transaction pooler) con un **rol de solo lectura** sobre `telemetry_events` | `extract_events` |
+| `telemetry-db-url` | `Secret` | URI de conexión a la base de Supabase (Transaction pooler) con un **rol de solo lectura** sobre `telemetry_events` | `extract_kpi_events` |
 | `reporting-db-url` | `Secret` | URI de conexión a la misma base con un **rol con escritura solo en el esquema `reporting`** | `start/finish_pipeline_run`, `load_weekly_performance` |
 
 - Dos blocks para una misma base de datos a propósito: aplican el principio de mínimo privilegio y hacen que sea imposible por permisos escribir en `telemetry_events`, además de por diseño.
@@ -430,13 +431,13 @@ Cada corrida es **una fila** en `reporting.pipeline_runs`, creada como `Running`
 
 **Lo que el log no guarda a propósito:** el detalle de cada evento rechazado (queda en el log de Prefect con su motivo, sin datos personales) y cualquier dato del evento. Si Elena necesita investigar rechazos, se añade una tabla de detalle más adelante.
 
-**Trazabilidad de cada número:** el `computed_at` de cada fila del reporte cae dentro de la ventana `started_at`–`finished_at` de exactamente una corrida: la última que la creó o la cambió (una corrida que no cambia nada no toca la fila). **Conciliación (task `reconcile`):** `events_read = válidos + rechazados` y la suma de los conteos por fila iguala los eventos válidos de cada tipo; si no cuadra, la corrida falla: un reporte que no concilia no se publica.
+**Trazabilidad de cada número:** el `computed_at` de cada fila del reporte cae dentro de la ventana `started_at`–`finished_at` de exactamente una corrida: la última que la creó o la cambió (una corrida que no cambia nada no toca la fila). **Conciliación (task `reconcile_weekly_kpis`):** `events_read = válidos + rechazados` y la suma de los conteos por fila iguala los eventos válidos de cada tipo; si no cuadra, la corrida falla: un reporte que no concilia no se publica.
 
 ### 5.3 Recuperabilidad
 
 - **Sin estado entre corridas:** no hay checkpoints ni offsets. La unidad de trabajo es la semana, así que "retomar" es volver a ejecutar esa semana; el resultado es idéntico (5.1).
 - **Atomicidad:** la carga va en una sola transacción. Si falla, no queda una semana a medias: la tabla conserva exactamente los datos de la última carga buena.
-- **Fallo transitorio:** `extract_events` y `load_weekly_performance` reintentan 3 veces con espera creciente (5 s, 30 s, 2 min) antes de marcar `Failed`.
+- **Fallo transitorio:** `extract_kpi_events` y `load_weekly_performance` reintentan 3 veces con espera creciente (5 s, 30 s, 2 min) antes de marcar `Failed`.
 - **Corrida muerta:** si el proceso cae sin poder escribir su estado final, la fila queda en `Running`. La siguiente corrida marca como `Crashed` cualquier `Running` con más de 1 h de antigüedad y procede con normalidad; así `GET /pipeline-runs/latest` nunca miente con un `Running` eterno.
 - **Reproceso:** `POST /reporting/pipeline-runs` con `week_start` permite repetir cualquier semana, también las pasadas (backfill).
 
@@ -582,6 +583,16 @@ Nombre exacto de la sección *Destination table* del briefing:
 | Tablas | `telemetry_events` (solo la lee este pipeline) | `reporting.*` |
 | Endpoints | `/telemetry/events`, `GET /telemetry/report` | `/reporting/...` |
 | Código de cálculo | `analysis.py` (no se toca) | `data/pipelines/` + `data/process/` |
+
+### 8.6 El dashboard del liderazgo (Parte 3)
+
+Nadie del liderazgo va a consultar un endpoint: los KPIs se ven en la página **`/reporting`** del backoffice (`uis/backoffice/src/views/BusinessPerformancePage.tsx`), que consume el endpoint de consulta de KPIs (3) y el de estado (1) de la sección 8.2, solo para leer. Está pensada para Laura (CEO) y Elena (L&D), no para desarrolladores:
+
+- Muestra cada uno de los 4 KPIs con **el nombre que tiene en el briefing** ("Costo de material por oficina/programa", "Kits entregados", "Frecuencia de escasez", "Frecuencia de variación de costo") y su definición, un total y una tabla por oficina y programa.
+- Dice **qué periodo cubren** los datos (la semana, de lunes a domingo) y permite moverse entre semanas; también dice cuándo se actualizaron por última vez.
+- El costo de cada oficina va en su moneda y los totales de euros y dólares **nunca se suman**.
+- Texto en español claro, sin códigos (`ventas-b2b` se ve como "Ventas B2B") ni jerga.
+- No calcula nada: todo número viene de la API, que lo lee de `reporting.weekly_office_program_performance`.
 
 ## 8b. Frescura y observabilidad
 

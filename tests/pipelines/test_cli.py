@@ -133,7 +133,8 @@ def documented_commands() -> set[tuple[str, ...]]:
     """Every runnable command the documentation shows (synopsis lines with [options], <placeholders> or ... are not commands)."""
     commands: set[tuple[str, ...]] = set()
     for doc in DOCS:
-        for match in re.finditer(r"python (?:-m data\.pipelines\.pipeline|data/pipelines/pipeline\.py)([^\n`]*)", doc.read_text(encoding="utf-8")):
+        text = re.sub(r"[ \t]#[^\n]*", "", doc.read_text(encoding="utf-8"))  # a comment after a command is prose, not part of a command
+        for match in re.finditer(r"python (?:-m data\.pipelines\.pipeline|data/pipelines/pipeline\.py)([^\n`]*)", text):
             tail = match.group(1).split("#")[0].strip()
             if any(token in tail for token in ("[", "<", "...", "|", "(")):
                 continue
