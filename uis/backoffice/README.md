@@ -98,6 +98,15 @@ it is never reported as a failed sign-up.
   quantity field.
 - `/inventory/orders` — read-only history of entries and exits: asset name, quantity, type, date and the `user_uuid`
   that created each one (with the user's name, from `GET /users/directory`, when it is known).
+- `/reporting` — **Reporte semanal de desempeño por oficina y programa**, the business dashboard for the leadership
+  (the CEO and the L&D manager), not for developers. It shows the four KPIs of the data-pipelines briefing — "Costo de
+  material por oficina/programa", "Kits entregados", "Frecuencia de escasez" and "Frecuencia de variación de costo" —
+  each with its name and its definition from the briefing, a total and a table per office and programme, for one
+  week at a time (the latest computed one at first, with buttons to move between weeks) and with the period it covers
+  and when the data was last updated. Euros and dollars are never added together. Plain Spanish, no codes or jargon.
+  It reads `GET /reporting/weekly-office-program-performance` (the rows the pipeline writes in
+  `reporting.weekly_office_program_performance`) and `GET /reporting/pipeline-runs/latest`, any logged-in user.
+  The calls are in `src/lib/reporting.ts`, where the four KPIs are defined; the page is `src/views/BusinessPerformancePage.tsx`.
 
 The calls to `/inventory/*` are all in `src/lib/inventory.ts` (no component calls `fetch`); the rules and texts
 (thresholds, validation, error messages) are in `src/lib/inventoryRules.ts`. Names follow the Hito 5 CONTEXT: "activo",
@@ -116,6 +125,9 @@ To call an API on another domain instead, set `NEXT_PUBLIC_API_BASE_URL` (see `.
 The inventory API (`/inventory/*`) is reached as `/api/inventory/*`, because `/inventory/orders` is also a page of
 the app. `next.config.mjs` forwards it to `NEXT_PUBLIC_INVENTORY_API_URL` (from `.env.local`; default
 `API_PROXY_TARGET`). The browser still only talks to its own origin.
+
+The reporting API (`/reporting/*`) is reached as `/api/reporting/*` for the same reason: `/reporting` is also a page of the app.
+`next.config.mjs` forwards it to `API_PROXY_TARGET`.
 
 ## Running locally
 
@@ -192,6 +204,10 @@ With the API and the backoffice running (`npm run dev`, or `npm run build && npm
   the API's 400 is simulated in the browser.
 - `npm run e2e:telemetry` — event capture against the live receiver (needs the inventory seed and
   `NEXT_PUBLIC_TELEMETRY_ENDPOINT`). **Writes** orders: development database only.
+
+- `npm run e2e:reporting` — the business dashboard (`/reporting`): the four KPIs, the period, that what the page shows is what
+  the API answers, that euros and dollars are not added, and the move between weeks. Needs at least one week computed by the
+  pipeline (`python data/pipelines/pipeline.py`); read-only. `E2E_SCREENSHOTS=<folder>` saves a picture of the page.
 
 The first five pass against `next dev` and against the production build. See the header of each file in `e2e/`.
 
