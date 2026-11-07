@@ -37,6 +37,18 @@ Cada corrida deja: una fila en `reporting.pipeline_runs`, la copia de los evento
 
 Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corrida.
 
+## En producción: programarlo, guardar las credenciales y recibir avisos
+
+Todo esto es **opcional**: sin nada de esto, el comando de arriba funciona igual que siempre.
+
+| Qué | Cómo | Dónde está |
+| --- | --- | --- |
+| Que corra solo (lunes 05:00 UTC y corrección el jueves 05:00 UTC) | `python data/pipelines/deploy.py --work-pool nexova-reporting` y un worker: `prefect worker start --pool nexova-reporting`. `--dry-run` muestra el plan sin servidor | `../deploy.py` |
+| Credenciales en `Secret` blocks en lugar de variables de entorno | `python -m data.pipelines.weekly_office_performance.blocks` los crea (imprime solo los nombres) y `PIPELINE_SECRET_BLOCKS=1` los activa | `blocks.py` |
+| Aviso cuando falla, se cae o los datos pueden estar mal | `PIPELINE_ALERT_WEBHOOK_URL` (o el block `pipeline-alert-webhook`): un *webhook* compatible con Slack. Sin él no hace nada | `alerts.py` |
+
+Qué está comprobado y qué no, en `../PIPELINE_DESIGN.md` (secciones 4.5, 4.6 y 8b): los tests usan un servidor de Prefect temporal y un *webhook* local; no se ha registrado en un servidor real ni se ha enviado un aviso a un Slack real.
+
 ## Tests
 
 Tests del pipeline (en la raíz del proyecto, no necesitan la API):

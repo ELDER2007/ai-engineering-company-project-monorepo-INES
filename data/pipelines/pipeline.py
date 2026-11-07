@@ -74,7 +74,7 @@ from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 from sqlalchemy.engine import Engine
 
-from data.pipelines.weekly_office_performance import repository, storage
+from data.pipelines.weekly_office_performance import alerts, repository, storage
 from data.process import weekly_performance as wp
 
 FLOW_NAME = "weekly-office-performance"
@@ -458,7 +458,7 @@ def mark_run_crashed(flow: Any, flow_run: Any, state: Any) -> None:
         logging.getLogger(__name__).exception("could not mark the crashed run in the log")
 
 
-@flow(name=FLOW_NAME, validate_parameters=False, on_crashed=[mark_run_crashed])
+@flow(name=FLOW_NAME, validate_parameters=False, on_crashed=[mark_run_crashed, alerts.notify_crashed], on_failure=[alerts.notify_failed])
 def weekly_office_performance_flow(
     week_start: date | None = None,
     trigger: str = "scheduled",
@@ -531,6 +531,7 @@ def weekly_office_performance_flow(
     finish_pipeline_run(target, run_id, fields)
     if prefect_run_id:
         _ACTIVE_TARGETS.pop(prefect_run_id, None)  # closed normally: nothing left for the crash hook
+    alerts.notify_data_health(week, environment, warnings)  # best-effort: it never raises, it does nothing without a webhook
     if raised is not None:
         raise raised
     return RunSummary(run_id, repository.STATE_COMPLETED, week, warnings=tuple(warnings))

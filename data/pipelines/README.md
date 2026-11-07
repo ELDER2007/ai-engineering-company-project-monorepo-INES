@@ -19,3 +19,5 @@ python data/pipelines/pipeline.py --week-start 2026-10-26 --refresh
 ```
 
 It reads `telemetry_events` (read-only) and writes `reporting.weekly_office_program_performance`; intermediate files go to `data/raw/` and the validation report of each run to `data/eval/`.
+
+To run it on a schedule (Monday 05:00 UTC, correction on Thursday), keep the credentials in Prefect `Secret` blocks and get alerts, see [`deploy.py`](./deploy.py) and the section *En producción* of [`weekly_office_performance/README.md`](./weekly_office_performance/README.md). All of it is optional.

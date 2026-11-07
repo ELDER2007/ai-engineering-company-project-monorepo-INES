@@ -20,12 +20,13 @@ Lo que este documento especifica y dónde está en el código. Lo que no está i
 | Endpoints `/reporting` y fachada `interface.py` (8) | ✅ | `services/api/reporting/` |
 | Línea de comandos y ciclo semanal (4.2e, 4.6) | ✅ | `python data/pipelines/pipeline.py` |
 | **Filtro por entorno de telemetría** | ✅ *Añadido al implementar* | No estaba en la primera versión del diseño: el contrato marca cada evento `development`/`test`/`staging`/`production` y solo `production` entra en un reporte de dirección (sección 3). **Aviso operativo:** la tabla de destino no lleva el entorno en su clave (así lo fija el briefing) y cada corrida reemplaza la semana completa; si una corrida de `development` guardó filas, la siguiente corrida de `production` de esa misma semana las retira |
-| Credenciales con `Secret` blocks de Prefect (4.5) | ⏳ **Pendiente** | Hoy entran por variables de entorno (`DATABASE_URL`, `TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`) o por el `.env` de la API. Los blocks requieren un servidor de Prefect desplegado |
+| Credenciales con `Secret` blocks de Prefect (4.5) | ✅ Implementado, **opcional** | `weekly_office_performance/blocks.py`: con `PIPELINE_SECRET_BLOCKS=1` la URL sale del block y de ningún otro sitio. Sin esa variable todo funciona como antes (variables de entorno o `.env` de la API). Probado contra el servidor temporal de Prefect; **no** se ha creado ningún block en un servidor real |
 | Roles de base de datos separados, lectura y escritura (4.5) | ⏳ Recomendado | No aplicado: se usa una sola conexión |
-| *Deployment* de Prefect con los crons del lunes y del jueves (4.6) | ⏳ **Pendiente** | Documentado y ejecutable con el script; ningún programador lo lanza solo |
+| *Deployment* de Prefect con los crons del lunes y del jueves (4.6) | ✅ Implementado | `data/pipelines/deploy.py`: un deployment con dos schedules en UTC. Probado: se registra en un servidor de Prefect temporal y se lee de vuelta con sus crons y parámetros. **Falta** registrarlo en el servidor real y arrancar un worker (ver 4.6) |
 | **Subflows** por fase (4.3) y sus primeros tests en `tests/pipelines/` | ✅ Parte 3 | `extract_kpi_events_subflow`, `transform_weekly_kpis_subflow`, `load_weekly_office_program_performance_subflow` y 3 opcionales |
 | **Dashboard de negocio** (`/reporting` en el backoffice, 8.6) | ✅ Parte 3 | Lo lee el liderazgo: los 4 KPIs con el nombre del briefing, la semana que cubren y euros y dólares por separado |
-| Alertas por Slack o correo (8b) y *flow* de *backfill* | ⏳ Pendiente | No los pide el ticket de la Parte 3 |
+| Avisos a un *webhook* compatible con Slack (8b) | ✅ Implementado, **sin destino configurado** | `weekly_office_performance/alerts.py`: avisa si la corrida falla, se cae o detecta que los datos pueden estar mal. Sin `PIPELINE_ALERT_WEBHOOK_URL` no hace nada. Probado contra un servidor local, **no** contra un Slack real |
+| Aviso por correo y *flow* de *backfill* | ⏳ Pendiente | No los pide el ticket de la Parte 3 |
 | Conciliación contra las tablas de inventario, historial de valores pasados (anexo, I-3 y R-2) | ⏳ v2 | Límites conocidos, no se han implementado |
 
 ## Estado Actual (Current State)
@@ -223,7 +224,8 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 | Etapa de **carga** | **Tasks** | `load_weekly_performance`, `finish_pipeline_run` |
 | Resultado de una corrida | **State** | `Running`, `Completed`, `Failed` (+ `Crashed`, `AwaitingRetry`) |
 | Conexión a Supabase / PostgreSQL | **Blocks** (`Secret`) | `telemetry-db-url`, `reporting-db-url` |
-| Lunes 05:00 UTC y disparo manual | **Deployment** (schedule + parámetros) | cron `0 5 * * 1`, `week_start=None` |
+| Aviso de fallo o de datos dudosos | **Block** (`Secret`) | `pipeline-alert-webhook` |
+| Lunes 05:00 UTC, jueves 05:00 UTC y disparo manual | **Deployment** (schedules + parámetros) | crons `0 5 * * 1` y `0 5 * * 4`, `week_start=None` |
 | Reproceso de semanas pasadas | El **mismo flow** con parámetro | `week_start` histórico (un flow de *backfill* es opcional y queda para la Parte 3) |
 
 ### 4.1 Flow principal
@@ -345,9 +347,11 @@ Reglas de negocio sobre fallos:
 
 - Dos blocks para una misma base de datos a propósito: aplican el principio de mínimo privilegio y hacen que sea imposible por permisos escribir en `telemetry_events`, además de por diseño.
 - Los blocks se cargan en tiempo de ejecución (`Secret.load("reporting-db-url")`); el repo solo contiene sus nombres, nunca la URI. En desarrollo local, a falta de blocks, se usa `DATABASE_URL` (SQLite local).
-- **Estado en la implementación:** los blocks son el destino de producción, pero **aún no están implementados**: hace falta un servidor de Prefect donde guardarlos. Hoy la conexión sale de variables de entorno (`TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`, o `DATABASE_URL` para ambas) y del `.env` de la API; nunca del repositorio.
+- **Estado en la implementación:** los blocks están implementados (`weekly_office_performance/blocks.py`) y son **opcionales**: con `PIPELINE_SECRET_BLOCKS=1` cada URL sale de su block y de nada más; si el block no existe, la corrida se detiene con un mensaje claro y **no** recurre a otra credencial (una URL más poderosa en el entorno no se usa por error). Sin esa variable, la conexión sale como antes de variables de entorno (`TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`, o `DATABASE_URL` para ambas) y del `.env` de la API; nunca del repositorio.
+- **Crear los blocks** (una vez, en el servidor de Prefect que use el deployment, desde un entorno que tenga las credenciales): `python -m data.pipelines.weekly_office_performance.blocks`. Imprime los **nombres** guardados y nunca los valores. Si `TELEMETRY_DATABASE_URL` o `REPORTING_DATABASE_URL` no existen, usa `DATABASE_URL` para ese block.
+- **Lo que sigue pendiente de esta sección:** los **dos roles** de base de datos (lectura y escritura) no están creados; con una sola URL, ambos blocks guardan la misma credencial y el mínimo privilegio no se cumple todavía. Crear los roles es una tarea de quien administra la base.
 - No hay block de configuración (`JSON`) en v1: reintentos y zona horaria (UTC) son constantes del código y no sostienen ningún KPI.
-- Fuera de la v1: un block de notificación (Slack o correo) para avisar de un `Failed` cuando Laura y Elena dependan del reporte (ver 8b).
+- Block de notificación: `pipeline-alert-webhook` guarda la URL del *webhook* de los avisos (ver 8b). Es una credencial: quien la tenga puede publicar en ese canal.
 
 ### 4.6 Frecuencia del ciclo de reporting y programación
 
@@ -367,7 +371,15 @@ python data/pipelines/pipeline.py --trigger scheduled --refresh   # jueves 05:00
 python data/pipelines/pipeline.py --week-start 2026-10-26 --refresh   # reproceso de una semana concreta
 ```
 
-Con Prefect, el equivalente es un *deployment* `weekly-office-performance` sobre un *work pool* de tipo `process`, con esos dos crons en UTC, `week_start=None` y `trigger="scheduled"`. Se ejecuta con el script de arriba mientras no haya un servidor de Prefect desplegado. El `POST /reporting/pipeline-runs` lanza el mismo flow con `trigger="manual"` y, opcionalmente, un `week_start`.
+Con Prefect, el equivalente es un *deployment* `weekly-office-performance` sobre un *work pool* de tipo `process`, con esos dos crons en UTC, `week_start=None` y `trigger="scheduled"`. Está en `data/pipelines/deploy.py`: un deployment con **dos schedules**, cada uno con sus parámetros (el del lunes con `refresh=False`; el del jueves con `refresh=True`, para absorber los eventos tardíos).
+
+```bash
+python data/pipelines/deploy.py --dry-run                      # muestra lo que registraría, sin servidor
+python data/pipelines/deploy.py --work-pool nexova-reporting   # lo registra en el servidor de Prefect del perfil actual
+prefect worker start --pool nexova-reporting                   # sin un worker, nada se ejecuta a su hora
+```
+
+Con `--secret-blocks`, las corridas leen sus credenciales de los blocks (4.5). **Qué está comprobado y qué no:** los tests registran el deployment en un servidor de Prefect temporal y lo leen de vuelta con sus dos crons, la zona UTC y los parámetros, y comprueban con el calendario de Prefect que dispararían el lunes y el jueves a las 05:00 UTC. **No** se ha registrado en un servidor real ni se ha dejado un worker en marcha: mientras eso no se haga, ningún programador lanza el flow solo y se sigue ejecutando con el script de arriba. El `POST /reporting/pipeline-runs` lanza el mismo flow con `trigger="manual"` y, opcionalmente, un `week_start`.
 
 ## 5. Robustez: idempotencia, observabilidad, recuperabilidad
 
@@ -598,7 +610,8 @@ Nadie del liderazgo va a consultar un endpoint: los KPIs se ven en la página **
 ## 8b. Frescura y observabilidad
 
 - **Frescura:** el reporte de la semana N se considera fresco si existe una corrida `Completed` de esa semana con `finished_at` el lunes N+1 antes de las 06:00 UTC. Se mide con el log y no con `computed_at`, porque una corrida que no cambia nada no toca las filas.
-- **Señal de fallo:** si el último run de la semana está en `Failed`, `GET /reporting/pipeline-runs/latest` lo muestra; la alerta (correo/Slack desde Prefect) queda para la Parte 3.
+- **Señal de fallo:** si el último run de la semana está en `Failed`, `GET /reporting/pipeline-runs/latest` lo muestra, y el dashboard lo dice en palabras sencillas.
+- **Avisos activos** (`weekly_office_performance/alerts.py`): un *webhook* con cuerpo `{"text": "..."}`, compatible con Slack, configurado con `PIPELINE_ALERT_WEBHOOK_URL` o con el block `pipeline-alert-webhook`. Avisa en tres casos: la corrida termina `Failed` (hook `on_failure`), se cae (`on_crashed`), o termina bien pero con una nota `data_health:*` (los datos pueden no haberse recogido). Las demás notas de `warnings` son internas y no generan aviso. Reglas: **sin webhook no hace nada** (ni una llamada de red); **nunca rompe una corrida** (plazo de 5 s, sin reintentos, ninguna excepción sale); y **no filtra credenciales** (las URLs de conexión se ocultan y el texto se recorta). Solo se aceptan URLs `http` y `https`. No hay aviso por correo.
 - **Calidad:** `rejected_count` y `events_read` por run permiten detectar semanas con telemetría anómala (p. ej. muchos eventos rechazados o cero eventos).
 - **Salud del dato (mejoras adicionales, sección 13):** la corrida compara la actividad de la semana con la de las anteriores y deja avisos `data_health:*` en `warnings`; el dashboard los muestra solo en la semana a la que se refieren.
 
@@ -742,7 +755,7 @@ Se pusieron todas las "respuestas pendientes" del anexo en una lista y se priori
 | Cabecera `Idempotency-Key` | R-3 | El anexo ya concluye que no hace falta: cada evento trae su `eventId`. |
 | Tabla de historial de valores y detección de eventos tardíos por llegada | I-3 | Exige una columna de hora de llegada en `telemetry_events` y una tabla nueva: es un cambio de esquema (v2), no una mejora del pipeline. |
 | Reconciliación contra `asset_entries` / `asset_exits` | R-2 | Requiere decidir con negocio qué cuenta como verdad (v2). |
-| Envío de los avisos por correo o Slack | 8b | Necesita un destino y credenciales que no están configurados; queda documentado como pendiente. Los avisos ya quedan en `warnings` y en el dashboard. |
+| Aviso por correo | 8b | Necesita un servidor de correo y destinatarios que nadie ha definido. Sí hay un *webhook* compatible con Slack (sección 8b), sin destino configurado todavía: los avisos siguen quedando también en `warnings` y en el dashboard. |
 
 ### Cómo se comprobó
 

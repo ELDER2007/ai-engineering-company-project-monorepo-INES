@@ -38,6 +38,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
 
+from data.pipelines.weekly_office_performance import blocks
+
 REPORTING_SCHEMA = "reporting"
 _SQLITE_PREFIX = "sqlite:///"
 DEFAULT_ENVIRONMENT = "production"
@@ -135,6 +137,8 @@ def load_api_env() -> None:
 def database_configured() -> bool:
     """True when a real database was configured through the environment or the API's .env (DATABASE_URL or TELEMETRY_DATABASE_URL)."""
     load_api_env()
+    if blocks.enabled():  # the credentials live in Secret blocks: a real database is configured by definition
+        return True
     return bool(os.environ.get("TELEMETRY_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip())
 
 
@@ -163,7 +167,10 @@ def demo_url() -> str:
 def database_url(env: str = "DATABASE_URL") -> str:
     """Connection string: ``env``, else DATABASE_URL, else the API's local SQLite file."""
     load_api_env()
-    raw = os.environ.get(env, "").strip() or os.environ.get("DATABASE_URL", "").strip()
+    if blocks.enabled() and env in blocks.DATABASE_BLOCKS:  # production: the credential comes from its Secret block, and only from there
+        raw = blocks.database_url(env)
+    else:
+        raw = os.environ.get(env, "").strip() or os.environ.get("DATABASE_URL", "").strip()
     if not raw:
         return app_local_url()
     for scheme in ("postgres://", "postgresql://"):

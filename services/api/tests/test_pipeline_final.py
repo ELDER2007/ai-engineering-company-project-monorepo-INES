@@ -94,8 +94,16 @@ def test_what_the_implementation_table_says_is_done_exists_in_the_code():
     assert "✅" in table and "⏳" in table  # it says what is done and what is not
     for name in ("mark_run_crashed", "weekly_office_performance_flow", "extract_kpi_events", "load_weekly_performance"):
         assert hasattr(pipeline, name)
-    assert re.search(r"Secret.*Pendiente|Pendiente.*Secret", table)  # the blocks are not claimed as implemented
-    assert not any(hasattr(pipeline, n) for n in ("Secret", "load_block"))  # ...and indeed they are not
+    # The Secret blocks, the deployment and the alerts are claimed as implemented (they are, in their own modules) ...
+    from data.pipelines import deploy
+    from data.pipelines.weekly_office_performance import alerts, blocks
+
+    for claim, thing in ((r"Secret.*Implementado|Implementado.*Secret", blocks.load_secret), (r"Deployment.*Implementado|Implementado.*Deployment", deploy.register),
+                         (r"webhook.*Implementado|Implementado.*webhook", alerts.send_alert)):
+        assert re.search(claim, table, re.IGNORECASE) and callable(thing), claim
+    # ... and what is NOT done is still said as not done, with no claim in the code: the separate read and write roles
+    assert re.search(r"Roles de base de datos separados.*⏳", table)
+    assert "no se ha creado ningún block en un servidor real" in table.replace("**", "")  # what was not verified is said too
 
 
 def test_the_source_table_mirror_has_the_columns_of_the_real_telemetry_model():
