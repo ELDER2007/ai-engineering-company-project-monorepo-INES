@@ -19,7 +19,7 @@ Lo que este documento especifica y dónde está en el código. Lo que no está i
 | Hook `on_crashed` (4.4) | ✅ | `mark_run_crashed` en `pipeline.py` |
 | Endpoints `/reporting` y fachada `interface.py` (8) | ✅ | `services/api/reporting/` |
 | Línea de comandos y ciclo semanal (4.2e, 4.6) | ✅ | `python data/pipelines/pipeline.py` |
-| **Filtro por entorno de telemetría** | ✅ *Añadido al implementar* | No estaba en la primera versión del diseño: el contrato marca cada evento `development`/`test`/`staging`/`production` y solo `production` entra en un reporte de dirección (sección 3) |
+| **Filtro por entorno de telemetría** | ✅ *Añadido al implementar* | No estaba en la primera versión del diseño: el contrato marca cada evento `development`/`test`/`staging`/`production` y solo `production` entra en un reporte de dirección (sección 3). **Aviso operativo:** la tabla de destino no lleva el entorno en su clave (así lo fija el briefing) y cada corrida reemplaza la semana completa; si una corrida de `development` guardó filas, la siguiente corrida de `production` de esa misma semana las retira |
 | Credenciales con `Secret` blocks de Prefect (4.5) | ⏳ **Pendiente** | Hoy entran por variables de entorno (`DATABASE_URL`, `TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`) o por el `.env` de la API. Los blocks requieren un servidor de Prefect desplegado |
 | Roles de base de datos separados, lectura y escritura (4.5) | ⏳ Recomendado | No aplicado: se usa una sola conexión |
 | *Deployment* de Prefect con los crons del lunes y del jueves (4.6) | ⏳ **Pendiente** | Documentado y ejecutable con el script; ningún programador lo lanza solo |
@@ -584,7 +584,7 @@ Conversión de monedas, subflows, block de configuración, tabla de detalle de e
 ## 11. Preguntas abiertas
 
 1. Las ramas `feature/telemetry-*` (PRs #24, #27, #28 y #29) no están en `main`: el pipeline lee `telemetry_events`, que solo existe en ellas hasta que se integren.
-2. *(Respondida en parte)* **Base de datos:** el pipeline se ha probado contra **PostgreSQL 16** real (idempotencia, candado, *rollback*, tipos y DDL) y contra SQLite. **Falta probarlo con las credenciales de Supabase de Nexova**, en particular los permisos para crear el esquema `reporting`.
+2. *(Respondida)* **Base de datos:** el pipeline se ha probado contra **PostgreSQL 16** (idempotencia, candado, *rollback*, tipos, DDL y un test de extremo a extremo por el receptor real) y **contra el Supabase real de Nexova** (7 de noviembre de 2026): la corrida terminó `Completed`, creó el esquema `reporting` con sus dos tablas, leyó `telemetry_events` y dejó el log. Con el entorno por defecto (`production`) no había eventos que contar, porque todos los de esa base estaban marcados `development`; con `--environment development` guardó 2 filas (Valencia y Miami, programa `onboarding-soporte`), con el entorno anotado en el log.
 3. ¿Prefect Cloud o servidor propio para los *blocks*, el *deployment* y los dos crons?
 4. *(Resuelta en la Parte 2)* El código usa ya `timestamp`, `tags` y `total_cost_minor`.
 5. **Kits entregados:** el briefing define `kits_delivered_count` como «conteo de `outbound_order_created`», y así se implementa (una salida de 24 unidades cuenta 1). Si Elena prefiere sumar unidades, es un cambio pequeño pero se apartaría de la definición escrita.
