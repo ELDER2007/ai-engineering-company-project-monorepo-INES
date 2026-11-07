@@ -39,6 +39,17 @@ Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corri
 
 ## Tests
 
+Tests del pipeline (en la raíz del proyecto, no necesitan la API):
+
 ```bash
-cd services/api && uv run pytest tests/test_weekly_performance.py tests/test_reporting.py tests/test_pipeline_resilience.py tests/test_pipeline_ticket.py
+python -m pytest tests/pipelines                       # todos
+python -m pytest tests/pipelines/test_pipeline.py      # unitarios de las tasks de transformación (sin base de datos, 1-2 s)
+python -m pytest tests/pipelines/test_subflows.py      # cada subflow por separado
+python -m pytest tests/pipelines/test_cli.py           # el comando python data/pipelines/pipeline.py y su documentación
+```
+
+Tests de comportamiento del pipeline y de sus endpoints (necesitan la API):
+
+```bash
+cd services/api && uv run pytest tests/test_pipeline_*.py tests/test_reporting*.py tests/test_weekly_performance.py
 ```
