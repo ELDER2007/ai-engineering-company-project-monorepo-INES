@@ -32,7 +32,7 @@ const BUSY_WEEK: WeeklyReport = {
     { office: "miami", programme_id: "liderazgo-basico", total_material_cost: 980, kits_delivered_count: 12, shortage_events_count: 0, cost_variance_events_count: 2, currency: "USD" },
   ],
 };
-const COMPLETED: PipelineRun = { state: "Completed", week_start: "2026-10-26", started_at: "2026-11-02T05:00:00Z", finished_at: "2026-11-02T05:00:09Z", error: null };
+const COMPLETED: PipelineRun = { state: "Completed", week_start: "2026-10-26", started_at: "2026-11-02T05:00:00Z", finished_at: "2026-11-02T05:00:09Z", error: null, warnings: null };
 
 const KPI_NAMES = ["Costo de material por oficina/programa", "Kits entregados", "Frecuencia de escasez", "Frecuencia de variación de costo"];
 
@@ -44,6 +44,7 @@ function freezeClock(iso: string) {
 const kpi = (name: string) => screen.getByRole("region", { name });
 
 beforeEach(() => {
+  freezeClock("2026-11-04T09:00:00Z"); // two days after the run: "how fresh" never depends on the real clock
   mockWeek.mockResolvedValue(REPORT);
   mockRun.mockResolvedValue(COMPLETED);
 });
@@ -244,12 +245,49 @@ describe("how fresh the data is, in every case", () => {
     expect(await screen.findByText("Los datos se están actualizando en este momento.")).toBeInTheDocument();
   });
 
-  it("simply does not say it when it cannot be read, and the report still shows", async () => {
+  it("says the process has not run yet when there is no run at all, and the report still shows", async () => {
     mockRun.mockRejectedValue(new ApiError("Not found", 404));
     await renderLoaded();
-    await waitFor(() => expect(mockRun).toHaveBeenCalled());
-    expect(screen.queryByText(/actualiza/i)).not.toBeInTheDocument();
+    expect(await screen.findByText("El proceso que calcula estos datos todavía no se ha ejecutado.")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
+  });
+
+  it("simply does not say anything when the run cannot be read for another reason, and the report still shows", async () => {
+    mockRun.mockRejectedValue(new ApiError("Server error", 500));
+    await renderLoaded();
+    await waitFor(() => expect(mockRun).toHaveBeenCalled());
+    expect(screen.queryByText(/actualiza|ejecutado/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
+  });
+
+  it("warns that the data is out of date when the last update is more than a week old", async () => {
+    freezeClock("2026-11-12T09:00:00Z"); // 10 days after the run
+    await renderLoaded();
+    expect(await screen.findByText(/^Los datos llevan 10 días sin actualizarse/)).toBeInTheDocument();
+  });
+});
+
+describe("whether the data of the week was collected", () => {
+  const SILENT: PipelineRun = { ...COMPLETED, warnings: "data_health:capture_silent: no events in the window" };
+
+  it("warns, in plain words, when the week shown had no activity recorded", async () => {
+    mockRun.mockResolvedValue(SILENT);
+    await renderLoaded();
+    expect(await screen.findByLabelText("Avisos sobre los datos")).toHaveTextContent("No se registró ninguna actividad en el sistema durante esta semana");
+  });
+
+  it("shows no warning when the run has none", async () => {
+    await renderLoaded();
+    await screen.findByText(/^Datos actualizados/);
+    expect(screen.queryByLabelText("Avisos sobre los datos")).not.toBeInTheDocument();
+  });
+
+  it("does not show the warning of the latest run on another week", async () => {
+    mockRun.mockResolvedValue(SILENT);
+    mockWeek.mockResolvedValue(BUSY_WEEK); // week of 19 October; the run is about the 26th
+    await renderLoaded();
+    await screen.findByText(/^Datos actualizados/);
+    expect(screen.queryByLabelText("Avisos sobre los datos")).not.toBeInTheDocument();
   });
 });
 

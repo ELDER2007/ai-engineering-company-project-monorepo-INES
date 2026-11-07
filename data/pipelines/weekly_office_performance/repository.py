@@ -276,6 +276,28 @@ def finish_run(engine: Engine, run_id: str, **fields) -> None:
         connection.execute(update(_runs).where(_runs.c.id == uuid.UUID(run_id)).values(finished_at=_now(), **fields))
 
 
+def previous_events_read(engine: Engine, flow_name: str, environment: str, week_start: date, limit: int = 4) -> list[int]:
+    """``events_read`` of the latest COMPLETED run of each of the weeks before ``week_start`` in this environment, newest week
+    first: what a normal week looked like, to tell a loss of events from a quiet week. A rerun of a week counts once."""
+    query = (
+        select(_runs.c.week_start, _runs.c.events_read)
+        .where(_runs.c.flow_name == flow_name, _runs.c.environment == environment, _runs.c.state == STATE_COMPLETED, _runs.c.week_start < week_start)
+        .order_by(_runs.c.week_start.desc(), _runs.c.started_at.desc())
+    )
+    with engine.connect() as connection:
+        rows = connection.execute(query).all()
+    seen: set[date] = set()
+    counts: list[int] = []
+    for week, events_read in rows:
+        if week in seen:
+            continue
+        seen.add(week)
+        counts.append(events_read)
+        if len(counts) == limit:
+            break
+    return counts
+
+
 def get_run(engine: Engine, run_id: str) -> RunInfo | None:
     with engine.connect() as connection:
         row = connection.execute(select(_runs).where(_runs.c.id == uuid.UUID(run_id))).mappings().first()

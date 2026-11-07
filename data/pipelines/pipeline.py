@@ -27,7 +27,8 @@ It turns the telemetry of one closed ISO week into the "Weekly Performance Repor
                                                    count_shortage_events, count_cost_variance_events (one per KPI),
                                                    build_weekly_kpi_rows, reconcile_weekly_kpis
     LOAD       load_weekly_office_program_performance_subflow -> load_weekly_performance (ONE transaction)
-    OPTIONAL   window_liveness_count_subflow, raw_events_snapshot_subflow, validation_report_subflow
+    OPTIONAL   window_liveness_count_subflow, raw_events_snapshot_subflow, capture_activity_check_subflow,
+               validation_report_subflow
                (called with return_state=True: their failure is a warning)
     LOG        start_pipeline_run ... finish_pipeline_run (in the main flow: it is the audit of the whole run)
 
@@ -202,6 +203,19 @@ def save_eval_report(report: dict[str, Any]) -> str:
     path = _dir("eval") / f"run_{report['week_start']}_{report['run_id'][:8]}.json"
     path.write_text(json.dumps(report, indent=2, sort_keys=True, default=_json_default), encoding="utf-8")
     return str(path)
+
+
+@task(tags=["extract", "optional"], cache_policy=NO_CACHE, retries=RETRIES_OPTIONAL, retry_delay_seconds=RETRY_DELAY_SECONDS_OPTIONAL)
+def load_previous_activity(target: Engine, week_start: date, environment: str) -> list[int]:
+    """OPTIONAL. How many business events the previous weeks had (the run log is the memory): what a normal week looks like."""
+    return repository.previous_events_read(target, FLOW_NAME, environment, week_start)
+
+
+@task(tags=["transform", "optional"], cache_policy=NO_CACHE)
+def assess_capture_activity(window_events_total: int | None, events_read: int, previous_events_read: list[int]) -> list[str]:
+    """OPTIONAL. Is the capture alive? The warnings (``data_health:<code>: <why>``) when the week has no event at all or far fewer
+    business events than the previous weeks. Pure. It only warns: it never stops the run or changes a number."""
+    return [f"data_health:{alert.code}: {alert.message}" for alert in wp.assess_activity(window_events_total, events_read, previous_events_read)]
 
 
 def _json_default(value: Any) -> Any:
@@ -408,6 +422,13 @@ def validation_report_subflow(report: dict[str, Any]) -> str:
     return save_eval_report(report)
 
 
+@flow(name="capture-activity-check", validate_parameters=False)
+def capture_activity_check_subflow(target: Engine, week_start: date, environment: str, events_read: int, window_events_total: int | None) -> list[str]:
+    """OPTIONAL: is the capture alive? Compares the week with the previous ones and returns the ``data_health`` warnings, if any."""
+    previous = load_previous_activity(target, week_start, environment)
+    return assess_capture_activity(window_events_total, events_read, previous)
+
+
 # --------------------------------------------------------------------------- the main flow: it only coordinates
 
 
@@ -485,6 +506,10 @@ def weekly_office_performance_flow(
             fields["window_events_total"] = None
         snapshot_state = raw_events_snapshot_subflow(extraction.events, week, environment, return_state=True)
         report["raw_snapshot"] = settled(snapshot_state, label="save_raw_snapshot", warnings=warnings)
+        activity_state = capture_activity_check_subflow(
+            target, week, environment, extraction.events_read, fields["window_events_total"], return_state=True
+        )
+        warnings.extend(settled(activity_state, label="capture_activity_check", warnings=warnings, default=[]))  # data_health warnings
 
         transformation = transform_weekly_kpis_subflow(extraction.events, week, refresh)  # critical from here to the load
         fields["rejected_count"] = transformation.rejected_count

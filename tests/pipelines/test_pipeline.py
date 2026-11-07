@@ -382,3 +382,60 @@ def test_events_that_are_neither_valid_nor_rejected_make_the_report_refuse_to_pu
     rows, unique = reconcile_inputs([outbound("out-1")])
     with pytest.raises(wp.ReconciliationError, match="events_read"):
         run(pipeline.reconcile_weekly_kpis, rows, unique.events, unique.duplicates_removed, 5, 0, 1)  # 4 events are unaccounted for
+
+
+# ---------------------------------------------------------------- assess_capture_activity: is the capture alive? (design annex, O-1 and O-3)
+#
+# A report of zeros can mean "nothing happened" or "nothing was collected". This task reads the signs the run already has and warns, without
+# ever stopping the run or touching a number. The usual week is the MEDIAN of the previous weeks' business events.
+
+
+def assess(window_events_total, events_read, previous):
+    return run(pipeline.assess_capture_activity, window_events_total, events_read, previous)
+
+
+def test_a_window_with_no_event_of_any_type_warns_that_the_capture_may_be_down():
+    (warning,) = assess(0, 0, [100, 110, 95, 105])
+    assert warning.startswith("data_health:capture_silent: ") and "no event of any type" in warning
+
+
+def test_silence_is_judged_even_without_any_history():
+    assert [w.split(":")[1] for w in assess(0, 0, [])] == ["capture_silent"]
+
+
+def test_an_unknown_count_is_never_read_as_silence():
+    """``None`` means the optional count failed: it says nothing, it is not a zero."""
+    assert assess(None, 0, []) == []
+    assert assess(None, 0, [100, 110, 95]) != [w for w in assess(0, 0, [])]  # the silence warning is the one thing it must not be
+
+
+def test_a_week_with_less_than_half_the_usual_business_events_warns_of_a_volume_drop():
+    (warning,) = assess(18, 40, [100, 110, 95, 105])  # the usual is the median: 102.5
+    assert warning.startswith("data_health:volume_drop: ") and "40 business events" in warning and "102.5" in warning
+
+
+@pytest.mark.parametrize("events_read, warns", [(49, True), (50, False), (51, False), (100, False), (500, False)])
+def test_the_limit_is_half_of_the_usual_and_only_below_it_warns(events_read, warns):
+    assert bool(assess(events_read + 10, events_read, [100, 100, 100])) is warns
+
+
+def test_fewer_than_three_previous_weeks_are_not_a_baseline_so_it_says_nothing():
+    assert assess(5, 0, [100, 110]) == [] and assess(5, 0, []) == []
+
+
+def test_a_usual_of_zero_never_warns_a_week_cannot_drop_below_nothing():
+    assert assess(5, 0, [0, 0, 0]) == []
+
+
+def test_one_odd_week_does_not_move_the_usual_because_it_is_a_median_not_an_average():
+    assert assess(70, 60, [100, 100, 0, 100]) == []  # the average would be 75 and 60 would still pass; the median is 100 and 60 passes too
+    assert assess(70, 40, [100, 100, 0, 100]) != []  # 40 is under half of the median 100
+
+
+def test_silence_is_the_only_warning_when_the_week_is_also_below_the_usual():
+    assert len(assess(0, 0, [100, 110, 95, 105])) == 1
+
+
+def test_a_healthy_week_has_no_warning_and_the_inputs_are_not_changed():
+    previous = [100, 110, 95]
+    assert assess(120, 100, previous) == [] and previous == [100, 110, 95]

@@ -15,7 +15,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Iterable, Mapping
+from statistics import median
+from typing import Any, Iterable, Mapping, Sequence
 
 INBOUND = "inbound_order_created"
 OUTBOUND = "outbound_order_created"
@@ -312,3 +313,41 @@ def reconcile(aggregation: Aggregation, *, events_read: int, rejected_count: int
         raise ReconciliationError("; ".join(problems))
     return {"ok": True, "events_read": events_read, "valid": valid_count, "rejected": rejected_count,
             "unique": len(aggregation.events), "duplicates_removed": aggregation.duplicates_removed}
+
+
+# --------------------------------------------------------------------------- is the capture alive? (design annex, O-1 and O-3)
+#
+# A report of zeros can mean two very different things: nothing happened, or nothing was collected. The pipeline already records how
+# many events of ANY type the window had (``window_events_total``); these functions read that signal, and the history of previous weeks,
+# and say so when the numbers may be misleading. They only raise a WARNING: they never stop the run or change a number.
+
+ALERT_CAPTURE_SILENT = "capture_silent"
+ALERT_VOLUME_DROP = "volume_drop"
+MIN_BASELINE_WEEKS = 3  # fewer previous weeks than this are not a baseline: say nothing rather than guess
+VOLUME_DROP_RATIO = 0.5  # the design's proposal (annex, O-3); it is not an agreed service level and has no real baseline yet
+
+
+@dataclass(frozen=True)
+class ActivityAlert:
+    code: str
+    message: str
+
+
+def assess_activity(window_events_total: int | None, events_read: int, previous_events_read: Sequence[int]) -> list[ActivityAlert]:
+    """Warnings about the activity of a week, from what the run already knows.
+
+    * ``capture_silent``: the window has NO event of any type (``window_events_total == 0``). A quiet week still has navigation events;
+      none at all means the capture, not the business, may be what stopped. An unknown count (``None``, its optional task failed)
+      says nothing: it is never read as zero.
+    * ``volume_drop``: the week has less than half the business events of the median of the previous weeks, with at least
+      ``MIN_BASELINE_WEEKS`` of them. A loss of events and a slow week look alike; this says which one to check first.
+    """
+    if window_events_total == 0:
+        return [ActivityAlert(ALERT_CAPTURE_SILENT, "the window has no event of any type: the capture may have been down, so zeros in the report may be misleading")]
+    usual = median(previous_events_read) if len(previous_events_read) >= MIN_BASELINE_WEEKS else 0
+    if usual > 0 and events_read < VOLUME_DROP_RATIO * usual:
+        return [ActivityAlert(
+            ALERT_VOLUME_DROP,
+            f"{events_read} business events this week against a usual {usual:g} (median of the previous {len(previous_events_read)} weeks): the capture may be losing events",
+        )]
+    return []

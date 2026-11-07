@@ -25,7 +25,7 @@ from data.pipelines import pipeline
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "data" / "pipelines" / "pipeline.py"
 PHASE_SUBFLOWS = ["extract-kpi-events", "transform-weekly-kpis", "load-weekly-office-program-performance"]
-OPTIONAL_SUBFLOWS = ["window-liveness-count", "raw-events-snapshot", "validation-report"]
+OPTIONAL_SUBFLOWS = ["window-liveness-count", "raw-events-snapshot", "capture-activity-check", "validation-report"]
 KPI_TASKS = ["calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events"]
 DOCS = [
     REPO / "data" / "pipelines" / "PIPELINE_DESIGN.md",

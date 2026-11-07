@@ -12,6 +12,8 @@ import {
   barPercent,
   currencyName,
   currentWeekStart,
+  NEVER_RAN,
+  describeDataHealth,
   describeFreshness,
   formatCount,
   formatValue,
@@ -26,7 +28,7 @@ import {
   type DataFreshness,
   type KpiDefinition,
 } from "../lib/reporting";
-import type { WeeklyEntry, WeeklyReport } from "../types/reporting";
+import type { PipelineRun, WeeklyEntry, WeeklyReport } from "../types/reporting";
 
 const TONE: Record<DataFreshness["tone"], { Icon: typeof Info; color: string }> = {
   ok: { Icon: CheckCircle2, color: "#34d399" },
@@ -106,7 +108,8 @@ export default function BusinessPerformancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nothingYet, setNothingYet] = useState(false);
-  const [freshness, setFreshness] = useState<DataFreshness | null>(null);
+  const [run, setRun] = useState<PipelineRun | null>(null);
+  const [neverRan, setNeverRan] = useState(false);
   const latest = useRef(0);
 
   const load = useCallback(async (weekStart: string | null) => {
@@ -134,8 +137,8 @@ export default function BusinessPerformancePage() {
   useEffect(() => {
     // How fresh the numbers are is a nicety: if it cannot be read, the page simply does not say it.
     getLatestPipelineRun()
-      .then((run) => setFreshness(describeFreshness(run)))
-      .catch(() => setFreshness(null));
+      .then(setRun)
+      .catch((err) => setNeverRan(isNotFound(err))); // "never ran" is worth saying; any other failure is not
   }, []);
 
   const go = (weekStart: string) => {
@@ -145,7 +148,9 @@ export default function BusinessPerformancePage() {
 
   const shown = report?.week_start ?? null;
   const next = shown ? shiftWeek(shown, 1) : null;
+  const freshness = run ? describeFreshness(run) : neverRan ? NEVER_RAN : null;
   const FreshIcon = freshness ? TONE[freshness.tone].Icon : null;
+  const health = run && shown ? describeDataHealth(run, shown) : [];
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -156,6 +161,17 @@ export default function BusinessPerformancePage() {
           <FreshIcon size={16} color={TONE[freshness.tone].color} aria-hidden="true" className="shrink-0" />
           {freshness.text}
         </p>
+      )}
+
+      {health.length > 0 && (
+        <ul aria-label="Avisos sobre los datos" className="mt-3 space-y-2">
+          {health.map((text) => (
+            <li key={text} className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              <AlertTriangle size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+              {text}
+            </li>
+          ))}
+        </ul>
       )}
 
       {shown && (

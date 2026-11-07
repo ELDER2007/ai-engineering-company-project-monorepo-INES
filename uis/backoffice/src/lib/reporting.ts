@@ -167,20 +167,52 @@ export const barPercent = (value: number, largest: number) => (largest <= 0 || v
 export const formatValue = (row: KpiRow, kind: KpiDefinition["kind"], unit: readonly [string, string]) =>
   kind === "money" ? formatMoney(row.value, row.currency) : formatCount(row.value, unit);
 
-// ------------------------------------------------------------------------------------------------ how fresh the numbers are
+// ------------------------------------------------------------------------------------------------ how fresh and how complete the numbers are
 
 export interface DataFreshness {
   tone: "ok" | "warning" | "info";
   text: string;
 }
 
+/** The numbers are computed once a week, so a last update older than a week and a day means the process has stopped. */
+export const STALE_AFTER_DAYS = 8;
+
+/** The process that computes the numbers has not run at all: the report may be empty for that reason, not because nothing happened. */
+export const NEVER_RAN: DataFreshness = { tone: "warning", text: "El proceso que calcula estos datos todavía no se ha ejecutado." };
+
 /** What to tell the reader about the process that computes the numbers, without naming it. */
-export function describeFreshness(run: PipelineRun): DataFreshness {
+export function describeFreshness(run: PipelineRun, now: Date = new Date()): DataFreshness {
   if (run.state === "Completed") {
-    return { tone: "ok", text: run.finished_at ? `Datos actualizados el ${formatDateTime(run.finished_at)}.` : "Datos actualizados." };
+    if (!run.finished_at) return { tone: "ok", text: "Datos actualizados." };
+    const days = Math.floor((now.getTime() - new Date(run.finished_at).getTime()) / DAY_MS);
+    if (days >= STALE_AFTER_DAYS) {
+      return { tone: "warning", text: `Los datos llevan ${days} días sin actualizarse: se esperaba una actualización cada semana, así que pueden estar desfasados.` };
+    }
+    return { tone: "ok", text: `Datos actualizados el ${formatDateTime(run.finished_at)}.` };
   }
   if (run.state === "Failed" || run.state === "Crashed") {
     return { tone: "warning", text: "La última actualización de los datos no terminó bien, así que estos números pueden no estar al día." };
   }
   return { tone: "info", text: "Los datos se están actualizando en este momento." };
+}
+
+// What the process says about whether the data was COLLECTED (its "data_health" notes), in words for the reader. The codes are the pipeline's.
+const DATA_HEALTH: Record<string, string> = {
+  capture_silent:
+    "No se registró ninguna actividad en el sistema durante esta semana. Si no era de esperar, es posible que los datos no se hayan recogido y que los números de abajo estén incompletos.",
+  volume_drop: "Esta semana hay mucha menos actividad registrada que en las semanas anteriores. Conviene comprobar que los datos se están recogiendo bien.",
+};
+const DATA_HEALTH_UNKNOWN = "Hay un aviso sobre si los datos de esta semana se han recogido bien.";
+
+/**
+ * The notes about whether the data of `weekStart` was collected, in plain Spanish. The latest run only speaks for the week it computed:
+ * looking at another week it says nothing.
+ */
+export function describeDataHealth(run: PipelineRun, weekStart: string): string[] {
+  if (run.week_start !== weekStart || !run.warnings) return [];
+  return run.warnings
+    .split("; ")
+    .map((note) => /^data_health:([a-z_]+):/.exec(note))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map((match) => DATA_HEALTH[match[1]] ?? DATA_HEALTH_UNKNOWN);
 }

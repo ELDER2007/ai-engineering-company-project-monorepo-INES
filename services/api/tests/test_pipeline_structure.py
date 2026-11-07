@@ -18,12 +18,12 @@ TASKS = {name: obj for name, obj in vars(pipeline).items() if isinstance(obj, Ta
 SUBFLOWS = {name: obj for name, obj in vars(pipeline).items() if isinstance(obj, Flow) and obj is not MAIN}
 
 PHASE_SUBFLOWS = ["extract_kpi_events_subflow", "transform_weekly_kpis_subflow", "load_weekly_office_program_performance_subflow"]
-OPTIONAL_SUBFLOWS = {"window_liveness_count_subflow", "raw_events_snapshot_subflow", "validation_report_subflow"}
+OPTIONAL_SUBFLOWS = {"window_liveness_count_subflow", "raw_events_snapshot_subflow", "capture_activity_check_subflow", "validation_report_subflow"}
 STAGE = {"extract": {"resolve_week_window", "extract_kpi_events", "count_window_events", "save_raw_snapshot"},
          "transform": {"validate_kpi_events", "check_currency_consistency", "deduplicate_events", "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events",
                        "build_weekly_kpi_rows", "reconcile_weekly_kpis"},
          "load": {"load_weekly_performance", "save_eval_report"}}
-OPTIONAL_TASKS = {"count_window_events", "save_raw_snapshot", "save_eval_report"}
+OPTIONAL_TASKS = {"count_window_events", "save_raw_snapshot", "load_previous_activity", "assess_capture_activity", "save_eval_report"}
 COORDINATION_TASKS = {"resolve_week_window", "start_pipeline_run", "finish_pipeline_run"}  # the main flow may call these itself
 
 

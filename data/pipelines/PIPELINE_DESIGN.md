@@ -310,10 +310,11 @@ El flow principal ya **no contiene la lógica de las fases: las coordina**. Cada
 | `load_weekly_office_program_performance_subflow` | Carga | `target`, `rows`, `week_start` → `LoadResult` | `load_weekly_performance` |
 | `window_liveness_count_subflow` *(opcional)* | Extracción | `source`, `start`, `end`, `environment` → `int` | `count_window_events` |
 | `raw_events_snapshot_subflow` *(opcional)* | Extracción | `events`, `week_start`, `environment` → ruta del archivo | `save_raw_snapshot` |
+| `capture_activity_check_subflow` *(opcional)* | Extracción | `target`, `week_start`, `environment`, `events_read`, `window_events_total` → `list[str]` (los avisos de salud del dato) | `load_previous_activity`, `assess_capture_activity` |
 | `validation_report_subflow` *(opcional)* | Carga | `report` → ruta del archivo | `save_eval_report` |
 
 - Los **tres primeros** son críticos: el flow principal los llama en secuencia y su fallo detiene la corrida.
-- Los **tres opcionales** se llaman desde el flow principal con `return_state=True`: su fallo queda en `warnings` y la corrida continúa.
+- Los **cuatro opcionales** se llaman desde el flow principal con `return_state=True`: su fallo queda en `warnings` y la corrida continúa.
 - El flow principal conserva solo lo que es coordinación o auditoría de toda la corrida: resolver la semana, abrir y cerrar el log (`start_pipeline_run`, `finish_pipeline_run`), el candado de corridas simultáneas, el *hook* `on_crashed` y el manejo del fallo.
 - Los nombres siguen los de tu briefing: los KPIs (`total_material_cost`, `kits_delivered_count`, `shortage_events_count`, `cost_variance_events_count`) y la tabla de destino (`weekly_office_program_performance`).
 - Un *flow de backfill* (varias semanas seguidas) sigue sin hacerse: no lo pide el ticket.
@@ -599,6 +600,7 @@ Nadie del liderazgo va a consultar un endpoint: los KPIs se ven en la página **
 - **Frescura:** el reporte de la semana N se considera fresco si existe una corrida `Completed` de esa semana con `finished_at` el lunes N+1 antes de las 06:00 UTC. Se mide con el log y no con `computed_at`, porque una corrida que no cambia nada no toca las filas.
 - **Señal de fallo:** si el último run de la semana está en `Failed`, `GET /reporting/pipeline-runs/latest` lo muestra; la alerta (correo/Slack desde Prefect) queda para la Parte 3.
 - **Calidad:** `rejected_count` y `events_read` por run permiten detectar semanas con telemetría anómala (p. ej. muchos eventos rechazados o cero eventos).
+- **Salud del dato (mejoras adicionales, sección 13):** la corrida compara la actividad de la semana con la de las anteriores y deja avisos `data_health:*` en `warnings`; el dashboard los muestra solo en la semana a la que se refieren.
 
 ## 9. Pruebas previstas
 
@@ -700,3 +702,52 @@ No hace falta un evento *heartbeat* nuevo: el contrato está cerrado y los event
 - *Ejemplo:* el cron del lunes arranca a las 05:00 y a las 05:02 un admin pulsa "Recalcular" para la misma semana desde el backoffice.
 - *Pista:* una lectura previa ("¿hay alguien corriendo?") no basta si dos corridas leen a la vez; la garantía tiene que vivir en la base de datos.
 - *Respuesta:* **qué observo:** dos filas de `pipeline_runs` de la misma `week_start`, una `scheduled` y otra `manual`, con `started_at` casi iguales, y la segunda en `Skipped`. **Cómo evito la carrera:** un índice único parcial `unique (flow_name, week_start) where state = 'Running'`; la segunda inserción `Running` falla en la base de datos (de ahí el `409` del `POST`), sin depender de ningún chequeo previo. Un `Running` de más de 1 h se marca `Crashed` antes de insertar, para que una corrida muerta no bloquee la semana. Semanas distintas (un reproceso de la anterior mientras corre la actual) no chocan. **Cómo me recupero:** si la primera falla, no afecta a la segunda; como la carga es idempotente, incluso si por un error ambas escribieran, el resultado final sería el mismo.
+
+## 13. Mejoras adicionales (actividad opcional)
+
+El anexo (sección 12) dejaba señalado qué no se había construido todavía. Aquí se anota **cada mejora que sí se construyó**, qué pregunta del anexo responde y por qué se priorizó; y, con la misma honestidad, **lo que se decidió no construir** y por qué. No se ha añadido nada solo para tener más mejoras.
+
+### Cómo se eligió
+
+Se pusieron todas las "respuestas pendientes" del anexo en una lista y se priorizaron con un único criterio: **¿qué fallo hace que el reporte mienta sin que nadie se entere?** Un reporte que falla de forma visible (`Failed`, un `409`) se corrige; uno que muestra un cero falso, o cifras de una semana sin actividad, se cree. Las dos mejoras elegidas son las que cierran ese riesgo con lo que la corrida **ya sabe** (sin eventos nuevos, sin tablas nuevas, sin tocar el contrato de telemetría).
+
+### Mejora A. Alerta de captura en silencio (`capture_silent`)
+
+- **Pregunta que responde:** O-1, *¿cómo distingo un cero de una captura caída?*
+- **Qué hace:** si la ventana de la semana no tiene **ningún** evento, de ningún tipo (`window_events_total == 0`), la corrida lo anota en `warnings` como `data_health:capture_silent`. Una semana tranquila sigue teniendo eventos de navegación; ninguno en absoluto indica que lo que se paró fue la captura, no el negocio. Si `window_events_total` es desconocido (`null`, porque su task opcional falló), **no se interpreta como cero**: no se avisa.
+- **Por qué se priorizó:** es el caso de mayor daño. Con la captura caída, los cuatro KPIs salen en cero y el reporte se ve perfecto ("0 faltantes"), cuando en realidad no se midió nada. El anexo decía que no hacía falta un *heartbeat* nuevo porque los eventos de navegación ya son esa señal; esta mejora solo **lee** esa señal, que el log ya guardaba.
+- **Dónde está:** `assess_activity` en `data/process/weekly_performance.py` (lógica pura), la task `assess_capture_activity` dentro del subflow opcional `capture_activity_check_subflow`; el dashboard lo muestra en español sencillo.
+
+### Mejora B. Alerta de caída de volumen (`volume_drop`)
+
+- **Pregunta que responde:** O-3, *¿crece el negocio o estoy perdiendo mediciones?*
+- **Qué hace:** compara `events_read` de la semana con la **mediana** de `events_read` de las semanas anteriores (`load_previous_activity` → `previous_events_read`: la última corrida `Completed` de cada semana, del mismo entorno; una semana reprocesada cuenta una sola vez). Si la semana tiene **menos de la mitad** (`VOLUME_DROP_RATIO = 0.5`) y hay al menos **3 semanas previas** (`MIN_BASELINE_WEEKS`), lo anota como `data_health:volume_drop`. Con menos historia no dice nada: no hay línea base, y adivinar sería peor que callar.
+- **Por qué se priorizó:** cubre el caso parcial que la mejora A no ve (la captura funcionó a medias). Y es barata: reutiliza el `events_read` que cada corrida ya registra en `pipeline_runs`.
+- **Lo que no pretende:** distinguir "pérdida" de "semana floja". Avisa de cuál mirar primero. El umbral del 50 % es el que propuso el anexo, **no un acuerdo de servicio**, y no tiene todavía una línea base real: ajustarlo con datos reales es una tarea pendiente.
+
+### Mejora C. Señales de "el proceso se ha parado" en el dashboard
+
+- **Pregunta que responde:** O-1 (primera fila de su tabla: *el pipeline nunca corrió / el último `Completed` tiene más de 8 días*).
+- **Qué hace:** el dashboard dice con claridad (1) que el proceso **todavía no se ha ejecutado** cuando no hay ninguna corrida (`GET /reporting/pipeline-runs/latest` responde `404`), y (2) que los datos **llevan N días sin actualizarse** cuando la última corrida completada tiene 8 días o más (`STALE_AFTER_DAYS`: se calcula cada semana, así que más de una semana y un día es un retraso). Antes, ambos casos se mostraban como si todo estuviera bien o como si no hubiera nada que decir.
+- **Por qué se priorizó:** es el fallo más silencioso de todos: si el programador deja de lanzar el flow, **no hay ningún error**, solo un reporte cada vez más viejo. Es además la parte más pequeña de las tres (solo lectura de datos que ya existen).
+
+### Qué se decidió NO construir (y por qué)
+
+| Candidata | Pregunta | Por qué no |
+| --- | --- | --- |
+| Evento *heartbeat* propio | O-1 | El contrato de telemetría está cerrado y los eventos de navegación ya cumplen esa función (decisión del anexo, que se mantiene). |
+| Eventos por sesión activa y comparación por día de la semana | O-3 | Exige consultas por día y sesión que no se pueden validar sin una línea base real; con 3-4 semanas de historia daría más falsas alarmas que información. La mejora B usa la comparación semanal, más simple. |
+| Vigilar `accepted − stored` (duplicados en la ingesta) | O-3 | Ese contador vive en el receptor de telemetría (otro servicio), no en este pipeline. Se debe hacer allí. |
+| Candado contra corridas simultáneas | T-1 | **Ya estaba construido** en la Parte 2 (índice único parcial sobre `pipeline_runs`); no se vuelve a presentar como mejora. |
+| Cabecera `Idempotency-Key` | R-3 | El anexo ya concluye que no hace falta: cada evento trae su `eventId`. |
+| Tabla de historial de valores y detección de eventos tardíos por llegada | I-3 | Exige una columna de hora de llegada en `telemetry_events` y una tabla nueva: es un cambio de esquema (v2), no una mejora del pipeline. |
+| Reconciliación contra `asset_entries` / `asset_exits` | R-2 | Requiere decidir con negocio qué cuenta como verdad (v2). |
+| Envío de los avisos por correo o Slack | 8b | Necesita un destino y credenciales que no están configurados; queda documentado como pendiente. Los avisos ya quedan en `warnings` y en el dashboard. |
+
+### Cómo se comprobó
+
+- Lógica pura de `assess_activity` y de `assess_capture_activity`: 14 tests propios (silencio, desconocido ≠ cero, umbral exacto, poca historia, mediana, sin falsas alarmas).
+- `previous_events_read` y el subflow, con una base de datos real de pruebas: historial reprocesado, otro entorno, semanas no completadas, y que el fallo del subflow opcional **no detiene** la corrida (`return_state=True`).
+- Dashboard: los avisos solo aparecen en la semana a la que se refieren, sin palabras técnicas, y la antigüedad se prueba con un reloj fijo (no con la fecha real).
+- Se comprobó que los tests **fallan** al romper a propósito la regla (p. ej. quitar la comparación de semana en el dashboard, o cambiar `>=` por `>` en la antigüedad).
+

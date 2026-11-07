@@ -30,4 +30,6 @@ export interface PipelineRun {
   started_at: string;
   finished_at: string | null;
   error: string | null;
+  /** Notes of the run, separated by "; ". The ones that start with "data_health:" say the capture of the data may have failed. */
+  warnings: string | null;
 }

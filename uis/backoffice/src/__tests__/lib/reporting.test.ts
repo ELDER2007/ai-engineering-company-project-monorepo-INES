@@ -9,6 +9,8 @@ import {
   barPercent,
   currencyName,
   currentWeekStart,
+  NEVER_RAN,
+  describeDataHealth,
   describeFreshness,
   formatCount,
   formatValue,
@@ -169,17 +171,35 @@ describe("one KPI as rows and totals", () => {
 });
 
 describe("how fresh the numbers are", () => {
-  const run = { week_start: "2026-10-26", started_at: "2026-11-02T05:00:00Z", error: null };
+  const run = { week_start: "2026-10-26", started_at: "2026-11-02T05:00:00Z", error: null, warnings: null };
+  const NOW = new Date("2026-11-04T09:00:00Z"); // two days after the run: never read the real clock in a test
 
   it("says when the data was updated, once the last run completed", () => {
-    const fresh = describeFreshness({ ...run, state: "Completed", finished_at: "2026-11-02T05:00:09Z" });
+    const fresh = describeFreshness({ ...run, state: "Completed", finished_at: "2026-11-02T05:00:09Z" }, NOW);
     expect(fresh.tone).toBe("ok");
     expect(fresh.text).toMatch(/^Datos actualizados el .+\.$/);
   });
 
+  it("warns when the last completed update is older than a week and a day: the weekly process has stopped", () => {
+    const finished = { ...run, state: "Completed" as const, finished_at: "2026-11-02T05:00:09Z" };
+    expect(describeFreshness(finished, new Date("2026-11-09T05:00:09Z")).tone).toBe("ok"); // 7 days: still on schedule
+    const late = describeFreshness(finished, new Date("2026-11-10T05:00:09Z")); // 8 days
+    expect(late.tone).toBe("warning");
+    expect(late.text).toBe("Los datos llevan 8 días sin actualizarse: se esperaba una actualización cada semana, así que pueden estar desfasados.");
+  });
+
+  it("never reads a completed run without a finish time as stale", () => {
+    expect(describeFreshness({ ...run, state: "Completed", finished_at: null }, NOW)).toEqual({ tone: "ok", text: "Datos actualizados." });
+  });
+
+  it("says, when the process has never run, that it has not run yet", () => {
+    expect(NEVER_RAN.tone).toBe("warning");
+    expect(NEVER_RAN.text).toBe("El proceso que calcula estos datos todavía no se ha ejecutado.");
+  });
+
   it("warns, in plain words, when the last update did not end well", () => {
     for (const state of ["Failed", "Crashed"] as const) {
-      const fresh = describeFreshness({ ...run, state, finished_at: "2026-11-02T05:00:09Z" });
+      const fresh = describeFreshness({ ...run, state, finished_at: "2026-11-02T05:00:09Z" }, NOW);
       expect(fresh.tone).toBe("warning");
       expect(fresh.text).toBe("La última actualización de los datos no terminó bien, así que estos números pueden no estar al día.");
     }
@@ -187,8 +207,47 @@ describe("how fresh the numbers are", () => {
 
   it("says the data is being updated while a run is going", () => {
     for (const state of ["Running", "Skipped"] as const) {
-      expect(describeFreshness({ ...run, state, finished_at: null })).toEqual({ tone: "info", text: "Los datos se están actualizando en este momento." });
+      expect(describeFreshness({ ...run, state, finished_at: null }, NOW)).toEqual({ tone: "info", text: "Los datos se están actualizando en este momento." });
     }
+  });
+});
+
+describe("whether the data was collected (data health)", () => {
+  const WEEK = "2026-10-26";
+  const base = { week_start: WEEK, started_at: "2026-11-02T05:00:00Z", finished_at: "2026-11-02T05:00:09Z", error: null, state: "Completed" as const };
+
+  it("says nothing when the run has no notes", () => {
+    expect(describeDataHealth({ ...base, warnings: null }, WEEK)).toEqual([]);
+    expect(describeDataHealth({ ...base, warnings: "" }, WEEK)).toEqual([]);
+  });
+
+  it("explains a silent capture in plain words", () => {
+    const [text] = describeDataHealth({ ...base, warnings: "data_health:capture_silent: 0 events in the window" }, WEEK);
+    expect(text).toMatch(/^No se registró ninguna actividad en el sistema durante esta semana/);
+  });
+
+  it("explains a drop in activity in plain words", () => {
+    const [text] = describeDataHealth({ ...base, warnings: "data_health:volume_drop: 3 of a typical 100" }, WEEK);
+    expect(text).toMatch(/^Esta semana hay mucha menos actividad/);
+  });
+
+  it("ignores the other notes of the run and keeps only the data health ones, in order", () => {
+    const warnings = "optional step skipped; data_health:volume_drop: x; data_health:capture_silent: y";
+    expect(describeDataHealth({ ...base, warnings }, WEEK)).toHaveLength(2);
+    expect(describeDataHealth({ ...base, warnings: "optional step skipped" }, WEEK)).toEqual([]);
+  });
+
+  it("does not make up an explanation for a code it does not know, but still warns", () => {
+    expect(describeDataHealth({ ...base, warnings: "data_health:something_new: z" }, WEEK)).toEqual(["Hay un aviso sobre si los datos de esta semana se han recogido bien."]);
+  });
+
+  it("only speaks for the week the run computed: looking at another week it says nothing", () => {
+    expect(describeDataHealth({ ...base, warnings: "data_health:capture_silent: y" }, "2026-10-19")).toEqual([]);
+  });
+
+  it("uses no technical word", () => {
+    const all = ["capture_silent", "volume_drop", "other"].flatMap((code) => describeDataHealth({ ...base, warnings: `data_health:${code}: x` }, WEEK)).join(" ");
+    expect(all).not.toMatch(/\b(pipeline|endpoint|api|json|sql|telemetr\w*|flow|task|data_health|undefined|null)\b/i);
   });
 });
 

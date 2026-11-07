@@ -7,7 +7,7 @@ others and without the main flow. The KPI names are the ones of the briefing ("K
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -238,3 +238,100 @@ def test_a_failing_critical_subflow_stops_the_run_and_the_phases_after_it_never_
         run_main(engines)
     assert loads == []  # the load subflow was never reached
     assert repository.get_latest_run(engines[1]).state == "Failed"
+
+
+# ---------------------------------------------------------------- capture_activity_check_subflow: is the capture alive? (design annex, O-1 and O-3)
+
+FLOW_NAME = pipeline.FLOW_NAME
+
+
+def record_run(target, weeks_before, events_read, *, state="Completed", environment="production"):
+    """A run of the week `weeks_before` weeks before WEEK, in the log, as the pipeline would have left it."""
+    run_id, _ = repository.start_run(target, flow_name=FLOW_NAME, trigger="scheduled", week_start=WEEK - timedelta(weeks=weeks_before),
+                                     environment=environment, prefect_flow_run_id=None)
+    repository.finish_run(target, run_id, state=state, events_read=events_read)
+
+
+def history(target, counts):
+    """The previous weeks, newest first: counts[0] is last week."""
+    for weeks_before, events_read in enumerate(counts, start=1):
+        record_run(target, weeks_before, events_read)
+
+
+def test_the_log_remembers_what_the_previous_weeks_looked_like(engines):
+    _, target = engines
+    history(target, [100, 110, 95, 105, 90, 80])
+    assert repository.previous_events_read(target, FLOW_NAME, "production", WEEK) == [100, 110, 95, 105]  # the last four, newest first
+
+
+def test_the_memory_counts_a_rerun_of_a_week_once_with_its_latest_result(engines):
+    _, target = engines
+    record_run(target, 1, 50)
+    record_run(target, 1, 90)  # the same week, run again later
+    assert repository.previous_events_read(target, FLOW_NAME, "production", WEEK) == [90]
+
+
+def test_the_memory_ignores_failed_runs_other_environments_and_the_week_itself_and_later_ones(engines):
+    _, target = engines
+    record_run(target, 1, 100)
+    record_run(target, 2, 5, state="Failed")
+    record_run(target, 3, 7, environment="development")
+    record_run(target, 0, 999)  # the week being computed
+    record_run(target, -1, 888)  # a later week
+    assert repository.previous_events_read(target, FLOW_NAME, "production", WEEK) == [100]
+
+
+def test_the_memory_of_a_pipeline_that_never_ran_is_empty(engines):
+    assert repository.previous_events_read(engines[1], FLOW_NAME, "production", WEEK) == []
+
+
+def check(engines, events_read, window_events_total):
+    return pipeline.capture_activity_check_subflow(engines[1], WEEK, "production", events_read, window_events_total)
+
+
+def test_the_check_subflow_alone_warns_of_a_drop_against_the_previous_weeks(engines):
+    history(engines[1], [100, 110, 95, 105])
+    (warning,) = check(engines, 17, 18)
+    assert warning.startswith("data_health:volume_drop:")
+
+
+def test_the_check_subflow_alone_warns_of_silence(engines):
+    assert [w.split(":")[1] for w in check(engines, 0, 0)] == ["capture_silent"]
+
+
+def test_the_check_subflow_alone_says_nothing_about_a_normal_week(engines):
+    history(engines[1], [20, 18, 22, 19])
+    assert check(engines, 17, 18) == []
+
+
+def test_a_week_that_dropped_is_still_reported_in_full_and_the_run_completes_with_the_warning(engines):
+    history(engines[1], [100, 110, 95, 105])
+    summary = run_main(engines)
+    assert summary.state == "Completed" and len(table(engines[1])) == 5  # the report is complete and unchanged
+    log = repository.get_latest_run(engines[1])
+    assert log.state == "Completed" and "data_health:volume_drop" in log.warnings
+    assert any("data_health:volume_drop" in w for w in summary.warnings)
+
+
+def test_a_silent_window_completes_with_an_empty_report_and_a_warning_that_explains_the_zeros(engines):
+    from sqlalchemy import delete
+
+    history(engines[1], [100, 110, 95, 105])
+    with engines[0].begin() as connection:
+        connection.execute(delete(storage.telemetry_events))
+    assert run_main(engines).state == "Completed"
+    log = repository.get_latest_run(engines[1])
+    assert table(engines[1]) == [] and log.window_events_total == 0 and "data_health:capture_silent" in log.warnings
+
+
+def test_a_run_with_no_history_has_no_warning(engines):
+    run_main(engines)
+    assert repository.get_latest_run(engines[1]).warnings is None
+
+
+def test_when_the_check_itself_fails_the_run_completes_and_says_so(engines, monkeypatch):
+    monkeypatch.setattr(repository, "previous_events_read", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("log unreachable")))
+    assert run_main(engines).state == "Completed"
+    log = repository.get_latest_run(engines[1])
+    assert "capture_activity_check" in log.warnings and "log unreachable" in log.warnings
+    assert len(table(engines[1])) == 5
