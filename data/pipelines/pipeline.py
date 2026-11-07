@@ -54,11 +54,12 @@ if __name__ == "__main__" and not __package__:  # `python data/pipelines/pipelin
 import argparse
 import hashlib
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
 
 from prefect import flow, get_run_logger, task
 from prefect.cache_policies import NO_CACHE
@@ -263,7 +264,24 @@ class RunSummary:
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
 
-@flow(name=FLOW_NAME, validate_parameters=False)
+# Where each active flow run writes its log, by Prefect run id, so the crash hook below can reach the right database.
+_ACTIVE_TARGETS: dict[str, Engine] = {}
+
+
+def mark_run_crashed(flow: Any, flow_run: Any, state: Any) -> None:
+    """``on_crashed`` hook (design, section 4.4): when the process or its infrastructure dies, close the run's log row as
+    ``Crashed`` at once instead of leaving it ``Running`` until the next run notices (repository.mark_stale_runs).
+    It never raises: a hook that fails must not hide the crash it reports."""
+    try:
+        run_id = str(flow_run.id)
+        engine = _ACTIVE_TARGETS.pop(run_id, None) or storage.build_engine(storage.database_url("REPORTING_DATABASE_URL"))
+        reason = f"Crashed: {getattr(state, 'message', None) or 'the process or its infrastructure died'}"
+        repository.mark_crashed_by_prefect_id(engine, run_id, reason[:500])
+    except Exception:  # noqa: BLE001 - see the docstring
+        logging.getLogger(__name__).exception("could not mark the crashed run in the log")
+
+
+@flow(name=FLOW_NAME, validate_parameters=False, on_crashed=[mark_run_crashed])
 def weekly_office_performance_flow(
     week_start: date | None = None,
     trigger: str = "scheduled",
@@ -291,6 +309,9 @@ def weekly_office_performance_flow(
     if not acquired:
         return RunSummary(run_id, repository.STATE_SKIPPED, week, "another run of this week is already running")
 
+    prefect_run_id = str(flow_run.id) if flow_run.id else None
+    if prefect_run_id:
+        _ACTIVE_TARGETS[prefect_run_id] = target  # for the on_crashed hook
     warnings: list[str] = []
     report: dict[str, Any] = {"run_id": run_id, "week_start": week, "environment": environment, "trigger": trigger}
     fields: dict[str, Any] = {}
@@ -337,6 +358,8 @@ def weekly_office_performance_flow(
     settled(eval_state, label="save_eval_report", warnings=warnings)
     fields["warnings"] = "; ".join(warnings) or None
     finish_pipeline_run(target, run_id, fields)
+    if prefect_run_id:
+        _ACTIVE_TARGETS.pop(prefect_run_id, None)  # closed normally: nothing left for the crash hook
     if raised is not None:
         raise raised
     return RunSummary(run_id, repository.STATE_COMPLETED, week, warnings=tuple(warnings))

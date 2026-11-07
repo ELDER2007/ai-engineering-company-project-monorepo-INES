@@ -20,7 +20,6 @@ from data.pipelines import pipeline
 from main import app
 from reporting import router as reporting_router
 from reporting.schemas import PipelineRunOut
-from test_reporting import client, data_dir, engines  # noqa: F401  (fixtures)
 
 REPO = Path(__file__).resolve().parents[3]
 BRIEFING = next(REPO.glob("pipeline*BRIEFING*.md"), None)

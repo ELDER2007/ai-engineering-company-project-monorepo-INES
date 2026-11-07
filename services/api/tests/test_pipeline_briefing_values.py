@@ -18,7 +18,6 @@ from sqlalchemy import select
 
 from data.pipelines.pipeline import weekly_office_performance_flow
 from data.pipelines.weekly_office_performance import storage
-from test_reporting import data_dir  # noqa: F401  (fixture)
 
 FIXTURE = Path(__file__).resolve().parents[3] / "docs" / "telemetry" / "seed-data.json"
 pytestmark = pytest.mark.skipif(not FIXTURE.exists(), reason="the telemetry seed fixture is not in the repository")

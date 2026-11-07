@@ -233,3 +233,44 @@ def telemetry_db(tmp_path):
     yield engine
     app.dependency_overrides.pop(get_db, None)
     engine.dispose()
+
+
+# ---------------------------------------------------------------- the weekly performance pipeline (shared by its tests)
+
+
+@pytest.fixture(autouse=True)
+def data_dir(tmp_path, monkeypatch):
+    """The raw and eval files of the pipeline tests go to a temp folder, never to the repo's data/."""
+    monkeypatch.setenv("PIPELINE_DATA_DIR", str(tmp_path / "data"))
+    return tmp_path / "data"
+
+
+@pytest.fixture()
+def engines(tmp_path):
+    """``(source, target)``: a database with demo ``telemetry_events`` and one for the ``reporting`` schema, both throw-away."""
+    from data.pipelines.weekly_office_performance import storage
+    from data.pipelines.weekly_office_performance.seed_telemetry import seed_telemetry
+
+    source = storage.build_engine(f"sqlite:///{tmp_path / 'telemetry.sqlite'}")
+    target = storage.build_engine(f"sqlite:///{tmp_path / 'reporting.sqlite'}")
+    seed_telemetry(source)
+    storage.create_reporting_schema(target)
+    yield source, target
+    source.dispose()
+    target.dispose()
+
+
+@pytest.fixture()
+def client(engines, auth_headers):
+    """An admin's client of the app, with the /reporting endpoints wired to the throw-away ``engines``."""
+    from fastapi.testclient import TestClient
+
+    from main import app
+    from reporting.database import get_reporting_engine, get_telemetry_engine
+
+    source, target = engines
+    app.dependency_overrides[get_telemetry_engine] = lambda: source
+    app.dependency_overrides[get_reporting_engine] = lambda: target
+    yield TestClient(app, headers=auth_headers)  # ALICE is an admin
+    app.dependency_overrides.pop(get_telemetry_engine, None)
+    app.dependency_overrides.pop(get_reporting_engine, None)

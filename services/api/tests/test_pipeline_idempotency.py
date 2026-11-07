@@ -14,7 +14,7 @@ from sqlalchemy import insert, select, text
 from sqlalchemy.exc import IntegrityError
 
 from data.pipelines.weekly_office_performance import repository, storage
-from test_reporting import PERF, WEEK, add_event, data_dir, engines, rows, run  # noqa: F401  (fixtures and helpers)
+from test_reporting import PERF, WEEK, add_event, run
 
 REPO = Path(__file__).resolve().parents[3]
 

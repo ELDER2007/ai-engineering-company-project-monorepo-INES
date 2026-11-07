@@ -233,6 +233,17 @@ def mark_stale_runs(engine: Engine, flow_name: str) -> int:
     return result.rowcount
 
 
+def mark_crashed_by_prefect_id(engine: Engine, prefect_flow_run_id: str, reason: str) -> int:
+    """Close the ``Running`` row of a Prefect flow run that crashed (the process or its infrastructure died)."""
+    with engine.begin() as connection:
+        result = connection.execute(
+            update(_runs)
+            .where(_runs.c.prefect_flow_run_id == prefect_flow_run_id, _runs.c.state == STATE_RUNNING)
+            .values(state=STATE_CRASHED, finished_at=_now(), error=reason)
+        )
+    return result.rowcount
+
+
 def start_run(
     engine: Engine, *, flow_name: str, trigger: str, week_start: date, environment: str, prefect_flow_run_id: str | None
 ) -> tuple[str, bool]:

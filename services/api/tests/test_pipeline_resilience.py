@@ -8,12 +8,12 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 from prefect.testing.utilities import prefect_test_harness
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from data.pipelines.weekly_office_performance import interface, repository, storage
 from main import app
 from reporting.database import get_reporting_engine, get_telemetry_engine
-from test_reporting import PERF, WEEK, add_event, data_dir, engines, rows, run  # noqa: F401  (fixtures and helpers)
+from test_reporting import WEEK, add_event, rows, run
 
 RUNS = storage.pipeline_runs
 

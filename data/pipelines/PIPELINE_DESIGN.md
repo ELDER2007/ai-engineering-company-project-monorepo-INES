@@ -1,7 +1,30 @@
 # PIPELINE_DESIGN — Reporte Semanal de Desempeño por Oficina y Programa
 
-> Estado: **documento de diseño (Parte 1 de 3)**. No incluye código de orquestación: un prototipo vive aparte, en la rama `feature/weekly-performance-pipeline`, y se alineará con este diseño en la Parte 2. Pendientes: ver sección 11.
+> Estado: **diseño aprobado (Parte 1) e implementado (Parte 2)**. La sección «Implementación del diseño» dice qué está ya en el código y qué queda pendiente, sin maquillar. Código: [`pipeline.py`](./pipeline.py).
 > Fuentes: `pipeline.parte(1de3-nexova-BRIEFING.md` y `nexova-BRIEFING.es.md` (telemetría).
+
+## Implementación del diseño (Parte 2)
+
+Lo que este documento especifica y dónde está en el código. Lo que no está implementado se dice como tal.
+
+| Pieza del diseño | Estado | Dónde / nota |
+| --- | --- | --- |
+| Flow `weekly_office_performance_flow` y sus tasks (secciones 3b y 4) | ✅ Implementado | `data/pipelines/pipeline.py`: extracción, transformación y carga, más 3 pasos opcionales |
+| Tasks críticas y opcionales, `return_state=True` (4.2b) | ✅ | Las opcionales no detienen la corrida; su fallo queda en `warnings` |
+| Reintentos 5 s, 30 s y 2 min con justificación (4.2c) | ✅ | Comentario junto a `RETRIES` |
+| Caché de una hora, con `cache_key_fn` (4.2d) | ✅ | Extracción y agregación; la carga y el log nunca se cachean |
+| Carga idempotente, *no-op* si no hay cambios (3c, 5.1) | ✅ | `repository.load_week`; comprobado contra PostgreSQL 16 |
+| Log de 17 campos (5.2) | ✅ | `reporting.pipeline_runs` |
+| Candado de corridas simultáneas, `Crashed` por antigüedad (5.1b) | ✅ | Índice único parcial; lo impone la base de datos |
+| Hook `on_crashed` (4.4) | ✅ | `mark_run_crashed` en `pipeline.py` |
+| Endpoints `/reporting` y fachada `interface.py` (8) | ✅ | `services/api/reporting/` |
+| Línea de comandos y ciclo semanal (4.2e, 4.6) | ✅ | `python data/pipelines/pipeline.py` |
+| **Filtro por entorno de telemetría** | ✅ *Añadido al implementar* | No estaba en la primera versión del diseño: el contrato marca cada evento `development`/`test`/`staging`/`production` y solo `production` entra en un reporte de dirección (sección 3) |
+| Credenciales con `Secret` blocks de Prefect (4.5) | ⏳ **Pendiente** | Hoy entran por variables de entorno (`DATABASE_URL`, `TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`) o por el `.env` de la API. Los blocks requieren un servidor de Prefect desplegado |
+| Roles de base de datos separados, lectura y escritura (4.5) | ⏳ Recomendado | No aplicado: se usa una sola conexión |
+| *Deployment* de Prefect con los crons del lunes y del jueves (4.6) | ⏳ **Pendiente** | Documentado y ejecutable con el script; ningún programador lo lanza solo |
+| Alertas por Slack o correo (8b), subflows y *backfill* (4.3) | ⏳ Parte 3 | |
+| Conciliación contra las tablas de inventario, historial de valores pasados (anexo, I-3 y R-2) | ⏳ v2 | Límites conocidos, no se han implementado |
 
 ## Estado Actual (Current State)
 
@@ -299,6 +322,7 @@ Reglas de negocio sobre fallos:
 
 - Dos blocks para una misma base de datos a propósito: aplican el principio de mínimo privilegio y hacen que sea imposible por permisos escribir en `telemetry_events`, además de por diseño.
 - Los blocks se cargan en tiempo de ejecución (`Secret.load("reporting-db-url")`); el repo solo contiene sus nombres, nunca la URI. En desarrollo local, a falta de blocks, se usa `DATABASE_URL` (SQLite local).
+- **Estado en la implementación:** los blocks son el destino de producción, pero **aún no están implementados**: hace falta un servidor de Prefect donde guardarlos. Hoy la conexión sale de variables de entorno (`TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`, o `DATABASE_URL` para ambas) y del `.env` de la API; nunca del repositorio.
 - No hay block de configuración (`JSON`) en v1: reintentos y zona horaria (UTC) son constantes del código y no sostienen ningún KPI.
 - Fuera de la v1: un block de notificación (Slack o correo) para avisar de un `Failed` cuando Laura y Elena dependan del reporte (ver 8b).
 
@@ -559,10 +583,11 @@ Conversión de monedas, subflows, block de configuración, tabla de detalle de e
 
 ## 11. Preguntas abiertas
 
-1. Las ramas `feature/telemetry-*` no están en `main`: ¿se integran antes de implementar el pipeline?
-2. ¿PostgreSQL/Supabase real o SQLite local para el esquema `reporting`? (Hoy `telemetry_events` y el inventario comparten base.)
-3. ¿Prefect Cloud o servidor local para el deployment y el cron del lunes?
+1. Las ramas `feature/telemetry-*` (PRs #24, #27, #28 y #29) no están en `main`: el pipeline lee `telemetry_events`, que solo existe en ellas hasta que se integren.
+2. *(Respondida en parte)* **Base de datos:** el pipeline se ha probado contra **PostgreSQL 16** real (idempotencia, candado, *rollback*, tipos y DDL) y contra SQLite. **Falta probarlo con las credenciales de Supabase de Nexova**, en particular los permisos para crear el esquema `reporting`.
+3. ¿Prefect Cloud o servidor propio para los *blocks*, el *deployment* y los dos crons?
 4. *(Resuelta en la Parte 2)* El código usa ya `timestamp`, `tags` y `total_cost_minor`.
+5. **Kits entregados:** el briefing define `kits_delivered_count` como «conteo de `outbound_order_created`», y así se implementa (una salida de 24 unidades cuenta 1). Si Elena prefiere sumar unidades, es un cambio pequeño pero se apartaría de la definición escrita.
 
 ## 12. Anexo: preguntas de diseño respondidas
 

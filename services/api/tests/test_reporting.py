@@ -17,9 +17,7 @@ from sqlalchemy import func, select
 
 from data.pipelines.pipeline import weekly_office_performance_flow
 from data.pipelines.weekly_office_performance import interface, repository, storage
-from data.pipelines.weekly_office_performance.seed_telemetry import seed_telemetry
 from main import app
-from reporting.database import get_reporting_engine, get_telemetry_engine
 
 WEEK = date(2026, 10, 26)
 PERF = storage.weekly_performance
@@ -29,24 +27,6 @@ PERF = storage.weekly_performance
 def prefect_harness():
     with prefect_test_harness():
         yield
-
-
-@pytest.fixture(autouse=True)
-def data_dir(tmp_path, monkeypatch):
-    """The raw and eval files of the tests go to a temp folder, never to the repo's data/."""
-    monkeypatch.setenv("PIPELINE_DATA_DIR", str(tmp_path / "data"))
-    return tmp_path / "data"
-
-
-@pytest.fixture()
-def engines(tmp_path):
-    source = storage.build_engine(f"sqlite:///{tmp_path / 'telemetry.sqlite'}")
-    target = storage.build_engine(f"sqlite:///{tmp_path / 'reporting.sqlite'}")
-    seed_telemetry(source)
-    storage.create_reporting_schema(target)
-    yield source, target
-    source.dispose()
-    target.dispose()
 
 
 def run(engines, week=WEEK, **kwargs):
@@ -169,16 +149,6 @@ def test_the_pipeline_never_writes_to_telemetry_events(engines):
 
 
 # ---------------------------------------------------------------- the endpoints
-
-
-@pytest.fixture()
-def client(engines, auth_headers):
-    source, target = engines
-    app.dependency_overrides[get_telemetry_engine] = lambda: source
-    app.dependency_overrides[get_reporting_engine] = lambda: target
-    yield TestClient(app, headers=auth_headers)  # ALICE is an admin
-    app.dependency_overrides.pop(get_telemetry_engine, None)
-    app.dependency_overrides.pop(get_reporting_engine, None)
 
 
 def test_before_any_run_the_report_and_the_latest_run_are_not_found(client):

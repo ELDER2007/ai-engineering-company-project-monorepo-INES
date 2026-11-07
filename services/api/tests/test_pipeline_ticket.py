@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -14,9 +14,9 @@ from prefect.cache_policies import NO_CACHE
 from prefect.testing.utilities import prefect_test_harness
 
 from data.pipelines import pipeline
-from data.pipelines.weekly_office_performance import repository, storage
+from data.pipelines.weekly_office_performance import repository
 from data.process import weekly_performance as wp
-from test_reporting import WEEK, add_event, data_dir, engines, rows, run  # noqa: F401  (fixtures and helpers)
+from test_reporting import WEEK, add_event, rows, run
 
 REPO = Path(__file__).resolve().parents[3]
 
