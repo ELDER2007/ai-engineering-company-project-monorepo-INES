@@ -23,7 +23,8 @@ Lo que este documento especifica y dónde está en el código. Lo que no está i
 | Credenciales con `Secret` blocks de Prefect (4.5) | ⏳ **Pendiente** | Hoy entran por variables de entorno (`DATABASE_URL`, `TELEMETRY_DATABASE_URL`, `REPORTING_DATABASE_URL`) o por el `.env` de la API. Los blocks requieren un servidor de Prefect desplegado |
 | Roles de base de datos separados, lectura y escritura (4.5) | ⏳ Recomendado | No aplicado: se usa una sola conexión |
 | *Deployment* de Prefect con los crons del lunes y del jueves (4.6) | ⏳ **Pendiente** | Documentado y ejecutable con el script; ningún programador lo lanza solo |
-| Alertas por Slack o correo (8b), subflows y *backfill* (4.3) | ⏳ Parte 3 | |
+| **Subflows** por fase (4.3) y sus primeros tests en `tests/pipelines/` | ✅ Parte 3 | `extract_kpi_events_subflow`, `transform_weekly_kpis_subflow`, `load_weekly_office_program_performance_subflow` y 3 opcionales |
+| Alertas por Slack o correo (8b) y *flow* de *backfill* | ⏳ Pendiente | No los pide el ticket de la Parte 3 |
 | Conciliación contra las tablas de inventario, historial de valores pasados (anexo, I-3 y R-2) | ⏳ v2 | Límites conocidos, no se han implementado |
 
 ## Estado Actual (Current State)
@@ -292,9 +293,24 @@ Opciones: `[--week-start AAAA-MM-DD] [--environment production] [--refresh] [--t
 
 Sin argumentos lee la telemetría que guarda la API (`DATABASE_URL`, o su SQLite local). **En un clon limpio** (sin `DATABASE_URL` y sin telemetría local todavía) lo avisa por pantalla y usa los datos de demostración, para que el comando se pueda ejecutar de punta a punta. Con una base de datos configurada nunca hace eso: un fallo real debe seguir siendo un fallo.
 
-### 4.3 Subflows
+### 4.3 Subflows (Parte 3)
 
-**No hay subflows en la v1.** Un flow plano de 9 tasks ya da reintentos y estados por etapa; dividirlo en subflows no sostiene ningún KPI. La Parte 3 dividirá las etapas en subflows (`extract`, `transform`, `load`) y puede añadir un flow de *backfill* que llame al principal para un rango de semanas.
+El flow principal ya **no contiene la lógica de las fases: las coordina**. Cada fase es un `@flow` propio (un *subflow* cuando el principal lo llama), con entradas y salidas explícitas y sin variables globales compartidas, de modo que se puede ejecutar, vigilar, probar y reutilizar por separado.
+
+| Subflow | Fase | Entradas → salida | Tasks que contiene |
+| --- | --- | --- | --- |
+| `extract_kpi_events_subflow` | Extracción | `source`, `start`, `end`, `environment`, `refresh` → `ExtractionResult` (los eventos de los 4 KPIs y cuántos) | `extract_events` |
+| `transform_weekly_kpis_subflow` | Transformación | `events`, `week_start`, `refresh` → `TransformationResult` (las filas con `total_material_cost`, `kits_delivered_count`, `shortage_events_count` y `cost_variance_events_count`, y la evidencia) | `validate_events`, `check_currency_consistency`, `aggregate_by_office_programme`, `reconcile` |
+| `load_weekly_office_program_performance_subflow` | Carga | `target`, `rows`, `week_start` → `LoadResult` | `load_weekly_performance` |
+| `window_liveness_count_subflow` *(opcional)* | Extracción | `source`, `start`, `end`, `environment` → `int` | `count_window_events` |
+| `raw_events_snapshot_subflow` *(opcional)* | Extracción | `events`, `week_start`, `environment` → ruta del archivo | `save_raw_snapshot` |
+| `validation_report_subflow` *(opcional)* | Carga | `report` → ruta del archivo | `save_eval_report` |
+
+- Los **tres primeros** son críticos: el flow principal los llama en secuencia y su fallo detiene la corrida.
+- Los **tres opcionales** se llaman desde el flow principal con `return_state=True`: su fallo queda en `warnings` y la corrida continúa.
+- El flow principal conserva solo lo que es coordinación o auditoría de toda la corrida: resolver la semana, abrir y cerrar el log (`start_pipeline_run`, `finish_pipeline_run`), el candado de corridas simultáneas, el *hook* `on_crashed` y el manejo del fallo.
+- Los nombres siguen los de tu briefing: los KPIs (`total_material_cost`, `kits_delivered_count`, `shortage_events_count`, `cost_variance_events_count`) y la tabla de destino (`weekly_office_program_performance`).
+- Un *flow de backfill* (varias semanas seguidas) sigue sin hacerse: no lo pide el ticket.
 
 ### 4.4 States relevantes
 
@@ -454,6 +470,7 @@ data/
       storage.py, sql/                      <- tablas del esquema `reporting`, conexiones y DDL
       seed_telemetry.py                     <- datos demo (solo local y tests)
   process/weekly_performance.py             <- validación, deduplicación, agregación y conciliación puras
+tests/pipelines/                            <- tests unitarios de los subflows y las tasks (raíz del proyecto, sin depender de la API)
   raw/                                      <- copia de los eventos leídos en cada corrida (JSONL, no se versiona)
   eval/                                     <- informe de validación de cada corrida (JSON, no se versiona)
 services/api/reporting/                     <- módulo NUEVO (importa solo interface.py)

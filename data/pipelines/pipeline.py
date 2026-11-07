@@ -19,10 +19,15 @@ for the ISO week that just closed, and a correction run every Thursday at 05:00 
 It turns the telemetry of one closed ISO week into the "Weekly Performance Report per Office and Programme"
 (``reporting.weekly_office_program_performance``), as designed in ``PIPELINE_DESIGN.md``:
 
-    EXTRACT    resolve_week_window -> extract_events -> (count_window_events, save_raw_snapshot)
-    TRANSFORM  validate_events -> check_currency_consistency -> aggregate_by_office_programme -> reconcile
-    LOAD       load_weekly_performance   (ONE transaction: upsert + delete stale rows + verify)
-    LOG        start_pipeline_run ... (save_eval_report) ... finish_pipeline_run
+    The main flow (weekly_office_performance_flow) only COORDINATES; every phase is a SUBFLOW of its own:
+
+    EXTRACT    extract_kpi_events_subflow       -> extract_events
+    TRANSFORM  transform_weekly_kpis_subflow    -> validate_events, check_currency_consistency,
+                                                   aggregate_by_office_programme, reconcile
+    LOAD       load_weekly_office_program_performance_subflow -> load_weekly_performance (ONE transaction)
+    OPTIONAL   window_liveness_count_subflow, raw_events_snapshot_subflow, validation_report_subflow
+               (called with return_state=True: their failure is a warning)
+    LOG        start_pipeline_run ... finish_pipeline_run (in the main flow: it is the audit of the whole run)
 
 Resilience (the four requirements of the ticket):
 
@@ -252,7 +257,94 @@ def load_weekly_performance(target: Engine, rows: list[wp.WeeklyRow], week_start
     return repository.load_week(target, rows, week_start)
 
 
-# --------------------------------------------------------------------------- the flow
+# --------------------------------------------------------------------------- subflows: one per phase
+#
+# Each phase of the design is a flow of its own (a SUBFLOW when the main flow calls it): it can be run, monitored and
+# reused by itself. Each one takes everything it needs as INPUTS and gives back everything it produces as an OUTPUT: no
+# phase reads what another one left in a global variable. The main flow below only coordinates them.
+
+
+@dataclass(frozen=True)
+class ExtractionResult:
+    """What the extraction phase hands over: the events behind the four KPIs of the week."""
+
+    events: list[wp.TelemetryEvent]
+    events_read: int
+
+
+@dataclass(frozen=True)
+class TransformationResult:
+    """What the transformation phase hands over: the rows of ``weekly_office_program_performance`` and the evidence behind them."""
+
+    rows: list[wp.WeeklyRow]
+    valid_count: int
+    rejected_count: int
+    rejected_by_reason: dict[str, int]
+    reconciliation: dict[str, Any]
+
+    def kpis(self) -> list[dict[str, Any]]:
+        """The rows as the report shows them, with the KPI names of the briefing."""
+        return [
+            {"office": r.office, "programme_id": r.programme_id, "currency": r.currency,
+             "total_material_cost": r.total_material_cost, "kits_delivered_count": r.kits_delivered_count,
+             "shortage_events_count": r.shortage_events_count, "cost_variance_events_count": r.cost_variance_events_count}
+            for r in self.rows
+        ]
+
+
+@flow(name="extract-kpi-events", validate_parameters=False)
+def extract_kpi_events_subflow(source: Engine, start: datetime, end: datetime, environment: str, refresh: bool = False) -> ExtractionResult:
+    """PHASE 1, EXTRACT: read, from ``telemetry_events`` (read-only), the events behind the four KPIs of the window
+    ``[start, end)`` in one telemetry environment. ``refresh=True`` ignores the one-hour cache."""
+    extract = extract_events.with_options(refresh_cache=True) if refresh else extract_events
+    events = extract(source, start, end, environment)
+    return ExtractionResult(events=events, events_read=len(events))
+
+
+@flow(name="transform-weekly-kpis", validate_parameters=False)
+def transform_weekly_kpis_subflow(events: list[wp.TelemetryEvent], week_start: date, refresh: bool = False) -> TransformationResult:
+    """PHASE 2, TRANSFORM: turn the events into the weekly KPIs per office and programme: ``total_material_cost``,
+    ``kits_delivered_count``, ``shortage_events_count`` and ``cost_variance_events_count``. Validate, check the currencies,
+    aggregate and prove the numbers add up. Pure: it touches no database. ``refresh=True`` ignores the one-hour cache."""
+    aggregate = aggregate_by_office_programme.with_options(refresh_cache=True) if refresh else aggregate_by_office_programme
+    checked = validate_events(events)
+    check_currency_consistency(checked.valid)
+    aggregation = aggregate(checked.valid, week_start)
+    reconciliation = reconcile(aggregation, len(events), len(checked.rejected), len(checked.valid))
+    return TransformationResult(
+        rows=aggregation.rows, valid_count=len(checked.valid), rejected_count=len(checked.rejected),
+        rejected_by_reason=checked.rejected_by_reason(), reconciliation=reconciliation,
+    )
+
+
+@flow(name="load-weekly-office-program-performance", validate_parameters=False)
+def load_weekly_office_program_performance_subflow(target: Engine, rows: list[wp.WeeklyRow], week_start: date) -> repository.LoadResult:
+    """PHASE 3, LOAD: replace the week in ``reporting.weekly_office_program_performance``, in one transaction."""
+    return load_weekly_performance(target, rows, week_start)
+
+
+# OPTIONAL phases: the main flow calls them with return_state=True, so their failure is a warning and not the end of the run.
+
+
+@flow(name="window-liveness-count", validate_parameters=False)
+def window_liveness_count_subflow(source: Engine, start: datetime, end: datetime, environment: str) -> int:
+    """OPTIONAL: how many events of ANY type the window has, the sign of life of the capture."""
+    return count_window_events(source, start, end, environment)
+
+
+@flow(name="raw-events-snapshot", validate_parameters=False)
+def raw_events_snapshot_subflow(events: list[wp.TelemetryEvent], week_start: date, environment: str) -> str:
+    """OPTIONAL: keep the events the run read in ``data/raw/``. Returns the path of the file."""
+    return save_raw_snapshot(events, week_start, environment)
+
+
+@flow(name="validation-report", validate_parameters=False)
+def validation_report_subflow(report: dict[str, Any]) -> str:
+    """OPTIONAL: write the validation report of the run in ``data/eval/``. Returns the path of the file."""
+    return save_eval_report(report)
+
+
+# --------------------------------------------------------------------------- the main flow: it only coordinates
 
 
 @dataclass(frozen=True)
@@ -292,17 +384,16 @@ def weekly_office_performance_flow(
 ) -> RunSummary:
     """Compute and load the weekly report for ``week_start`` (default: the last complete ISO week).
 
-    ``refresh=True`` ignores the one-hour cache (to see late events). A critical failure is recorded in
-    ``reporting.pipeline_runs`` and then re-raised, so the Prefect run also ends ``Failed``. A failure of an optional
-    task is recorded as a warning and the run completes. If another run of the same week is active, this one is ``Skipped``.
+    It COORDINATES the phases and holds none of their logic: extract -> transform -> load, each a subflow with explicit
+    inputs and outputs, plus the optional ones. ``refresh=True`` ignores the one-hour cache (to see late events). A critical
+    failure is recorded in ``reporting.pipeline_runs`` and then re-raised, so the Prefect run also ends ``Failed``. A failure
+    of an optional subflow is recorded as a warning and the run completes. If another run of the same week is active, this
+    one is ``Skipped``.
     """
     environment = environment or storage.default_environment()
     target = target_engine or storage.build_engine(storage.database_url("REPORTING_DATABASE_URL"))
     source = source_engine or storage.build_engine(storage.database_url("TELEMETRY_DATABASE_URL"))
     storage.create_reporting_schema(target)
-
-    extract = extract_events.with_options(refresh_cache=True) if refresh else extract_events
-    aggregate = aggregate_by_office_programme.with_options(refresh_cache=True) if refresh else aggregate_by_office_programme
 
     week, start, end = resolve_week_window(week_start)
     run_id, acquired = start_pipeline_run(target, trigger, week, environment)
@@ -317,10 +408,10 @@ def weekly_office_performance_flow(
     fields: dict[str, Any] = {}
     raised: Exception | None = None
     try:
-        events = extract(source, start, end, environment)  # critical
-        fields["events_read"] = len(events)
-        # OPTIONAL steps are called with return_state=True: if one fails, the main extract -> transform -> load goes on
-        count_state = count_window_events(source, start, end, environment, return_state=True)
+        extraction = extract_kpi_events_subflow(source, start, end, environment, refresh)  # critical
+        fields["events_read"] = extraction.events_read
+        # OPTIONAL subflows are called with return_state=True: if one fails, the main extract -> transform -> load goes on
+        count_state = window_liveness_count_subflow(source, start, end, environment, return_state=True)
         if count_state.is_completed():
             fields["window_events_total"] = count_state.result()
         else:  # the failure is handled HERE, it does not propagate: the count is unknown (None), never read as zero
@@ -328,24 +419,15 @@ def weekly_office_performance_flow(
             warnings.append(f"count_window_events: {type(error).__name__}: {error}")
             get_run_logger().warning("count_window_events failed, the run continues without it: %s", error)
             fields["window_events_total"] = None
-        snapshot_state = save_raw_snapshot(events, week, environment, return_state=True)
+        snapshot_state = raw_events_snapshot_subflow(extraction.events, week, environment, return_state=True)
         report["raw_snapshot"] = settled(snapshot_state, label="save_raw_snapshot", warnings=warnings)
 
-        checked = validate_events(events)  # critical from here to the load
-        fields["rejected_count"] = len(checked.rejected)
-        report["rejected_by_reason"] = checked.rejected_by_reason()
+        transformation = transform_weekly_kpis_subflow(extraction.events, week, refresh)  # critical from here to the load
+        fields["rejected_count"] = transformation.rejected_count
+        report.update(rejected_by_reason=transformation.rejected_by_reason, reconciliation=transformation.reconciliation,
+                      kpis=transformation.kpis())
 
-        check_currency_consistency(checked.valid)
-        aggregation = aggregate(checked.valid, week)
-        report["reconciliation"] = reconcile(aggregation, len(events), len(checked.rejected), len(checked.valid))
-        report["kpis"] = [
-            {"office": r.office, "programme_id": r.programme_id, "currency": r.currency,
-             "total_material_cost": r.total_material_cost, "kits_delivered_count": r.kits_delivered_count,
-             "shortage_events_count": r.shortage_events_count, "cost_variance_events_count": r.cost_variance_events_count}
-            for r in aggregation.rows
-        ]
-
-        loaded = load_weekly_performance(target, aggregation.rows, week)
+        loaded = load_weekly_office_program_performance_subflow(target, transformation.rows, week)
         fields.update(rows_written=loaded.written, rows_changed=loaded.changed, rows_deleted=loaded.deleted)
         fields.update(state=repository.STATE_COMPLETED, error=None)
     except Exception as exc:  # noqa: BLE001 - recorded below, then re-raised
@@ -354,7 +436,7 @@ def weekly_office_performance_flow(
 
     report.update(state=fields["state"], error=fields["error"], warnings=list(warnings),
                   counts={k: v for k, v in fields.items() if k not in ("state", "error")})
-    eval_state = save_eval_report(report, return_state=True)  # optional too
+    eval_state = validation_report_subflow(report, return_state=True)  # optional too
     settled(eval_state, label="save_eval_report", warnings=warnings)
     fields["warnings"] = "; ".join(warnings) or None
     finish_pipeline_run(target, run_id, fields)
