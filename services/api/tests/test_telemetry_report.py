@@ -183,7 +183,11 @@ async def test_a_start_after_the_default_end_is_422(async_client):
 
 async def test_storing_an_event_through_the_api_invalidates_the_cache(async_client, telemetry_db):
     await get(async_client)
-    assert (await post(async_client, [browser_event()])).json()["stored"] == 1
+    # The report with no dates looks at the LAST 7 DAYS, so the event must be recent: ``browser_event``'s fixed date would
+    # fall out of that window as time passes and this test would start failing with no change in the code.
+    event = browser_event()
+    event["timestamp"] = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    assert (await post(async_client, [event])).json()["stored"] == 1
     body = (await get(async_client)).json()
     assert body["cached"] is False and total(body) == 1
 
