@@ -355,3 +355,29 @@ def test_the_secrets_are_never_in_the_repository():
     """The blocks, the alerts and the deployment hold names and constants, never a URL with a password."""
     for path in (REPO / "data" / "pipelines").rglob("*.py"):
         assert not re.search(r"(postgres(ql)?(\+\w+)?|mysql)://[^\s/@\"']+:[^\s/@\"']+@(?!host|h/|db\.example)", path.read_text(encoding="utf-8")), path
+
+
+def test_the_readme_explains_why_a_real_database_can_come_out_empty_and_what_the_replacement_does():
+    """An empty report from a database whose events are `development` is the filter working: the README says so, with the command."""
+    text = (REPO / "data" / "pipelines" / "weekly_office_performance" / "README.md").read_text(encoding="utf-8")
+    assert "python data/pipelines/pipeline.py --environment development --week-start 2026-10-26" in text
+    assert "**0 filas**" in text and "retira" in text  # the empty result, and the replacement of the week, are both said
+
+
+@pytest.mark.usefixtures("prefect_runtime")
+def test_a_run_of_another_environment_replaces_the_whole_week_as_the_readme_warns(engines):
+    """What the README says is real: the table has no environment in its key, so the last run of a week decides its rows."""
+    from sqlalchemy import select
+
+    source, target = engines
+
+    def rows() -> int:
+        with target.connect() as connection:
+            return len(connection.execute(select(storage.weekly_performance)).all())
+
+    run = lambda environment: pipeline.weekly_office_performance_flow(  # noqa: E731
+        week_start=WEEK, environment=environment, source_engine=source, target_engine=target, refresh=True)
+    assert run("production").state == "Completed" and rows() == 5  # the demo events are `production`
+    assert run("development").state == "Completed" and rows() == 0  # this database has none of `development`: the week is replaced by nothing
+    assert run("production").state == "Completed" and rows() == 5  # and the last run decides again
+

@@ -37,6 +37,18 @@ Cada corrida deja: una fila en `reporting.pipeline_runs`, la copia de los evento
 
 Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corrida.
 
+## Con tu base real: ¿por qué sale vacío?
+
+El comando sin argumentos lee solo eventos del entorno `production`, porque un reporte que lee el liderazgo no debe mezclar pruebas. Si en tu base los eventos son de otro entorno (lo normal mientras desarrollas es `development`), el reporte sale con **0 filas** y la corrida termina bien: no es un error, es el filtro funcionando.
+
+Para ver tus datos de prueba, di el entorno **y la semana** de tus eventos:
+
+```bash
+python data/pipelines/pipeline.py --environment development --week-start 2026-10-26
+```
+
+**Cuidado con una cosa:** la tabla de destino no lleva el entorno en su clave (así lo fija el briefing) y cada corrida reemplaza la semana completa. Por eso una corrida de `production` sobre una semana en la que antes corriste `development` **retira** esas filas (y al revés). No es un fallo: es la regla de reemplazo. Si quieres conservar las filas de prueba, no ejecutes `production` sobre esa misma semana.
+
 ## En producción: programarlo, guardar las credenciales y recibir avisos
 
 Todo esto es **opcional**: sin nada de esto, el comando de arriba funciona igual que siempre.
