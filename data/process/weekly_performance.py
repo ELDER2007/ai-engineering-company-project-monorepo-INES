@@ -163,6 +163,8 @@ def validate_events(events: Iterable[TelemetryEvent]) -> ValidationResult:
 def _reject_reason(event: TelemetryEvent) -> str | None:
     if event.event_type not in EVENT_TYPES:
         return "unsupported event_type"
+    if event.tags is not None and not isinstance(event.tags, Mapping):
+        return "malformed tags"  # a JSON array or a string where the contract says an object: reject it, never crash on it
     tags = event.tags or {}
     if str(tags.get("office") or "").strip().lower() not in OFFICE_CURRENCY:
         return "missing or unknown office"
@@ -202,36 +204,82 @@ def dedupe_events(events: Iterable[CleanEvent]) -> tuple[list[CleanEvent], int]:
     return unique, len(events) - len(unique)
 
 
-def aggregate_by_office_programme(events: Iterable[CleanEvent], week_start: date) -> Aggregation:
-    """De-duplicate, then compute the four KPIs per (office, programme_id). Sorted for deterministic output."""
-    unique, duplicates = dedupe_events(list(events))
-    buckets: dict[tuple[str, str], dict[str, Any]] = {}
-    for e in unique:
-        b = buckets.setdefault(
-            (e.office, e.programme_id),
-            {"cost": Decimal(0), "kits": 0, "short": 0, "var": 0, "currency": OFFICE_CURRENCY[e.office]},
-        )
+GroupKey = tuple[str, str]  # (office, programme_id): the grain of the report, together with the week
+
+
+def _group(event: CleanEvent) -> GroupKey:
+    return (event.office, event.programme_id)
+
+
+def total_material_cost_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, Decimal]:
+    """KPI ``total_material_cost`` ("Costo de material por oficina/programa"): the SUM of the cost of the
+    ``inbound_order_created`` events of each office and programme, in the currency of the office."""
+    totals: dict[GroupKey, Decimal] = {}
+    for e in events:
         if e.event_type == INBOUND:
-            b["cost"] += e.cost
-        elif e.event_type == OUTBOUND:
-            b["kits"] += 1
-        elif e.event_type == SHORTAGE:
-            b["short"] += 1
-        elif e.event_type == COST_VARIANCE:
-            b["var"] += 1
-    rows = [
+            totals[_group(e)] = totals.get(_group(e), Decimal(0)) + e.cost
+    return totals
+
+
+def _count_by_group(events: Iterable[CleanEvent], event_type: str) -> dict[GroupKey, int]:
+    counts: dict[GroupKey, int] = {}
+    for e in events:
+        if e.event_type == event_type:
+            counts[_group(e)] = counts.get(_group(e), 0) + 1
+    return counts
+
+
+def kits_delivered_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, int]:
+    """KPI ``kits_delivered_count`` ("Kits entregados"): the COUNT of ``outbound_order_created`` events of each office and
+    programme. One delivery order counts once, whatever its quantity (the briefing: "conteo de outbound_order_created")."""
+    return _count_by_group(events, OUTBOUND)
+
+
+def shortage_events_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, int]:
+    """KPI ``shortage_events_count`` ("Frecuencia de escasez"): the COUNT of ``stock_threshold_triggered`` events."""
+    return _count_by_group(events, SHORTAGE)
+
+
+def cost_variance_events_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, int]:
+    """KPI ``cost_variance_events_count`` ("Frecuencia de variación de costo"): the COUNT of ``kit_cost_variance_detected``."""
+    return _count_by_group(events, COST_VARIANCE)
+
+
+def build_weekly_rows(
+    week_start: date,
+    total_material_cost: Mapping[GroupKey, Decimal],
+    kits_delivered: Mapping[GroupKey, int],
+    shortage_events: Mapping[GroupKey, int],
+    cost_variance_events: Mapping[GroupKey, int],
+) -> list[WeeklyRow]:
+    """One row per (office, programme) that has at least one of the four KPI events, sorted so the output is deterministic.
+    A KPI the group has no event for is zero. The currency is the office's: valencia is EUR, miami is USD, never mixed."""
+    keys = set(total_material_cost) | set(kits_delivered) | set(shortage_events) | set(cost_variance_events)
+    return [
         WeeklyRow(
             office=office,
             programme_id=programme,
             week_start=week_start,
-            total_material_cost=b["cost"],
-            kits_delivered_count=b["kits"],
-            shortage_events_count=b["short"],
-            cost_variance_events_count=b["var"],
-            currency=b["currency"],
+            total_material_cost=total_material_cost.get((office, programme), Decimal(0)),
+            kits_delivered_count=kits_delivered.get((office, programme), 0),
+            shortage_events_count=shortage_events.get((office, programme), 0),
+            cost_variance_events_count=cost_variance_events.get((office, programme), 0),
+            currency=OFFICE_CURRENCY[office],
         )
-        for (office, programme), b in sorted(buckets.items())
+        for office, programme in sorted(keys)
     ]
+
+
+def aggregate_by_office_programme(events: Iterable[CleanEvent], week_start: date) -> Aggregation:
+    """De-duplicate, then compute the four KPIs per (office, programme_id) with the functions above."""
+    unique, duplicates = dedupe_events(list(events))
+    rows = build_weekly_rows(
+        week_start,
+        total_material_cost_by_group(unique),
+        kits_delivered_by_group(unique),
+        shortage_events_by_group(unique),
+        cost_variance_events_by_group(unique),
+    )
     return Aggregation(rows=rows, events=unique, duplicates_removed=duplicates)
 
 

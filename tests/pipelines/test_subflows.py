@@ -17,6 +17,8 @@ from data.pipelines import pipeline
 from data.pipelines.weekly_office_performance import repository, storage
 from data.process import weekly_performance as wp
 
+pytestmark = pytest.mark.usefixtures("prefect_runtime")  # these tests RUN flows, so they need Prefect's throw-away runtime
+
 WEEK = date(2026, 10, 26)
 UTC = timezone.utc
 

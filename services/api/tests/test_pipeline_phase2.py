@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from types import SimpleNamespace
 import textwrap
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -35,7 +36,8 @@ def test_every_task_that_touches_the_database_spells_out_retries_and_retry_delay
     assert "retries" in keywords and "retry_delay_seconds" in keywords
 
 
-@pytest.mark.parametrize("name", ["resolve_week_window", "validate_events", "check_currency_consistency", "aggregate_by_office_programme",
+@pytest.mark.parametrize("name", ["resolve_week_window", "validate_events", "check_currency_consistency", "deduplicate_events",
+                                  "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events", "build_weekly_kpi_rows",
                                   "reconcile", "save_raw_snapshot", "save_eval_report"])
 def test_the_tasks_that_do_not_touch_an_external_service_have_no_retries(name):
     assert "retries" not in _decorator_keywords(name)
@@ -85,24 +87,31 @@ def clean(order_id="o-1", cost="10.00", programme="ventas-b2b"):
 WEEK = date(2026, 10, 26)
 
 
-def key(events, week=WEEK):
-    return pipeline._aggregate_cache_key(None, {"events": events, "week_start": week})
+def key(events, task="calculate_total_material_cost", **extra):
+    context = SimpleNamespace(task=SimpleNamespace(name=task))
+    return pipeline._kpi_cache_key(context, {"events": events, **extra})
 
 
 def test_the_costly_transformation_has_its_own_cache_key_and_expiration():
-    task = pipeline.aggregate_by_office_programme
-    assert task.cache_key_fn is pipeline._aggregate_cache_key
-    assert task.cache_expiration == timedelta(hours=1)
+    for name in ("calculate_total_material_cost", "count_kits_delivered", "count_shortage_events", "count_cost_variance_events"):
+        task = getattr(pipeline, name)
+        assert task.cache_key_fn is pipeline._kpi_cache_key
+        assert task.cache_expiration == timedelta(hours=1)
 
 
-def test_the_cache_key_is_the_week_plus_the_content_of_the_events():
+def test_the_cache_key_is_the_kpi_plus_the_content_of_the_events():
     events = [clean("o-1"), clean("o-2", "5.00")]
-    assert key(events) == key(list(events))  # same events, same week: same key
+    assert key(events) == key(list(events))  # same events, same KPI: same key
     assert key(events) == key(list(reversed(events)))  # the order the database returned them in does not matter
     assert key(events) != key(events[:1])  # an event less
     assert key(events) != key([clean("o-1"), clean("o-2", "5.01")])  # one amount changed
-    assert key(events) != key(events, week=date(2026, 10, 19))  # another week
-    assert key(events).startswith("aggregate|2026-10-26|")
+    assert key(events) != key(events, task="count_kits_delivered")  # another KPI never reuses this KPI's result
+    assert key(events).startswith("kpi|calculate_total_material_cost|")
+
+
+def test_a_refresh_has_no_cache_key_so_that_call_computes_again():
+    assert key([clean("o-1")], refresh=True) is None
+    assert key([clean("o-1")], refresh=False) is not None
 
 
 def test_the_cache_key_of_the_extraction_is_the_database_the_environment_and_the_window(tmp_path):
@@ -120,7 +129,7 @@ def test_the_cache_key_of_the_extraction_is_the_database_the_environment_and_the
 
 
 def test_the_key_comments_say_what_defines_the_key_and_how_long_it_is_valid():
-    key_doc = inspect.getdoc(pipeline._aggregate_cache_key) or ""
-    assert "CACHE KEY OF THE TRANSFORMATION" in key_doc and "week" in key_doc
+    key_doc = inspect.getdoc(pipeline._kpi_cache_key) or ""
+    assert "CACHE KEY OF THE KPI TASKS" in key_doc and "fingerprint" in key_doc
     assert "CACHE KEY OF THE EXTRACTION" in (inspect.getdoc(pipeline._extract_cache_key) or "")
     assert "CACHE_TTL = 1 hour" in SOURCE  # the validity is stated where the task is declared

@@ -18,10 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the repository r
 import pytest  # noqa: E402
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _prefect(tmp_path_factory):
+@pytest.fixture(scope="session")
+def prefect_runtime(tmp_path_factory):
     """Prefect's own throw-away database, and its cached results in a folder of this session (its test harness isolates the
-    database but not the result storage, which would otherwise be ``~/.prefect/storage`` and leak between sessions)."""
+    database but not the result storage, which would otherwise be ``~/.prefect/storage`` and leak between sessions).
+
+    NOT automatic: only the tests that RUN flows ask for it (``test_subflows.py``). The unit tests of the tasks
+    (``test_pipeline.py``) call the task functions directly and need no Prefect server at all."""
     from prefect.settings import PREFECT_LOCAL_STORAGE_PATH, temporary_settings
     from prefect.testing.utilities import prefect_test_harness
 

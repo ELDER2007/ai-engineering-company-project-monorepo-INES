@@ -22,8 +22,10 @@ It turns the telemetry of one closed ISO week into the "Weekly Performance Repor
     The main flow (weekly_office_performance_flow) only COORDINATES; every phase is a SUBFLOW of its own:
 
     EXTRACT    extract_kpi_events_subflow       -> extract_events
-    TRANSFORM  transform_weekly_kpis_subflow    -> validate_events, check_currency_consistency,
-                                                   aggregate_by_office_programme, reconcile
+    TRANSFORM  transform_weekly_kpis_subflow    -> validate_events, check_currency_consistency, deduplicate_events,
+                                                   calculate_total_material_cost, count_kits_delivered,
+                                                   count_shortage_events, count_cost_variance_events (one per KPI),
+                                                   build_weekly_kpi_rows, reconcile
     LOAD       load_weekly_office_program_performance_subflow -> load_weekly_performance (ONE transaction)
     OPTIONAL   window_liveness_count_subflow, raw_events_snapshot_subflow, validation_report_subflow
                (called with return_state=True: their failure is a warning)
@@ -37,7 +39,7 @@ Resilience (the four requirements of the ticket):
 * RETRIES. Every task that touches the database (``extract_events``, ``load_weekly_performance``, the run log and the
   optional count) retries with a back-off (5 s, 30 s, 2 min) to absorb transient failures. Why 3: see ``RETRIES`` below.
 * CACHE. A task that completed less than an hour ago is not run again: ``extract_events`` (the expensive read) and
-  ``aggregate_by_office_programme`` (each with its ``cache_key_fn`` and ``cache_expiration``) reuse their result for one hour, so rerunning after a failed load does not read the
+  the four KPI tasks (each with its ``cache_key_fn`` and ``cache_expiration``) reuse their result for one hour, so rerunning after a failed load does not read the
   source again. The load, the log and the checks are NEVER cached: they must act every time. ``refresh=True`` (the
   manual trigger and ``--refresh``) bypasses the cache, to pick up late events.
 * SCRIPT. ``main()`` below.
@@ -126,16 +128,19 @@ def _extract_cache_key(_context: Any, parameters: dict[str, Any]) -> str:
     )
 
 
-def _aggregate_cache_key(_context: Any, parameters: dict[str, Any]) -> str:
-    """CACHE KEY OF THE TRANSFORMATION: the week + a fingerprint of the clean events it receives.
+def _kpi_cache_key(context: Any, parameters: dict[str, Any]) -> str | None:
+    """CACHE KEY OF THE KPI TASKS: which KPI (the task) + a fingerprint of the clean events it receives.
 
-    The aggregation is a pure function: the same events for the same week always give the same rows. So the key is
-    exactly what the result depends on and nothing else: the week, and the CONTENT of the events (not the run, not the
-    database). The events are sorted before hashing, so the order in which the database returned them does not change
-    the key; if one event is added, removed or changed, the key changes and the aggregation is computed again."""
+    Each KPI task is a pure function: the same events always give the same numbers. So the key is exactly what the result
+    depends on and nothing else: the KPI, and the CONTENT of the events (not the run, not the database, not the week: the
+    week only labels the row afterwards). The events are sorted before hashing, so the order in which the database returned
+    them does not change the key; if one event is added, removed or changed, the key changes and the KPI is computed again.
+    With ``refresh=True`` there is no key at all: that call computes again."""
+    if parameters.get("refresh"):
+        return None
     events = sorted((e.event_type, e.office, e.programme_id, e.currency, e.order_id, str(e.cost)) for e in parameters["events"])
     fingerprint = hashlib.sha256(repr(events).encode("utf-8")).hexdigest()
-    return f"aggregate|{parameters['week_start'].isoformat()}|{fingerprint}"
+    return f"kpi|{context.task.name}|{fingerprint}"
 
 
 # --------------------------------------------------------------------------- critical tasks: the run log
@@ -237,18 +242,72 @@ def check_currency_consistency(events: list[wp.CleanEvent]) -> None:
     wp.check_currency_consistency(events)
 
 
-# The costly TRANSFORMATION is cached: cache_key_fn defines the key (week + fingerprint of the events, see
-# _aggregate_cache_key) and cache_expiration says how long a result stays valid: CACHE_TTL = 1 hour. After that hour, or
-# as soon as the events change, the aggregation runs again. A failed run is never cached, only a completed one.
-@task(tags=["transform"], cache_key_fn=_aggregate_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
-def aggregate_by_office_programme(events: list[wp.CleanEvent], week_start: date) -> wp.Aggregation:
-    """The transformation: same events and week give the same rows, so reusing a result for an hour is safe."""
-    return wp.aggregate_by_office_programme(events, week_start)
+@dataclass(frozen=True)
+class DeduplicationResult:
+    """The events with each (event_type, order_id) once, and how many repeated ones were dropped."""
+
+    events: list[wp.CleanEvent]
+    duplicates_removed: int
 
 
 @task(tags=["transform"], cache_policy=NO_CACHE)
-def reconcile(aggregation: wp.Aggregation, events_read: int, rejected_count: int, valid_count: int) -> dict[str, Any]:
-    return wp.reconcile(aggregation, events_read=events_read, rejected_count=rejected_count, valid_count=valid_count)
+def deduplicate_events(events: list[wp.CleanEvent]) -> DeduplicationResult:
+    """Count each (event_type, order_id) once: the source guarantees a unique event id, this protects an order that arrived twice."""
+    unique, duplicates = wp.dedupe_events(events)
+    return DeduplicationResult(events=unique, duplicates_removed=duplicates)
+
+
+# THE FOUR KPI TASKS of the briefing ("KPIs a medir"), one per KPI, each one a pure function of the clean events.
+# The costly TRANSFORMATION is cached: cache_key_fn defines the key (the KPI + a fingerprint of the events, see
+# _kpi_cache_key) and cache_expiration says how long a result stays valid: CACHE_TTL = 1 hour. After that hour, or as soon
+# as the events change, the KPI is computed again. A failed run is never cached, only a completed one.
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def calculate_total_material_cost(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, Decimal]:
+    """KPI ``total_material_cost``: the sum of the cost of the inbound orders of each office and programme."""
+    return wp.total_material_cost_by_group(events)
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def count_kits_delivered(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, int]:
+    """KPI ``kits_delivered_count``: the number of outbound (delivery) orders of each office and programme."""
+    return wp.kits_delivered_by_group(events)
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def count_shortage_events(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, int]:
+    """KPI ``shortage_events_count``: how many times the stock fell below its minimum, per office and programme."""
+    return wp.shortage_events_by_group(events)
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def count_cost_variance_events(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, int]:
+    """KPI ``cost_variance_events_count``: how many times a supplier's cost rose abnormally, per office and programme."""
+    return wp.cost_variance_events_by_group(events)
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def build_weekly_kpi_rows(
+    week_start: date,
+    total_material_cost: dict[wp.GroupKey, Decimal],
+    kits_delivered: dict[wp.GroupKey, int],
+    shortage_events: dict[wp.GroupKey, int],
+    cost_variance_events: dict[wp.GroupKey, int],
+) -> list[wp.WeeklyRow]:
+    """Put the four KPIs together: one row of ``weekly_office_program_performance`` per office and programme."""
+    return wp.build_weekly_rows(week_start, total_material_cost, kits_delivered, shortage_events, cost_variance_events)
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def reconcile(
+    rows: list[wp.WeeklyRow], events: list[wp.CleanEvent], duplicates_removed: int, events_read: int, rejected_count: int, valid_count: int
+) -> dict[str, Any]:
+    """Prove the report adds up to the events it came from; raise (and so stop the run) when it does not."""
+    return wp.reconcile(
+        wp.Aggregation(rows=rows, events=events, duplicates_removed=duplicates_removed),
+        events_read=events_read, rejected_count=rejected_count, valid_count=valid_count,
+    )
 
 
 @task(tags=["load"], cache_policy=NO_CACHE, retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
@@ -303,16 +362,21 @@ def extract_kpi_events_subflow(source: Engine, start: datetime, end: datetime, e
 
 @flow(name="transform-weekly-kpis", validate_parameters=False)
 def transform_weekly_kpis_subflow(events: list[wp.TelemetryEvent], week_start: date, refresh: bool = False) -> TransformationResult:
-    """PHASE 2, TRANSFORM: turn the events into the weekly KPIs per office and programme: ``total_material_cost``,
-    ``kits_delivered_count``, ``shortage_events_count`` and ``cost_variance_events_count``. Validate, check the currencies,
-    aggregate and prove the numbers add up. Pure: it touches no database. ``refresh=True`` ignores the one-hour cache."""
-    aggregate = aggregate_by_office_programme.with_options(refresh_cache=True) if refresh else aggregate_by_office_programme
+    """PHASE 2, TRANSFORM: turn the events into the weekly KPIs per office and programme, one task per KPI:
+    ``total_material_cost``, ``kits_delivered_count``, ``shortage_events_count`` and ``cost_variance_events_count``.
+    Validate, check the currencies, count each order once, compute the four KPIs, put them in rows and prove the numbers
+    add up. Pure: it touches no database. ``refresh=True`` ignores the one-hour cache."""
     checked = validate_events(events)
     check_currency_consistency(checked.valid)
-    aggregation = aggregate(checked.valid, week_start)
-    reconciliation = reconcile(aggregation, len(events), len(checked.rejected), len(checked.valid))
+    unique = deduplicate_events(checked.valid)
+    total_material_cost = calculate_total_material_cost(unique.events, refresh)
+    kits_delivered = count_kits_delivered(unique.events, refresh)
+    shortage_events = count_shortage_events(unique.events, refresh)
+    cost_variance_events = count_cost_variance_events(unique.events, refresh)
+    rows = build_weekly_kpi_rows(week_start, total_material_cost, kits_delivered, shortage_events, cost_variance_events)
+    reconciliation = reconcile(rows, unique.events, unique.duplicates_removed, len(events), len(checked.rejected), len(checked.valid))
     return TransformationResult(
-        rows=aggregation.rows, valid_count=len(checked.valid), rejected_count=len(checked.rejected),
+        rows=rows, valid_count=len(checked.valid), rejected_count=len(checked.rejected),
         rejected_by_reason=checked.rejected_by_reason(), reconciliation=reconciliation,
     )
 

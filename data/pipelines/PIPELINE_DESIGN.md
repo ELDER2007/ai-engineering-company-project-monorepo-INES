@@ -170,7 +170,7 @@ flowchart LR
     subgraph TRF["2. TRANSFORMACIÓN"]
         T1["validate_events<br/>rechaza incompletos"]
         T2["check_currency_consistency<br/>valencia=EUR, miami=USD"]
-        T3["aggregate_by_office_programme<br/>por office × programme_id"]
+        T3["una task por KPI:<br/>calculate_total_material_cost · count_kits_delivered<br/>count_shortage_events · count_cost_variance_events"]
         T4["reconcile<br/>conteos = eventos válidos"]
     end
 
@@ -218,7 +218,7 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 | --- | --- | --- |
 | El pipeline completo de una semana | **Flow** | `weekly_office_performance_flow(week_start, trigger)` |
 | Etapa de **extracción** | **Tasks** | `resolve_week_window`, `extract_events` |
-| Etapa de **transformación** | **Tasks** | `validate_events`, `check_currency_consistency`, `aggregate_by_office_programme`, `reconcile` |
+| Etapa de **transformación** | **Tasks** | `validate_events`, `check_currency_consistency`, `deduplicate_events`, una task por KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`), `build_weekly_kpi_rows`, `reconcile` |
 | Etapa de **carga** | **Tasks** | `load_weekly_performance`, `finish_pipeline_run` |
 | Resultado de una corrida | **State** | `Running`, `Completed`, `Failed` (+ `Crashed`, `AwaitingRetry`) |
 | Conexión a Supabase / PostgreSQL | **Blocks** (`Secret`) | `telemetry-db-url`, `reporting-db-url` |
@@ -243,13 +243,18 @@ Prefect organiza el trabajo en **flows** (funciones orquestadas), **tasks** (uni
 | **Extracción** | 2 | `extract_events` | Query de solo lectura a `telemetry_events` (4 tipos, ventana) | sí (3, backoff) |
 | **Transformación** | 3 | `validate_events` | Descarta eventos sin `office`, `programme_id`, `currency` o (en entradas) `total_cost_minor` válido; cuenta rechazados | no |
 | **Transformación** | 4 | `check_currency_consistency` | Verifica `EUR`↔valencia y `USD`↔miami; falla si se mezclan | no |
-| **Transformación** | 5 | `aggregate_by_office_programme` | Deduplica por (`event_type`, `order_id`), agrupa por (office, programme_id) y calcula los 4 KPIs | no |
-| **Transformación** | 6 | `reconcile` | Comprueba que los conteos agregados = eventos válidos de cada tipo; si no cuadra, falla | no |
-| **Carga** | 7 | `load_weekly_performance` | En **una transacción**: UPSERT por la clave única (reemplazo) + borrado de las filas de esa semana que ya no tienen eventos | sí (3, backoff) |
-| — | 8 | `finish_pipeline_run` | Actualiza la fila de log: estado final, conteos, error (alimenta `/pipeline-runs/latest`) | sí (3) |
+| **Transformación** | 5 | `deduplicate_events` | Cuenta cada (`event_type`, `order_id`) una sola vez | no |
+| **Transformación** | 6 | `calculate_total_material_cost` | **KPI `total_material_cost`**: suma del costo de las entradas de cada oficina y programa, en la moneda de la oficina | no (caché 1 h) |
+| **Transformación** | 7 | `count_kits_delivered` | **KPI `kits_delivered_count`**: número de pedidos de salida (`outbound_order_created`) de cada oficina y programa | no (caché 1 h) |
+| **Transformación** | 8 | `count_shortage_events` | **KPI `shortage_events_count`**: número de `stock_threshold_triggered` | no (caché 1 h) |
+| **Transformación** | 9 | `count_cost_variance_events` | **KPI `cost_variance_events_count`**: número de `kit_cost_variance_detected` | no (caché 1 h) |
+| **Transformación** | 10 | `build_weekly_kpi_rows` | Junta los cuatro KPIs: una fila de `weekly_office_program_performance` por oficina y programa | no |
+| **Transformación** | 11 | `reconcile` | Comprueba que los conteos agregados = eventos válidos de cada tipo; si no cuadra, falla | no |
+| **Carga** | 12 | `load_weekly_performance` | En **una transacción**: UPSERT por la clave única (reemplazo) + borrado de las filas de esa semana que ya no tienen eventos | sí (3, backoff) |
+| — | 13 | `finish_pipeline_run` | Actualiza la fila de log: estado final, conteos, error (alimenta `/pipeline-runs/latest`) | sí (3) |
 
 - Los reintentos solo están en las tasks que tocan red/base de datos y son idempotentes (2, 7, 8); una task de transformación que falla es un error de datos o de lógica, y reintentarla no lo arregla.
-- Las tasks 4, 5 y 6 son puras (sin I/O), por lo que se prueban sin base de datos.
+- Las tasks de transformación (de la 3 a la 11) son **puras**: no tocan base de datos ni servicios externos, así que se prueban de forma aislada, con eventos en memoria (`tests/pipelines/test_pipeline.py`).
 
 ### 4.2b Tasks críticas y tasks opcionales (tolerancia a fallos parciales)
 
@@ -257,7 +262,7 @@ Un fallo no tumba siempre toda la corrida: depende de si la task es imprescindib
 
 | Tipo | Tasks | Si fallan |
 | --- | --- | --- |
-| **Crítica** | `start_pipeline_run`, `resolve_week_window`, `extract_events`, `validate_events`, `check_currency_consistency`, `aggregate_by_office_programme`, `reconcile`, `load_weekly_performance`, `finish_pipeline_run` | La corrida se detiene, queda `Failed` en el log y no se carga nada (o se hace *rollback*) |
+| **Crítica** | `start_pipeline_run`, `resolve_week_window`, `extract_events`, `validate_events`, `check_currency_consistency`, `deduplicate_events`, `calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`, `build_weekly_kpi_rows`, `reconcile`, `load_weekly_performance`, `finish_pipeline_run` | La corrida se detiene, queda `Failed` en el log y no se carga nada (o se hace *rollback*) |
 | **Opcional** | `count_window_events` (señal de vida), `save_raw_snapshot` (copia en `data/raw/`), `save_eval_report` (informe en `data/eval/`) | Se anota en el campo `warnings` del log y la corrida **continúa y termina `Completed`** |
 
 Reglas: un dato que falla queda como **desconocido, nunca como cero** (`window_events_total` es `null` si su task falló). En Prefect las opcionales se llaman con `return_state=True`, que devuelve el estado de la task en lugar de lanzar su error.
@@ -275,7 +280,7 @@ Una task que ya terminó bien hace menos de una hora no se repite (`cache_expira
 | Task | ¿Caché? | Por qué |
 | --- | --- | --- |
 | `extract_events` | Sí, clave = base de datos + entorno + ventana | Es la lectura cara. Tras una carga fallida, reintentar no vuelve a leer la fuente |
-| `aggregate_by_office_programme` | Sí, `cache_key_fn`: clave = semana + huella (SHA-256) del contenido de los eventos, ordenados | Es una función pura: mismos eventos y misma semana, mismas filas. Si cambia un solo evento, cambia la clave y se recalcula |
+| Las 4 tasks de KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`) | Sí, `cache_key_fn`: clave = el KPI + huella (SHA-256) del contenido de los eventos, ordenados | Son funciones puras: mismos eventos, mismos números. Si cambia un solo evento, cambia la clave y se recalcula; un KPI nunca reutiliza el resultado de otro |
 | `load_weekly_performance`, `start/finish_pipeline_run`, `reconcile`, `check_currency_consistency` | **Nunca** | Actúan sobre el mundo o son comprobaciones: saltárselas sería peligroso |
 
 Solo se guardan en caché las tasks que terminaron `Completed`: un fallo nunca se reutiliza.
@@ -300,7 +305,7 @@ El flow principal ya **no contiene la lógica de las fases: las coordina**. Cada
 | Subflow | Fase | Entradas → salida | Tasks que contiene |
 | --- | --- | --- | --- |
 | `extract_kpi_events_subflow` | Extracción | `source`, `start`, `end`, `environment`, `refresh` → `ExtractionResult` (los eventos de los 4 KPIs y cuántos) | `extract_events` |
-| `transform_weekly_kpis_subflow` | Transformación | `events`, `week_start`, `refresh` → `TransformationResult` (las filas con `total_material_cost`, `kits_delivered_count`, `shortage_events_count` y `cost_variance_events_count`, y la evidencia) | `validate_events`, `check_currency_consistency`, `aggregate_by_office_programme`, `reconcile` |
+| `transform_weekly_kpis_subflow` | Transformación | `events`, `week_start`, `refresh` → `TransformationResult` (las filas con `total_material_cost`, `kits_delivered_count`, `shortage_events_count` y `cost_variance_events_count`, y la evidencia) | `validate_events`, `check_currency_consistency`, `deduplicate_events`, `calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`, `build_weekly_kpi_rows`, `reconcile` |
 | `load_weekly_office_program_performance_subflow` | Carga | `target`, `rows`, `week_start` → `LoadResult` | `load_weekly_performance` |
 | `window_liveness_count_subflow` *(opcional)* | Extracción | `source`, `start`, `end`, `environment` → `int` | `count_window_events` |
 | `raw_events_snapshot_subflow` *(opcional)* | Extracción | `events`, `week_start`, `environment` → ruta del archivo | `save_raw_snapshot` |
@@ -586,7 +591,7 @@ Nombre exacto de la sección *Destination table* del briefing:
 
 ## 9. Pruebas previstas
 
-- Unitarias de `aggregate_by_office_programme` con eventos sintéticos: conteos, suma de costos, límites de semana (domingo 23:59 / lunes 00:00).
+- Unitarias de las tasks de KPI (`calculate_total_material_cost`, `count_kits_delivered`, `count_shortage_events`, `count_cost_variance_events`) con eventos sintéticos: conteos, suma de costos, límites de semana (domingo 23:59 / lunes 00:00).
 - Moneda: mezcla EUR/USD debe fallar; Valencia y Miami salen en filas separadas.
 - Idempotencia: ejecutar dos veces no duplica filas ni cambia los valores.
 - Recuperabilidad: tras un fallo de carga, la tabla queda intacta; una corrida `Running` antigua pasa a `Crashed`.

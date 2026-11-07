@@ -50,7 +50,8 @@ def latest(target):
 def test_the_optional_and_the_critical_tasks_are_the_ones_the_design_says():
     optional = {"count_window_events", "save_raw_snapshot", "save_eval_report"}
     critical = {"start_pipeline_run", "resolve_week_window", "extract_events", "validate_events", "check_currency_consistency",
-                "aggregate_by_office_programme", "reconcile", "load_weekly_performance", "finish_pipeline_run"}
+                "deduplicate_events", "calculate_total_material_cost", "count_kits_delivered", "count_shortage_events",
+                "count_cost_variance_events", "build_weekly_kpi_rows", "reconcile", "load_weekly_performance", "finish_pipeline_run"}
     assert all(hasattr(pipeline, name) for name in optional | critical)
     assert optional.isdisjoint(critical)
 
@@ -151,7 +152,7 @@ def test_every_task_that_touches_the_database_is_configured_with_retries():
         "from data.pipelines import pipeline as p;"
         "t=[p.extract_events,p.load_weekly_performance,p.start_pipeline_run,p.finish_pipeline_run];"
         "print([x.retries for x in t], [x.retry_delay_seconds for x in t][0], p.count_window_events.retries,"
-        " p.validate_events.retries, p.aggregate_by_office_programme.retries)"
+        " p.validate_events.retries, p.calculate_total_material_cost.retries)"
     )
     env = {k: v for k, v in os.environ.items() if k != "PIPELINE_RETRIES"}
     out = subprocess.run([sys.executable, "-c", code], cwd=REPO, env=env, capture_output=True, text=True, timeout=120)
@@ -235,7 +236,9 @@ def test_main_returns_zero_when_it_works_and_one_when_it_fails(tmp_path, monkeyp
 def test_the_cache_lasts_one_hour_and_covers_only_the_tasks_that_can_safely_be_reused():
     assert pipeline.CACHE_TTL == timedelta(hours=1)
     assert pipeline.extract_events.cache_expiration == pipeline.CACHE_TTL
-    assert pipeline.aggregate_by_office_programme.cache_expiration == pipeline.CACHE_TTL
+    for kpi_task in (pipeline.calculate_total_material_cost, pipeline.count_kits_delivered, pipeline.count_shortage_events,
+                     pipeline.count_cost_variance_events):
+        assert kpi_task.cache_expiration == pipeline.CACHE_TTL
     # the load and the log act on the world every time: they must never be skipped
     for never_cached in (pipeline.load_weekly_performance, pipeline.start_pipeline_run, pipeline.finish_pipeline_run,
                          pipeline.reconcile, pipeline.check_currency_consistency):
@@ -244,7 +247,7 @@ def test_the_cache_lasts_one_hour_and_covers_only_the_tasks_that_can_safely_be_r
 
 def test_a_second_run_within_the_hour_reuses_the_extraction_and_the_transformation_but_still_loads(engines, monkeypatch):
     extractions = spy(monkeypatch, repository, "extract")
-    aggregations = spy(monkeypatch, wp, "aggregate_by_office_programme")
+    aggregations = spy(monkeypatch, wp, "total_material_cost_by_group")  # the work of the first KPI task
     loads = spy(monkeypatch, repository, "load_week")
 
     run(engines, refresh=False)
