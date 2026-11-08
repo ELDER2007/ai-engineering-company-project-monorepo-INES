@@ -69,8 +69,15 @@ Qué está comprobado y qué no, en `../PIPELINE_DESIGN.md` (secciones 4.5, 4.6 
 2. **Ejecuta el script:** Supabase → *SQL Editor* → pega el contenido de `sql/002_roles.sql`. **Antes de ejecutarlo, cambia las dos contraseñas** (`CHANGE-ME-...`) por contraseñas largas y distintas. No las pegues en el chat ni las guardes en el repositorio.
 3. **Comprueba el resultado:** ejecuta la consulta de comprobación que lleva el script al final: `pipeline_reader` debe tener solo `SELECT` sobre `telemetry_events`, y `pipeline_writer` solo `SELECT, INSERT, UPDATE, DELETE` sobre las dos tablas de `reporting`.
 4. **Seguridad por filas (RLS):** el script ya incluye una política que deja al lector hacer `SELECT` de todas las filas de `telemetry_events` y nada más. Hace falta porque, con RLS activada y sin política, el lector vería 0 filas **sin ningún error** y la corrida reemplazaría el reporte por uno vacío. Si ya ejecutaste una versión del script sin esa política, ejecuta solo la línea `create policy pipeline_reader_select ...`.
-5. **Obtén las dos cadenas de conexión:** Supabase → *Connect* → *Transaction pooler*. En el pooler, el usuario se escribe `rol.ID_DEL_PROYECTO` (por ejemplo `pipeline_writer.abcdefgh`); copia la cadena que muestra Supabase y sustituye usuario y contraseña. Una cadena para el lector y otra para el escritor.
-6. **Úsalas:** `TELEMETRY_DATABASE_URL` = la del lector y `REPORTING_DATABASE_URL` = la del escritor (o, con los `Secret` blocks, `TELEMETRY_DATABASE_URL`/`REPORTING_DATABASE_URL` en el entorno al ejecutar `python -m data.pipelines.weekly_office_performance.blocks`). Prueba con `python data/pipelines/pipeline.py --environment development --week-start 2026-10-26`.
+5. **Comprueba los roles y, si quieres, ejecuta el pipeline con ellos** (sin escribir ninguna cadena de conexión a mano):
+
+   ```bash
+   python data/pipelines/verify_roles.py                  # solo comprueba; no escribe nada
+   python data/pipelines/verify_roles.py --run --environment development --week-start 2026-10-26   # comprueba y ejecuta
+   ```
+
+   El script usa tu `DATABASE_URL` (del entorno o de `services/api/.env`) y construye las dos cadenas cambiando **solo el usuario** (`pipeline_reader` / `pipeline_writer`, conservando el `.ID_DEL_PROYECTO` de Supabase) y la contraseña. Te pide las dos contraseñas **sin mostrarlas**, no las imprime ni las guarda, y funcionan aunque lleven caracteres raros. Las comprobaciones son de solo lectura: las de "¿puede escribir?" usan `delete ... where false`, que no borra nada ni aunque esté permitido. Comprueba que el lector lee la telemetría, que **no** puede escribir ni ver `reporting`, que el escritor lee y escribe `reporting` pero **no** puede leer la telemetría, y que la RLS no deja al lector leyendo 0 filas en silencio. Si algo falla, no ejecuta nada.
+6. **Úsalos de forma permanente:** `TELEMETRY_DATABASE_URL` = la cadena del lector y `REPORTING_DATABASE_URL` = la del escritor (o, con los `Secret` blocks, esas dos variables en el entorno al ejecutar `python -m data.pipelines.weekly_office_performance.blocks`). Construye cada una a partir de tu `DATABASE_URL`, cambiando solo el usuario y la contraseña.
 
 **Aviso:** la API del backoffice sigue usando su propia conexión (`DATABASE_URL`) para leer el reporte; estos roles son solo para el pipeline.
 
