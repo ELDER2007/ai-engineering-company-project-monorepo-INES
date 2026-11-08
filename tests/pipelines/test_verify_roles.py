@@ -63,6 +63,81 @@ def test_without_a_postgresql_database_there_is_nothing_to_check(monkeypatch, tm
     assert "nothing to check" in capsys.readouterr().err
 
 
+# ---------------------------------------------------------------- --write-env: saving the two URLs safely (pure)
+
+URLS = {"TELEMETRY_DATABASE_URL": "postgresql+psycopg2://pipeline_reader.x:r-pw@h:6543/postgres",
+        "REPORTING_DATABASE_URL": "postgresql+psycopg2://pipeline_writer.x:w-pw@h:6543/postgres"}
+
+
+@pytest.fixture()
+def ignored(monkeypatch):
+    monkeypatch.setattr(vr, "is_git_ignored", lambda path: True)
+
+
+def test_write_env_appends_the_two_urls_and_keeps_what_was_there(tmp_path, ignored):
+    env = tmp_path / ".env"
+    env.write_text("SECRET_KEY=abc\nDATABASE_URL=postgresql://admin:pw@h/db", encoding="utf-8")  # no final newline, on purpose
+    vr.write_env(env, URLS)
+    text_ = env.read_text(encoding="utf-8")
+    assert text_.startswith("SECRET_KEY=abc\nDATABASE_URL=postgresql://admin:pw@h/db\n")  # untouched, and the new lines start on their own line
+    assert text_.endswith("\n") and "TELEMETRY_DATABASE_URL='postgresql+psycopg2://pipeline_reader.x:r-pw@h:6543/postgres'" in text_
+
+
+def test_write_env_creates_the_file_when_there_is_none(tmp_path, ignored):
+    env = tmp_path / ".env"
+    vr.write_env(env, URLS)
+    assert env.read_text(encoding="utf-8").count("DATABASE_URL=") == 2
+
+
+@pytest.mark.parametrize("present", ["TELEMETRY_DATABASE_URL", "REPORTING_DATABASE_URL"])
+@pytest.mark.parametrize("form", ["{k}=old", "  {k} = old", "export {k}=old"])
+def test_write_env_never_overwrites_and_leaves_the_file_as_it_was(tmp_path, ignored, present, form):
+    env = tmp_path / ".env"
+    before = f"SECRET_KEY=abc\n{form.format(k=present)}\n"
+    env.write_text(before, encoding="utf-8")
+    with pytest.raises(vr.EnvFileError, match="not overwriting"):
+        vr.write_env(env, URLS)
+    assert env.read_text(encoding="utf-8") == before
+
+
+def test_write_env_refuses_a_file_that_git_does_not_ignore(tmp_path, monkeypatch):
+    monkeypatch.setattr(vr, "is_git_ignored", lambda path: False)
+    env = tmp_path / ".env"
+    with pytest.raises(vr.EnvFileError, match="not ignored by git"):
+        vr.write_env(env, URLS)
+    assert not env.exists()  # a password never reaches a file that could be committed
+
+
+def test_git_ignored_is_decided_by_git_and_the_env_of_the_api_is_ignored():
+    import shutil
+
+    if shutil.which("git") is None:
+        pytest.skip("needs git")
+    assert vr.is_git_ignored(REPO / "services" / "api" / ".env") is True
+    assert vr.is_git_ignored(REPO / "README.md") is False  # a tracked file is not ignored
+
+
+@pytest.mark.parametrize("password", ["plain-pw", "a@b:c/d?e#f%g$h", "con espacios y ñ", "x${HOME}y", "tick'quote\"double"])
+def test_a_password_survives_being_saved_and_read_back_by_the_pipeline_loader(tmp_path, ignored, password):
+    """What is written is read back by python-dotenv (what the pipeline and the API use) as exactly the URL that was meant."""
+    dotenv = pytest.importorskip("dotenv")
+    env = tmp_path / ".env"
+    url = vr.role_url("postgresql://postgres.abc:admin-pw@h:6543/postgres", "pipeline_writer", password).render_as_string(hide_password=False)
+    vr.write_env(env, {"REPORTING_DATABASE_URL": url, "TELEMETRY_DATABASE_URL": url})
+    read = dotenv.dotenv_values(env)["REPORTING_DATABASE_URL"]
+    assert read == url and make_url(read).password == password
+
+
+def test_main_does_not_write_the_env_file_when_a_check_fails(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres.abc:admin-pw@h:6543/postgres")
+    monkeypatch.setenv("PIPELINE_ENV_FILE", str(tmp_path / ".env"))
+    monkeypatch.setattr(vr.getpass, "getpass", lambda prompt: "pw")
+    monkeypatch.setattr(vr, "check_roles", lambda *a: [vr.Check(False, "a role can do too much")])
+    monkeypatch.setattr(vr, "write_env", lambda *a: pytest.fail("the env file was written although a check failed"))
+    assert vr.main(["--write-env"]) == 1
+    assert "FALLA" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------- against a real PostgreSQL
 
 ADMIN = os.environ.get("PIPELINE_TEST_ADMIN_URL")
@@ -205,4 +280,31 @@ def test_run_does_not_run_the_pipeline_when_a_check_fails(roles, monkeypatch, ca
     monkeypatch.setattr(pipeline, "main", lambda *a, **k: pytest.fail("the pipeline ran although a check failed"))
     assert vr.main(["--run"]) == 1
     assert "FALLA" in capsys.readouterr().out
+
+
+@needs_postgres
+def test_write_env_saves_working_urls_and_prints_no_password(roles, tmp_path, monkeypatch, capsys):
+    """Against the real database: after --write-env, the saved URLs connect as the reader and as the writer."""
+    dotenv = pytest.importorskip("dotenv")
+    url, _ = roles
+    env = tmp_path / ".env"
+    monkeypatch.setenv("PIPELINE_ENV_FILE", str(env))
+    monkeypatch.setattr(vr, "is_git_ignored", lambda path: True)
+    monkeypatch.setenv("DATABASE_URL", url.render_as_string(hide_password=False))
+    monkeypatch.setattr(vr.getpass, "getpass", lambda prompt: "reader-pw" if vr.READER in prompt else "writer-pw")
+
+    assert vr.main(["--write-env"]) == 0
+    out = capsys.readouterr()
+    assert "reader-pw" not in out.out + out.err and "writer-pw" not in out.out + out.err and "(the values are not shown)" in out.out
+    saved = dotenv.dotenv_values(env)
+    reader = create_engine(make_url(saved["TELEMETRY_DATABASE_URL"]))
+    writer = create_engine(make_url(saved["REPORTING_DATABASE_URL"]))
+    try:
+        with reader.connect() as connection:
+            assert connection.execute(text("select count(*) from public.telemetry_events")).scalar() == 3
+        with writer.connect() as connection:
+            assert connection.execute(text("select count(*) from reporting.pipeline_runs")).scalar() == 0
+    finally:
+        reader.dispose()
+        writer.dispose()
 

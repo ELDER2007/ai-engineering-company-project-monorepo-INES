@@ -2,11 +2,17 @@
 
     python data/pipelines/verify_roles.py                 # checks the permissions; writes NOTHING
     python data/pipelines/verify_roles.py --run           # ...and, if all is right, runs the pipeline with the two roles
+    python data/pipelines/verify_roles.py --write-env     # ...and, if all is right, saves the two URLs in services/api/.env
     python data/pipelines/verify_roles.py --run --environment development --week-start 2026-10-26
 
 The database is the one of ``DATABASE_URL`` (the environment or ``services/api/.env``). The two role URLs are BUILT from it,
 changing only the user (``pipeline_reader`` / ``pipeline_writer``, keeping a Supabase ``.PROJECT_ID`` suffix if there is one) and
 the password, which are asked for WITHOUT showing them. Nothing is printed or stored: the passwords live in this process only.
+
+``--write-env`` appends TELEMETRY_DATABASE_URL (the reader) and REPORTING_DATABASE_URL (the writer) to the env file the pipeline
+already reads (``services/api/.env``, or PIPELINE_ENV_FILE), so the plain command ``python data/pipelines/pipeline.py`` uses the roles
+from then on. It only writes when every check passed; it refuses if the file is not ignored by git (a password must never reach a
+commit) or if either variable is already there (it never overwrites); and it never prints the URLs.
 
 Every check is read-only: the "can it write?" checks use ``delete ... where false``, which deletes nothing even if it is allowed.
 """
@@ -22,6 +28,8 @@ if __name__ == "__main__" and not __package__:  # `python data/pipelines/verify_
 import argparse
 import getpass
 import os
+import re
+import subprocess
 from dataclasses import dataclass
 
 from sqlalchemy import create_engine, text
@@ -30,7 +38,9 @@ from sqlalchemy.exc import DBAPIError
 
 from data.pipelines.weekly_office_performance import storage
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 READER, WRITER = "pipeline_reader", "pipeline_writer"
+ENV_KEYS = ("TELEMETRY_DATABASE_URL", "REPORTING_DATABASE_URL")  # the reader's URL, the writer's URL
 TELEMETRY = "public.telemetry_events"
 REPORTING_TABLES = ("reporting.pipeline_runs", "reporting.weekly_office_program_performance")
 
@@ -97,9 +107,42 @@ def check_roles(admin_url: str | URL, reader_password: str, writer_password: str
     return checks
 
 
+class EnvFileError(RuntimeError):
+    """The env file cannot be written safely; its text says why."""
+
+
+def env_file_path() -> Path:
+    """The file the pipeline reads its environment from (the same rule as ``storage.load_api_env``)."""
+    return Path(os.environ.get("PIPELINE_ENV_FILE") or REPO_ROOT / "services" / "api" / ".env")
+
+
+def is_git_ignored(path: Path) -> bool:
+    """True only if git says the file is ignored. Any doubt (no git, not a repository) is False: a secret must not be written there."""
+    try:
+        return subprocess.run(["git", "check-ignore", "-q", str(path)], cwd=REPO_ROOT, capture_output=True, timeout=20, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def write_env(path: Path, urls: dict[str, str]) -> None:
+    """Append ``urls`` (variable -> URL) to the env file, single-quoted so no character of a password is read as anything else.
+    Refuses, leaving the file as it was, if it is not ignored by git or if a variable is already in it."""
+    if not is_git_ignored(path):
+        raise EnvFileError(f"{path} is not ignored by git: not writing passwords there")
+    current = path.read_text(encoding="utf-8") if path.exists() else ""
+    present = [key for key in urls if re.search(rf"^\s*(export\s+)?{key}\s*=", current, re.MULTILINE)]
+    if present:
+        raise EnvFileError(f"{', '.join(present)} already in {path}: not overwriting. Edit the file by hand or remove those lines first")
+    lines = ["# Added by data/pipelines/verify_roles.py: least-privilege roles of the weekly pipeline (reader / writer)"]
+    lines += [f"{key}='{url}'" for key, url in urls.items()]
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(("\n" if current and not current.endswith("\n") else "") + "\n".join(lines) + "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check the two least-privilege roles against the database of DATABASE_URL.")
     parser.add_argument("--run", action="store_true", help="if every check passes, run the pipeline with the two roles")
+    parser.add_argument("--write-env", action="store_true", help="if every check passes, save the two role URLs in services/api/.env (never shown)")
     parser.add_argument("--environment", default=None, help="telemetry environment for --run (default: the pipeline's)")
     parser.add_argument("--week-start", default=None, help="Monday of the week for --run, YYYY-MM-DD (default: the last complete week)")
     args = parser.parse_args(argv)
@@ -118,6 +161,15 @@ def main(argv: list[str] | None = None) -> int:
         print("\nSome checks FAILED: nothing was run. Nothing was written to the database either.")
         return 1
     print("\nAll the checks passed: the roles can do what they need and nothing else.")
+    if args.write_env:
+        path = env_file_path()
+        try:
+            write_env(path, {ENV_KEYS[0]: role_url(admin_url, READER, reader_password).render_as_string(hide_password=False),
+                             ENV_KEYS[1]: role_url(admin_url, WRITER, writer_password).render_as_string(hide_password=False)})
+        except EnvFileError as error:
+            print(f"\nNot saved: {error}", file=sys.stderr)
+            return 1
+        print(f"\nSaved {ENV_KEYS[0]} and {ENV_KEYS[1]} in {path} (the values are not shown).")
     if not args.run:
         return 0
 

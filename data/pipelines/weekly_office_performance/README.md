@@ -77,7 +77,15 @@ Qué está comprobado y qué no, en `../PIPELINE_DESIGN.md` (secciones 4.5, 4.6 
    ```
 
    El script usa tu `DATABASE_URL` (del entorno o de `services/api/.env`) y construye las dos cadenas cambiando **solo el usuario** (`pipeline_reader` / `pipeline_writer`, conservando el `.ID_DEL_PROYECTO` de Supabase) y la contraseña. Te pide las dos contraseñas **sin mostrarlas**, no las imprime ni las guarda, y funcionan aunque lleven caracteres raros. Las comprobaciones son de solo lectura: las de "¿puede escribir?" usan `delete ... where false`, que no borra nada ni aunque esté permitido. Comprueba que el lector lee la telemetría, que **no** puede escribir ni ver `reporting`, que el escritor lee y escribe `reporting` pero **no** puede leer la telemetría, y que la RLS no deja al lector leyendo 0 filas en silencio. Si algo falla, no ejecuta nada.
-6. **Úsalos de forma permanente:** `TELEMETRY_DATABASE_URL` = la cadena del lector y `REPORTING_DATABASE_URL` = la del escritor (o, con los `Secret` blocks, esas dos variables en el entorno al ejecutar `python -m data.pipelines.weekly_office_performance.blocks`). Construye cada una a partir de tu `DATABASE_URL`, cambiando solo el usuario y la contraseña.
+6. **Úsalos de forma permanente:** añade `--write-env` y el script guarda las dos conexiones en tu `services/api/.env`, sin mostrarlas:
+
+   ```bash
+   python data/pipelines/verify_roles.py --write-env
+   ```
+
+   Solo escribe si **todas** las comprobaciones pasan; se niega si el archivo no está ignorado por git (una contraseña nunca debe llegar a un commit) y **nunca sobrescribe**: si `TELEMETRY_DATABASE_URL` o `REPORTING_DATABASE_URL` ya están en el archivo, no toca nada y te lo dice. Desde entonces, el comando normal `python data/pipelines/pipeline.py` lee con el lector y escribe con el escritor. Para dejar de usarlos, borra esas dos líneas del `.env`.
+
+   **Qué cambia y qué no:** esas dos variables solo las leen el pipeline y la parte de `reporting` de la API (que con el escritor sigue pudiendo leer y escribir sus tablas). La telemetría, el inventario y los usuarios de la API usan solo `DATABASE_URL` y no cambian. Comprobado con la API arrancada con las dos variables en su `.env`: los endpoints de reporting, de telemetría y de inventario responden, y el pipeline lanzado desde la API (`POST /reporting/pipeline-runs`) funciona con los roles.
 
 **Aviso:** la API del backoffice sigue usando su propia conexión (`DATABASE_URL`) para leer el reporte; estos roles son solo para el pipeline.
 
