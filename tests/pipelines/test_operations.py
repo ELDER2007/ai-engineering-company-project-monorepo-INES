@@ -394,6 +394,12 @@ def test_the_roles_script_gives_the_reader_only_a_select_on_telemetry():
     assert not any(re.search(r"\b(insert|update|delete|truncate|all)\b", g, re.IGNORECASE) for g in reader if g.lower().startswith("grant"))
 
 
+def test_the_reader_has_a_row_level_security_policy_to_select_and_only_that():
+    """With RLS on and no policy a role reads ZERO rows and gets no error: the report would be replaced by an empty one."""
+    policies = [line.lower() for line in ROLES_SQL.splitlines() if line.lower().startswith("create policy")]
+    assert policies == ["create policy pipeline_reader_select on public.telemetry_events for select to pipeline_reader using (true);"]
+
+
 def test_the_roles_script_gives_the_writer_the_two_reporting_tables_and_no_telemetry():
     writer = [g for g in GRANTS if "pipeline_writer" in g and g.lower().startswith("grant")]
     assert any("reporting.weekly_office_program_performance" in g and "insert" in g and "delete" in g for g in writer)

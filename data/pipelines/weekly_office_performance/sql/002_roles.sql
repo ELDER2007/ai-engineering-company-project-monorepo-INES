@@ -18,6 +18,11 @@ revoke create on schema public from pipeline_reader, pipeline_writer;
 grant usage on schema public to pipeline_reader;
 grant select on public.telemetry_events to pipeline_reader;
 
+-- Row level security (RLS): when it is ON for telemetry_events (Supabase often turns it on), a role with no policy sees ZERO
+-- rows and gets NO error, so the pipeline would read an empty week and replace the report with nothing. This policy lets the
+-- reader SELECT every row and nothing else; it applies to this role only. It is harmless when RLS is off.
+create policy pipeline_reader_select on public.telemetry_events for select to pipeline_reader using (true);
+
 -- The writer: the two tables of the reporting schema, and nothing else.
 grant usage on schema reporting to pipeline_writer;
 grant select, insert, update, delete on reporting.weekly_office_program_performance to pipeline_writer;
