@@ -45,4 +45,6 @@ data/.local/
 
 # Pipeline runtime output (events read and validation report of each run)
 data/raw/weekly_events_*.jsonl
+# Nightly export of the telemetry (scripts/nightly_export.py): a backup of telemetry_events, never to be committed
+data/raw/telemetry_*.csv
 data/eval/run_*.json
