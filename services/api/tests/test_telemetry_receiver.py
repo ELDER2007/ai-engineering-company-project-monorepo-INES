@@ -1,4 +1,4 @@
-"""The telemetry receiver (still a stub): batch in, per-event verdict out, nothing stored. See telemetry/router.py."""
+"""The telemetry receiver: batch in, per-event verdict out (what is stored is tested in test_telemetry_storage.py). See telemetry/router.py."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 from conftest import ALICE, headers_for
 from telemetry import contract
 
-pytestmark = pytest.mark.anyio
+pytestmark = [pytest.mark.anyio, pytest.mark.usefixtures("telemetry_db")]
 
 SCHEMA = json.loads((Path(__file__).resolve().parents[3] / "docs" / "telemetry" / "event-schemas.json").read_text(encoding="utf-8"))
 EXAMPLES = {example["event_type"]: example for example in SCHEMA["examples"]}
@@ -41,11 +41,11 @@ async def post(client, events, **kwargs):
 async def test_a_valid_batch_is_acknowledged_with_200(async_client):
     response = await post(async_client, [browser_event(), browser_event(), browser_event()])
     assert response.status_code == 200
-    assert response.json() == {"received": 3, "accepted": 3, "rejected": []}
+    assert response.json() == {"received": 3, "accepted": 3, "stored": 3, "rejected": []}
 
 
 async def test_an_empty_batch_is_fine(async_client):
-    assert (await post(async_client, [])).json() == {"received": 0, "accepted": 0, "rejected": []}
+    assert (await post(async_client, [])).json() == {"received": 0, "accepted": 0, "stored": 0, "rejected": []}
 
 
 async def test_the_body_is_parsed_whatever_the_content_type_because_sendbeacon_sends_text_plain(async_client):
@@ -192,9 +192,9 @@ async def test_cors_allows_the_backoffice_to_post_a_batch_directly(async_client)
     assert preflight.status_code == 200 and preflight.headers["access-control-allow-origin"] == "http://localhost:5174"
 
 
-# --- the stub's log: how many events and the type of each ----------------------------------------
+# --- the receiver's log: how many events and the type of each ----------------------------------------
 
-async def test_the_stub_logs_how_many_events_arrived_and_the_type_of_each(async_client, caplog):
+async def test_the_receiver_logs_how_many_events_arrived_and_the_type_of_each(async_client, caplog):
     caplog.set_level("INFO", logger="telemetry")
     await post(async_client, [browser_event("section_viewed"), browser_event("section_viewed"), inventory_event()], headers=headers_for(ALICE))
     assert "received 3 event(s): section_viewed, section_viewed, outbound_order_created" in caplog.text

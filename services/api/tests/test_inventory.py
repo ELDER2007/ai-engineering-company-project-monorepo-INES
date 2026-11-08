@@ -414,7 +414,7 @@ def test_all_inventory_routes_live_under_the_inventory_prefix():
 
 
 def test_the_inventory_has_no_users_table_and_orders_reference_users_by_plain_uuid():
-    assert set(SQLModel.metadata.tables) == {"assets", "asset_entries", "asset_exits"}
+    assert set(SQLModel.metadata.tables) == {"assets", "asset_entries", "asset_exits", "telemetry_events"}  # the last one: telemetry storage
     for name in ("asset_entries", "asset_exits"):
         assert not SQLModel.metadata.tables[name].c.user_uuid.foreign_keys
 

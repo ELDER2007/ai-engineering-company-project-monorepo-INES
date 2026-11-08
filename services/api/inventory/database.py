@@ -23,6 +23,8 @@ from tinydb import TinyDB
 from core.config import get_database_url
 from users import service as users_service
 
+from telemetry import models as telemetry_models  # noqa: F401  (the telemetry events live in the same SQL store)
+
 from . import models  # noqa: F401  (registers the tables on SQLModel.metadata)
 
 _SQLITE_PREFIX = "sqlite:///"

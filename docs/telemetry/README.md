@@ -26,7 +26,7 @@ y en el [README de la API](../../services/api/README.md#telemetry-receiver-telem
 | Autenticacion (en el cliente de la API, no en cada pagina) | `login_attempted`, `login_succeeded`, `login_failed` (razon: `invalid_credentials`, `invalid_request`, `rate_limited` o `internal_error`; nunca el email ni la contraseña), `logout_completed`, `session_expired`, `authorization_denied` (por plantilla de ruta), `registration_completed`, `registration_failed`, `profile_updated` (solo cuantos campos). Un fallo de red al entrar es `application_error_occurred` con `network_failed`, no un `login_failed`: no llego al API y distorsionaria su tasa de fallos. |
 | Piso tecnico transversal | Errores no capturados (`window.onerror`, `unhandledrejection`) y del Error Boundary: `application_error_occurred`. Rendimiento: `section_load_completed` (tiempo hasta tener los datos de la seccion) y `web_vital_reported` (LCP, CLS, INP, FCP, TTFB, contrato 2.1.0). Navegacion: `section_viewed` de las 11 secciones. |
 | Navegacion y flujos | `section_viewed`, `section_load_completed`, `search_performed`, `flow_started`, `flow_step_completed`, `flow_completed`, `flow_cancelled`, `form_validation_failed`. |
-| Receptor | `POST /telemetry/events`, lote `{"events": [...]}`, 200 con `accepted`/`rejected` por evento, validado contra `event-schemas.json`. No guarda nada. |
+| Receptor | `POST /telemetry/events`, lote `{"events": [...]}`, 200 con `accepted`/`rejected` por evento, validado contra `event-schemas.json`. Guarda los validos en la tabla `telemetry_events` antes de responder (ver abajo). |
 | Variable de entorno | `NEXT_PUBLIC_TELEMETRY_ENDPOINT` (se fija al compilar). |
 | Contrato | 2.1.0 (aditivo sobre 2.0.0): añade `web_vital_reported` ([plan, seccion 17](telemetry-plan.md#17-cambio-de-contrato-210-web-vitals)). El receptor acepta `2.0.0` y `2.1.0`. |
 
@@ -37,13 +37,23 @@ El receptor fija en el servidor la `source` de los eventos que el contrato ata a
 Cambios previos que el plan (seccion 3) marcaba como prerrequisito y que se han hecho: programa, categoria de negocio, minimo de stock,
 coste unitario y proveedor por ID en el inventario, y rechazo explicito de escritura directa de stock. Siguen pendientes:
 clasificar el catalogo real (Elena), la outbox transaccional en el servidor, el consentimiento y la politica de almacenamiento analitico
-(seccion 11), los eventos que solo puede emitir la API o el website, y la persistencia.
+(seccion 11) y los eventos que solo puede emitir la API o el website.
 
 Intervalos de envio: lote a los 20 eventos o a los 10 s (el enunciado de la fase de captura; el plan, seccion 10, proponia 5 s, y el valor del plan es una propuesta), 3 reintentos con espera 1, 2 y 4 s.
 
 Limitaciones conocidas de esta fase: los eventos de inventario los emite el navegador tras la respuesta del API, no el servidor en la
 transaccion; si el usuario cierra la pestaña antes del envio, el evento se pierde (se mitiga con `sendBeacon` al ocultar la pestaña y con
 `fetch keepalive` para los eventos que necesitan identidad). El receptor sustituye `source` y `userId` en el servidor, como pide el plan.
+
+## Almacenamiento (implementado)
+
+El receptor guarda cada evento valido en `telemetry_events` (misma base SQL que el inventario; Supabase o SQLite local), inmutable (solo
+INSERT) y deduplicada por `eventId`, con una sola operacion de insercion por lote. Ocho columnas: `event_id`, `event_type`, `timestamp`,
+`service` (la `source` del envelope), `user_id` (seudonimo HMAC), `session_id`, `environment` y `tags` (JSONB = `properties` intacto, con las
+dimensiones del briefing: oficina, programa, producto, categoria, moneda y cantidad). Tres indices: `timestamp`, `event_type` y GIN sobre
+`tags`. Un test comprueba que las claves guardadas en `tags` pertenecen al diccionario del plan. La retencion de 90 dias del plan no esta
+implementada (pendiente de aprobacion). SQL para Supabase: [telemetry_events.sql](telemetry_events.sql). Detalle en el
+[README de la API](../../services/api/README.md#storage-telemetrymodelspy-telemetrystorepy).
 
 ## Revision de Fase 1
 

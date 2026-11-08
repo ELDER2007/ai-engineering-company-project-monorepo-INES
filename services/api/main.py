@@ -30,7 +30,7 @@ from users.router import router as users_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logging.getLogger("telemetry").info("TELEMETRY_ENDPOINT = %s (read, not used: the receiver is a stub)", get_telemetry_endpoint() or "not set")
+    logging.getLogger("telemetry").info("TELEMETRY_ENDPOINT = %s (informational: events are stored by this API)", get_telemetry_endpoint() or "not set")
     get_jwt_secret()  # fail at startup, not on the first login, if SECRET_KEY is invalid
     users_service.bootstrap_first_user()
     users_service.migrate_legacy_users()
@@ -64,7 +64,7 @@ app.include_router(incident_manager_router)
 app.include_router(suppliers_router, prefix="/suppliers")
 app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=False)
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
-app.include_router(telemetry_router, prefix="/telemetry")  # public stub: accepts and drops events
+app.include_router(telemetry_router, prefix="/telemetry")  # public: validates and stores the events
 
 
 @app.get("/health")
