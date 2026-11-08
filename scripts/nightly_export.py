@@ -28,8 +28,9 @@ Environment (all optional):
     NIGHTLY_PIPELINE_COMMAND          the pipeline command (default: python data/pipelines/pipeline.py --trigger scheduled).
     NIGHTLY_PIPELINE_TIMEOUT_SECONDS  the pipeline is stopped after this long (default 1800).
     NIGHTLY_STALE_AFTER_MINUTES       a row ``processing`` for longer than this is a dead run (default 120; always longer than the timeout).
+    NIGHTLY_REQUIRE_DATABASE_URL      set to 1 (the scheduler container does) to refuse to run without DATABASE_URL instead of using the local SQLite file.
 
-Exit code: 0 done, or skipped (already done / another run is going); 1 the run failed; 2 bad usage (an invalid TARGET_DATE); 130 interrupted.
+Exit code: 0 done, or skipped (already done / another run is going); 1 the run failed; 2 bad usage (an invalid TARGET_DATE, or no database when one is required); 130 interrupted.
 """
 
 from __future__ import annotations
@@ -278,6 +279,9 @@ def main(argv: list[str] | None = None) -> int:
         target_date = resolve_target_date(os.environ.get("TARGET_DATE"))
     except UsageError as error:
         print(f"error: {error}", file=sys.stderr)
+        return 2
+    if os.environ.get("NIGHTLY_REQUIRE_DATABASE_URL") and not os.environ.get("DATABASE_URL", "").strip():
+        print("error: DATABASE_URL is not set, and NIGHTLY_REQUIRE_DATABASE_URL asks for a real database (not the local SQLite fallback)", file=sys.stderr)
         return 2
     signal.signal(signal.SIGTERM, _on_sigterm)
 

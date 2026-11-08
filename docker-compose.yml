@@ -55,6 +55,27 @@ services:
     networks: [nexova-net]
     restart: unless-stopped
 
+  # Nightly job (ticket DEV-53): a container of its OWN that runs scripts/nightly_export.py every night at 02:00 UTC (infra/scheduler/crontab).
+  # It is OFF by default, so the `docker compose up` of every other project is exactly what it was:
+  #   docker compose --profile scheduler up -d scheduler
+  # It does not depend on the API and shares nothing with it: it only needs the database (DATABASE_URL, from .env). Why a container: infra/scheduler/README.md
+  scheduler:
+    profiles: ["scheduler"]
+    build:
+      context: .
+      dockerfile: infra/scheduler/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: UTC
+      NIGHTLY_REQUIRE_DATABASE_URL: "1"  # without a real database the job would "work" against a throw-away file inside the container
+    volumes:
+      - ./data/raw:/app/data/raw    # the CSV backups, on the host
+      - ./data/eval:/app/data/eval  # the pipeline's validation reports
+    networks: [nexova-net]
+    restart: unless-stopped
+
 networks:
   nexova-net:
     name: nexova-net

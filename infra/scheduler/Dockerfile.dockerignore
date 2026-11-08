@@ -1,0 +1,13 @@
+# Applies ONLY to the build of infra/scheduler/Dockerfile (BuildKit reads <Dockerfile>.dockerignore): the root of the repo is its context,
+# and no other image of the monorepo has to change for that.
+.git
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv
+data/raw
+data/eval
+data/.local
