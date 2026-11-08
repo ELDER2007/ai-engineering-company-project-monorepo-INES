@@ -14,6 +14,7 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlmodel import Session
 
 from .models import TelemetryEventRow
+from .report_cache import report_cache
 
 logger = logging.getLogger("telemetry")
 
@@ -49,6 +50,8 @@ def save(session: Session, events: list[dict[str, Any]]) -> int:
     except Exception:
         session.rollback()
         raise
+    if inserted:
+        report_cache.invalidate()  # a cached technical report would hide what was just stored
     if inserted < len(rows):
         logger.info("%d duplicate event(s) skipped (delivery retry)", len(rows) - inserted)
     return inserted

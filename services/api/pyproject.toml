@@ -21,6 +21,7 @@ dependencies = [
     "psycopg2-binary>=2.9.13",
     "jsonschema>=4.21",
     "rfc3339-validator>=0.1.4",
+    "pandas>=2.2",
 ]
 
 [dependency-groups]
