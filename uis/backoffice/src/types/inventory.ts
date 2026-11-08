@@ -14,6 +14,10 @@ export const CATEGORY_LABELS: Record<AssetCategory, string> = {
   training_materials: "Material de formación",
 };
 
+/** Business classification of the telemetry contract; separate from the legacy `AssetCategory` on purpose. */
+export const PRODUCT_CATEGORIES = ["training_kit", "certification", "onboarding_equipment"] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
 export const EXIT_TYPES = ["allocation", "consumption"] as const;
 export type ExitType = (typeof EXIT_TYPES)[number];
 
@@ -29,16 +33,38 @@ export interface Asset {
   sku: string;
   category: AssetCategory;
   office: Office;
+  /** Telemetry classification; null = not classified yet (such an asset emits no inventory events). */
+  programme_id: string | null;
+  product_category: ProductCategory | null;
+  /** Alert level of the minimum-stock event; 0 = off. */
+  minimum_stock: number;
   current_stock: number;
 }
 
 /** POST /inventory/products. `current_stock` is never sent: it is computed from the orders. */
-export type AssetCreate = Omit<Asset, "id" | "current_stock">;
+export type AssetCreate = Omit<Asset, "id" | "current_stock" | "programme_id" | "product_category" | "minimum_stock"> &
+  Partial<Pick<Asset, "programme_id" | "product_category" | "minimum_stock">>;
 
 /** The asset as embedded in an order (no stock). */
 export type AssetBrief = Omit<Asset, "current_stock">;
 
 export type OrderType = "inbound" | "outbound";
+
+/** What an order did, computed by the API in the order's own transaction. Only in the response that creates it. */
+export interface OrderEffects {
+  stock_before: number;
+  stock_after: number;
+  minimum_stock: number;
+  /** Outbound only: the stock went from at least the minimum to below it. */
+  threshold_crossed: boolean;
+  /** Inbound only: the unit cost is more than 10 % away from the last five entries of the same asset and supplier. */
+  cost_variance: {
+    reference_unit_cost_minor: number;
+    baseline_order_count: number;
+    variance_percent: number;
+    threshold_percent: number;
+  } | null;
+}
 
 /** GET /inventory/orders: one entry (inbound) or exit (outbound). `supplier` is set only on inbound, `exit_type` and `assigned_to` only on outbound. */
 export interface InventoryOrder {
@@ -50,8 +76,14 @@ export interface InventoryOrder {
   created_at: string;
   user_uuid: string;
   supplier: string | null;
+  /** Opaque id derived from `supplier` by the API: the only thing about the supplier that reaches telemetry. */
+  supplier_id: string | null;
+  /** Inbound only, in minor units (cents) of `currency`; null on entries that predate the cost. */
+  unit_cost_minor: number | null;
+  currency: "EUR" | "USD" | null;
   exit_type: ExitType | null;
   assigned_to: string | null;
+  effects: OrderEffects | null;
 }
 
 /** POST /inventory/orders/inbound. The author and the timestamp are set by the server. */
@@ -60,6 +92,8 @@ export interface InboundOrderCreate {
   quantity: number;
   supplier: string;
   office: Office;
+  /** Unit cost in minor units (cents) of the office's currency (EUR for Valencia, USD for Miami). */
+  unit_cost_minor?: number;
 }
 
 /** POST /inventory/orders/outbound. `assigned_to` is required for an allocation and must be null for a consumption. */

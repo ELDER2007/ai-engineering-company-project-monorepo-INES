@@ -8,4 +8,6 @@ python-dotenv>=1.0
 email-validator>=2.0
 sqlmodel>=0.0.48
 psycopg2-binary>=2.9.13
+jsonschema>=4.21
+rfc3339-validator>=0.1.4
 -e ../../packages/shared/incidents_analyzer

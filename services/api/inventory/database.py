@@ -16,6 +16,7 @@ import sqlite3
 from collections.abc import Iterator
 from functools import lru_cache
 
+from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 from tinydb import TinyDB
 
@@ -55,11 +56,40 @@ def get_tinydb() -> TinyDB:
     return users_service.get_db()
 
 
+def add_missing_columns(engine) -> list[str]:
+    """Additive migration: ``create_all`` creates missing tables but never alters existing ones, so a database
+    created before a column existed would fail on its first query. Adds every column the models declare and the
+    table lacks (``ALTER TABLE ... ADD COLUMN``, valid on SQLite and PostgreSQL) and returns ``table.column``
+    for each. New columns are nullable or carry a server default, so existing rows stay valid and are NOT
+    backfilled; that is a reviewed business step (docs/telemetry/telemetry-plan.md, section 3). It never
+    drops, renames or retypes anything.
+    """
+    added: list[str] = []
+    inspector = inspect(engine)
+    with engine.begin() as connection:
+        for table in SQLModel.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {column["name"] for column in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing:
+                    continue
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN {column.name} {column.type.compile(engine.dialect)}'
+                if column.server_default is not None:
+                    ddl += f" NOT NULL DEFAULT {column.server_default.arg}"
+                connection.execute(text(ddl))
+                added.append(f"{table.name}.{column.name}")
+    return added
+
+
 def init_db() -> None:
     """Initialise both connections at startup: the TinyDB client, and the SQL engine with
-    its schema (``create_all`` creates the missing tables, FKs and CHECKs included)."""
+    its schema (``create_all`` creates the missing tables, FKs and CHECKs included; then the
+    columns added since the database was created, see ``add_missing_columns``)."""
     get_tinydb()
-    SQLModel.metadata.create_all(get_engine())
+    engine = get_engine()
+    SQLModel.metadata.create_all(engine)
+    add_missing_columns(engine)
 
 
 def get_db() -> Iterator[Session]:

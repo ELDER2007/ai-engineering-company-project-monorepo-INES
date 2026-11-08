@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import os
 import secrets
@@ -125,6 +127,39 @@ def get_jwt_secret() -> str:
         return raw
     logger.warning("SECRET_KEY is not set: using a random key, sessions will not survive a restart")
     return secrets.token_urlsafe(48)
+
+
+def get_telemetry_endpoint() -> str | None:
+    """Where the real telemetry collector will live, from the TELEMETRY_ENDPOINT env var (None when unset).
+
+    Read since the stub so the pattern is in place from the start, but NOT used to forward or redirect any traffic yet: the
+    receiver still validates and drops. Phase 3 replaces the stub with the real implementation and starts using it. It is
+    not the frontend's NEXT_PUBLIC_TELEMETRY_ENDPOINT, which is where the browser posts (this receiver today).
+    """
+    return os.environ.get("TELEMETRY_ENDPOINT", "").strip() or None
+
+
+def get_telemetry_schema_path() -> Path:
+    """The telemetry event contract (JSON Schema Draft 2020-12), from TELEMETRY_SCHEMA_PATH or the repo's docs."""
+    raw = os.environ.get("TELEMETRY_SCHEMA_PATH")
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[3] / "docs" / "telemetry" / "event-schemas.json"
+
+
+@lru_cache(maxsize=1)
+def get_telemetry_hmac_key() -> bytes:
+    """Key of the `userId` pseudonym, from TELEMETRY_HMAC_KEY (separate per environment, stable while the data is kept).
+
+    Without it the key is derived from the JWT secret, so development works out of the box; the pseudonyms then
+    change whenever SECRET_KEY does. Production should set its own, at least MIN_SECRET_KEY_LENGTH characters.
+    """
+    raw = os.environ.get("TELEMETRY_HMAC_KEY")
+    if raw:
+        if len(raw) < MIN_SECRET_KEY_LENGTH:
+            raise RuntimeError(f"TELEMETRY_HMAC_KEY must be at least {MIN_SECRET_KEY_LENGTH} characters long")
+        return raw.encode("utf-8")
+    return hmac.new(get_jwt_secret().encode("utf-8"), b"nexova.telemetry.user.v1", hashlib.sha256).digest()
 
 
 def get_access_token_expire_minutes() -> int:
