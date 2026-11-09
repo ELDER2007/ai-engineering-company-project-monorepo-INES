@@ -56,3 +56,20 @@ def test_the_api_modules_are_still_the_ones_of_services_api(tmp_path):
     out = run_python("import main, core, auth, users, reporting; print(core.__file__.endswith('services/api/core/__init__.py'), reporting.__file__.endswith('services/api/reporting/__init__.py'))", tmp_path)
     assert out.returncode == 0, out.stderr[-600:]
     assert out.stdout.strip() == "True True"
+
+
+# ---------------------------------------------------------------- how to see the reporting with numbers on a clean clone
+
+
+def test_the_readmes_say_how_to_see_numbers_with_the_demo_database_and_warn_about_the_destructive_seed():
+    """On a clean clone the report is empty (no telemetry to compute). The way to see numbers must stay written down, and the warning must stay TRUE."""
+    api_readme = (API / "README.md").read_text(encoding="utf-8")
+    pipeline_readme = (REPO / "data" / "pipelines" / "weekly_office_performance" / "README.md").read_text(encoding="utf-8")
+    for text in (api_readme, pipeline_readme):
+        assert "python data/pipelines/pipeline.py --demo" in text
+        assert 'REPORTING_DATABASE_URL="sqlite:///$DEMO"' in text and 'TELEMETRY_DATABASE_URL="sqlite:///$DEMO"' in text
+        assert "uvicorn main:app --port 8000" in text and "2026-10-26" in text
+        assert "seed_telemetry.py" in text
+    assert "deletes every row of `telemetry_events`" in api_readme and "borra todas las filas de `telemetry_events`" in pipeline_readme
+    seed = (REPO / "data" / "pipelines" / "weekly_office_performance" / "seed_telemetry.py").read_text(encoding="utf-8")
+    assert "connection.execute(delete(telemetry_events))" in seed  # the reason for the warning is still in the code

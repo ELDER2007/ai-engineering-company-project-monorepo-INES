@@ -275,6 +275,34 @@ cp .env.example .env    # then set SECRET_KEY (openssl rand -hex 32) and, on the
 uvicorn main:app --reload --port 8000
 ```
 
+### Seeing the `/reporting` endpoints with numbers (demo data)
+
+On a clean clone the API starts, but `GET /reporting/weekly-office-program-performance` answers `404 No week has been computed yet`: its database has no telemetry
+events, so the pipeline has nothing to compute. To see numbers without touching the API's own database, let the API read the pipeline's **throw-away demo
+database** (two commands, from the repository root):
+
+```bash
+# 1) The pipeline in demo mode: creates data/.local/demo.sqlite with example events and computes the week of 2026-10-26.
+python data/pipelines/pipeline.py --demo
+
+# 2) The API, reading the reporting data from that file (the rest of the API keeps using its usual database).
+DEMO="$(pwd)/data/.local/demo.sqlite"
+cd services/api
+REPORTING_DATABASE_URL="sqlite:///$DEMO" TELEMETRY_DATABASE_URL="sqlite:///$DEMO" \
+AUTH_INITIAL_EMAIL=you@example.com AUTH_INITIAL_PASSWORD=choose-a-password \
+uvicorn main:app --port 8000
+```
+
+`AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` only create the first user when there are **no users yet**; if the API already has accounts, use one of them.
+
+Then open `http://localhost:8000/docs`, *Authorize* with that email and password, and call `GET /reporting/weekly-office-program-performance`: five rows (two offices,
+three programmes) for the week of 2026-10-26. `GET /reporting/pipeline-runs/latest` shows the run, and `POST /reporting/pipeline-runs` (admin) runs it again. With
+`curl`: log in with `curl -s -X POST localhost:8000/auth/login -d "username=you@example.com&password=choose-a-password"` and send the `access_token` as
+`Authorization: Bearer <token>`.
+
+> Do **not** run `data/pipelines/weekly_office_performance/seed_telemetry.py` against the API's own database: it **deletes every row of `telemetry_events`**
+> before loading the demo events. It is meant for throw-away files only, which is what `--demo` uses.
+
 To (re)load the initial suppliers into TinyDB by hand (the API also seeds an empty database on startup):
 
 ```bash
