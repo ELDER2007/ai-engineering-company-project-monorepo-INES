@@ -37,6 +37,32 @@ Cada corrida deja: una fila en `reporting.pipeline_runs`, la copia de los evento
 
 Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corrida.
 
+## Verlo por la API, con cifras (datos de demostración)
+
+En un clon limpio la API arranca, pero `GET /reporting/weekly-office-program-performance` responde `404 No week has been computed yet`: su base de datos no tiene
+eventos de telemetría y el pipeline no tiene nada que calcular. Para ver cifras **sin tocar la base de la propia API**, la API puede leer la base de
+demostración desechable del pipeline. Dos comandos, desde la raíz del repo:
+
+```bash
+# 1) El pipeline en modo demostración: crea data/.local/demo.sqlite con eventos de ejemplo y calcula la semana 2026-10-26.
+python data/pipelines/pipeline.py --demo
+
+# 2) La API, leyendo los datos de reporting de ese archivo (el resto de la API sigue con su base de siempre).
+DEMO="$(pwd)/data/.local/demo.sqlite"
+cd services/api
+REPORTING_DATABASE_URL="sqlite:///$DEMO" TELEMETRY_DATABASE_URL="sqlite:///$DEMO" \
+AUTH_INITIAL_EMAIL=tu@correo.com AUTH_INITIAL_PASSWORD=elige-una-contraseña \
+uvicorn main:app --port 8000
+```
+
+`AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` solo crean el primer usuario cuando **todavía no hay ninguno**; si la API ya tiene cuentas, usa una de ellas.
+
+Después, en `http://localhost:8000/docs`, *Authorize* con ese correo y contraseña y `GET /reporting/weekly-office-program-performance`: cinco filas (dos oficinas, tres
+programas) de la semana 2026-10-26. `GET /reporting/pipeline-runs/latest` muestra la corrida y `POST /reporting/pipeline-runs` (admin) la repite.
+
+> **No** ejecutes `seed_telemetry.py` contra la base de la propia API: **borra todas las filas de `telemetry_events`** antes de cargar los eventos de demostración.
+> Es solo para archivos desechables, que es lo que usa `--demo`.
+
 ## Con tu base real: ¿por qué sale vacío?
 
 El comando sin argumentos lee solo eventos del entorno `production`, porque un reporte que lee el liderazgo no debe mezclar pruebas. Si en tu base los eventos son de otro entorno (lo normal mientras desarrollas es `development`), el reporte sale con **0 filas** y la corrida termina bien: no es un error, es el filtro funcionando.
