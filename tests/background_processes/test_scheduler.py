@@ -90,16 +90,30 @@ def test_the_scheduler_is_a_service_of_its_own_off_by_default_that_does_not_depe
     assert "./data/raw:/app/data/raw" in scheduler["volumes"] and scheduler["networks"] == ["nexova-net"]
 
 
-def test_the_api_and_the_uis_are_exactly_what_they_were_in_main():
-    """Respecting each project: the two services that were there are not touched, only a third is added."""
+def test_the_uis_are_what_they_were_in_main_and_the_api_only_gained_the_one_build_context_it_needs():
+    """Respecting each project: ``uis`` is untouched, and ``api`` differs from main in exactly one line: the named context ``data`` that its reporting module imports."""
+    import copy
+
     if shutil.which("git") is None:
         pytest.skip("needs git")
     shown = subprocess.run(["git", "show", "origin/main:docker-compose.yml"], cwd=REPO, capture_output=True, text=True, check=False)
     if shown.returncode != 0:
         pytest.skip("origin/main is not available here")
     before = yaml.safe_load(shown.stdout)
-    assert COMPOSE["services"]["api"] == before["services"]["api"] and COMPOSE["services"]["uis"] == before["services"]["uis"]
+    expected_api = copy.deepcopy(before["services"]["api"])
+    expected_api["build"]["additional_contexts"]["data"] = "./data"
+    assert COMPOSE["services"]["api"] == expected_api  # nothing else of the api service changed
+    assert COMPOSE["services"]["uis"] == before["services"]["uis"]
     assert COMPOSE["networks"] == before["networks"] and set(COMPOSE["services"]) - set(before["services"]) == {"scheduler"}
+
+
+def test_the_api_image_carries_the_code_of_the_pipeline_it_imports_and_never_the_data_folders():
+    """Without data/pipelines the API did not start in Docker (ModuleNotFoundError: No module named 'data'). Runtime output must not be baked in."""
+    dockerfile = (REPO / "services" / "Dockerfile").read_text(encoding="utf-8")
+    sources = [line.split()[2] for line in dockerfile.splitlines() if line.startswith("COPY --from=data")]  # COPY --from=data <source> <destination>
+    assert sources == ["__init__.py", "pipelines", "process"]  # the code, and nothing else of ./data (no raw, no eval, no .local)
+    requirements = (REPO / "services" / "api" / "requirements.txt").read_text(encoding="utf-8")
+    assert "prefect>=3.9.2" in requirements  # an older Prefect breaks with the newest FastAPI when it starts its server
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="needs the docker CLI")

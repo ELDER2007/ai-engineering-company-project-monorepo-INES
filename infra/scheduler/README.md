@@ -46,8 +46,9 @@ Why the container:
 * **Reproducible.** Python, the dependencies and the pipeline's code travel in the image. Nothing has to be installed on the server.
 * **One time zone, known.** UTC, always.
 * **It can be tried here.** It was built and run with Docker with a schedule of one minute to check that it fires (see *How it was checked*).
-* **It respects the other projects.** Only new files (`infra/scheduler/`) and one more service in `docker-compose.yml`, under a Compose *profile*:
-  `api`, `uis` and their images are not touched.
+* **It respects the other projects.** The scheduler itself is only new files (`infra/scheduler/`) and one more service in `docker-compose.yml`, under a Compose *profile*:
+  a plain `docker compose up` still starts `api` and `uis`. (Separately, the `api` image now also carries `data/pipelines` and `data/process`, which the reporting
+  endpoints import: without them the API did not start in Docker. See `services/Dockerfile`.)
 
 The alternative, if the container is not wanted, is one line in the `crontab` of the server (with `CRON_TZ=UTC` if its cron supports it, or
 the hour converted):
