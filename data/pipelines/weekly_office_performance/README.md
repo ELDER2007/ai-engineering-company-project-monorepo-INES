@@ -41,7 +41,15 @@ Sin servidor Prefect, Prefect levanta uno temporal (unos segundos) en cada corri
 
 En un clon limpio la API arranca, pero `GET /reporting/weekly-office-program-performance` responde `404 No week has been computed yet`: su base de datos no tiene
 eventos de telemetría y el pipeline no tiene nada que calcular. Para ver cifras **sin tocar la base de la propia API**, la API puede leer la base de
-demostración desechable del pipeline. Dos comandos, desde la raíz del repo:
+demostración desechable del pipeline. Lo más sencillo, **un comando** (desde cualquier carpeta):
+
+```bash
+python data/pipelines/serve_demo.py
+```
+
+Calcula la semana de demostración con el pipeline real en un archivo desechable, arranca la API en `http://127.0.0.1:8000/docs` leyendo de él (todas las variables
+de base de datos de ese proceso apuntan al archivo de demostración) e imprime el usuario de demostración. `--port 8010` cambia el puerto y `--check` solo dice lo que haría.
+Lo mismo en dos pasos (es lo que hace el comando), desde la raíz del repo:
 
 ```bash
 # 1) El pipeline en modo demostración: crea data/.local/demo.sqlite con eventos de ejemplo y calcula la semana 2026-10-26.

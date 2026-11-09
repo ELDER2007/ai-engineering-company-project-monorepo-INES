@@ -70,6 +70,7 @@ def test_the_readmes_say_how_to_see_numbers_with_the_demo_database_and_warn_abou
         assert 'REPORTING_DATABASE_URL="sqlite:///$DEMO"' in text and 'TELEMETRY_DATABASE_URL="sqlite:///$DEMO"' in text
         assert "uvicorn main:app --port 8000" in text and "2026-10-26" in text
         assert "seed_telemetry.py" in text
+        assert "python data/pipelines/serve_demo.py" in text  # the one-command path
     assert "deletes every row of `telemetry_events`" in api_readme and "borra todas las filas de `telemetry_events`" in pipeline_readme
     seed = (REPO / "data" / "pipelines" / "weekly_office_performance" / "seed_telemetry.py").read_text(encoding="utf-8")
     assert "connection.execute(delete(telemetry_events))" in seed  # the reason for the warning is still in the code
