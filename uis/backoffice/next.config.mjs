@@ -38,6 +38,8 @@ const nextConfig = {
       // Before the generic /api rule: the inventory routes are /inventory/* on the API, not /api/inventory/*.
       // The prefix keeps them apart from the /inventory/* pages of the app (/inventory/orders is both).
       { source: "/api/inventory/:path*", destination: `${INVENTORY_API}/inventory/:path*` },
+      // The business dashboard (the /reporting page of the app) reads /reporting/* on the API through the same kind of prefix.
+      { source: "/api/reporting/:path*", destination: `${API}/reporting/:path*` },
       { source: "/api/:path*", destination: `${API}/api/:path*` },
       { source: "/auth/:path*", destination: `${API}/auth/:path*` },
       { source: "/users", destination: `${API}/users`, missing: notAPage },

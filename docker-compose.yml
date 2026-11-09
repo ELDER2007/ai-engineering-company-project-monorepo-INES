@@ -7,6 +7,7 @@ services:
       context: ./services
       additional_contexts:
         shared: ./packages/shared
+        data: ./data  # the reporting module imports data/pipelines (see services/Dockerfile)
     env_file:
       - path: .env
         required: false
@@ -52,6 +53,27 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    networks: [nexova-net]
+    restart: unless-stopped
+
+  # Nightly job (ticket DEV-53): a container of its OWN that runs scripts/nightly_export.py every night at 02:00 UTC (infra/scheduler/crontab).
+  # It is OFF by default: a plain `docker compose up` starts `api` and `uis` and nothing else. To start it:
+  #   docker compose --profile scheduler up -d scheduler
+  # It does not depend on the API and shares nothing with it: it only needs the database (DATABASE_URL, from .env). Why a container: infra/scheduler/README.md
+  scheduler:
+    profiles: ["scheduler"]
+    build:
+      context: .
+      dockerfile: infra/scheduler/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: UTC
+      NIGHTLY_REQUIRE_DATABASE_URL: "1"  # without a real database the job would "work" against a throw-away file inside the container
+    volumes:
+      - ./data/raw:/app/data/raw    # the CSV backups, on the host
+      - ./data/eval:/app/data/eval  # the pipeline's validation reports
     networks: [nexova-net]
     restart: unless-stopped
 

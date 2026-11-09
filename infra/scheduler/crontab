@@ -1,0 +1,12 @@
+# Schedule of the scheduler container (ticket DEV-53). supercronic reads it; the syntax is the one of any crontab.
+#
+#   minute  hour  day-of-month  month  day-of-week   command
+#   0       2     *             *      *             -> every day at 02:00 UTC
+#
+# The container runs in UTC (TZ=UTC), so 02:00 is 02:00 UTC whatever the server's own time zone is. Why 02:00: the UTC day that is being
+# exported ended two hours ago (clients that were offline send their events late), it is a time with little traffic, and it does not
+# coincide with the pipeline's own schedule (Monday and Thursday at 05:00 UTC).
+#
+# What it runs: yesterday's telemetry to data/raw/telemetry_YYYY-MM-DD.csv, then the data pipeline, and a row in job_runs saying what happened.
+# If a night is skipped or fails, nothing else is needed: the next night does only yesterday, and a day can be done by hand with TARGET_DATE.
+0 2 * * * cd /app && python scripts/nightly_export.py

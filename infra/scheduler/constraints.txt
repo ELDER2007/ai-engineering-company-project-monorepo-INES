@@ -1,0 +1,8 @@
+# Versions that work TOGETHER in the scheduler image. Only this image is constrained: the API's requirements.txt and its image are not touched.
+#
+# Why: `uv` resolves the packages of requirements.txt one by one, takes the newest FastAPI (0.162) and then the newest Prefect that does not
+# forbid it: 3.8.8, which still calls `Body(..., min_items=1)`, an argument that new FastAPI removed. The pipeline then died inside the
+# container with "TypeError: Body() got an unexpected keyword argument 'min_items'" (found by running the container, not by the unit tests).
+# Prefect 3.9.2 and later declare `fastapi<0.151`, so requiring them makes the resolver pick a FastAPI they work with.
+prefect>=3.9.2
+fastapi<0.151

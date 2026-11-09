@@ -1,0 +1,217 @@
+"""Storage of the pipeline: the read-only telemetry source and the ``reporting`` schema.
+
+* ``telemetry_events`` is only ever *read* (SELECT). It is owned by the telemetry domain
+  (``services/api/telemetry/models.py``); the definition below mirrors its real columns and is used to build the
+  queries and, for local demos only, to create a throw-away copy. The pipeline never writes to it in production.
+* Everything the pipeline writes lives under the dedicated ``reporting`` schema.
+
+PostgreSQL/Supabase is the real target. SQLite is the local fallback: since SQLite has no schemas, ``reporting`` is
+emulated by attaching a second database file under that name, so the same ``reporting.<table>`` SQL runs on both.
+
+Engines are built from connection strings here, and passed in by callers; nothing imports from ``services/``.
+"""
+
+from __future__ import annotations
+
+import os
+import sqlite3
+from functools import lru_cache
+from pathlib import Path
+
+from sqlalchemy import (
+    JSON,
+    Column,
+    Date,
+    DateTime,
+    Index,
+    Integer,
+    MetaData,
+    Numeric,
+    String,
+    Table,
+    UniqueConstraint,
+    Uuid,
+    create_engine,
+    event,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import Engine
+
+from data.pipelines.weekly_office_performance import blocks
+
+REPORTING_SCHEMA = "reporting"
+_SQLITE_PREFIX = "sqlite:///"
+DEFAULT_ENVIRONMENT = "production"
+
+# Read-only mirror of services/api/telemetry/models.py (8 columns). `tags` is the event's `properties`.
+source_metadata = MetaData()
+telemetry_events = Table(
+    "telemetry_events",
+    source_metadata,
+    Column("event_id", String(36), primary_key=True),
+    Column("event_type", String(64), nullable=False, index=True),
+    Column("timestamp", DateTime(timezone=True), nullable=False, index=True),
+    Column("service", String(16), nullable=False),
+    Column("user_id", String(64)),
+    Column("session_id", String(36)),
+    Column("environment", String(16), nullable=False),
+    Column("tags", JSON().with_variant(JSONB(), "postgresql"), nullable=False),
+)
+
+metadata = MetaData(schema=REPORTING_SCHEMA)
+
+weekly_performance = Table(
+    "weekly_office_program_performance",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("office", String, nullable=False),
+    Column("programme_id", String, nullable=False),
+    Column("week_start", Date, nullable=False),
+    Column("total_material_cost", Numeric(18, 2), nullable=False, default=0),
+    Column("kits_delivered_count", Integer, nullable=False, default=0),
+    Column("shortage_events_count", Integer, nullable=False, default=0),
+    Column("cost_variance_events_count", Integer, nullable=False, default=0),
+    Column("currency", String, nullable=False),
+    Column("computed_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("office", "programme_id", "week_start", name="uq_weekly_office_program_week"),
+)
+
+# One row per run (the execution log, PIPELINE_DESIGN.md section 5.2).
+pipeline_runs = Table(
+    "pipeline_runs",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("flow_name", String, nullable=False),
+    Column("trigger", String, nullable=False),  # scheduled | manual
+    Column("prefect_flow_run_id", String),
+    Column("week_start", Date, nullable=False),
+    Column("environment", String, nullable=False),  # which telemetry environment was read
+    Column("state", String, nullable=False),  # Running | Completed | Failed | Crashed | Skipped
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True)),
+    Column("events_read", Integer, nullable=False, default=0),
+    Column("window_events_total", Integer),  # NULL = unknown (its optional task failed); never read as zero
+    Column("rejected_count", Integer, nullable=False, default=0),
+    Column("rows_written", Integer, nullable=False, default=0),
+    Column("rows_changed", Integer, nullable=False, default=0),
+    Column("rows_deleted", Integer, nullable=False, default=0),
+    Column("error", String),
+    Column("warnings", String),  # failures of OPTIONAL tasks: recorded, the run continued
+    # The lock: the database itself refuses a second `Running` run of the same week (no check-then-insert race).
+    Index(
+        "uq_pipeline_runs_one_running_per_week",
+        "flow_name",
+        "week_start",
+        unique=True,
+        sqlite_where=text("state = 'Running'"),
+        postgresql_where=text("state = 'Running'"),
+    ),
+)
+
+UPSERT_CONFLICT_COLUMNS = ("office", "programme_id", "week_start")
+
+
+def _app_local_path() -> Path:
+    """The SQLite file the API uses when DATABASE_URL is not set (PIPELINE_LOCAL_DB overrides it, for tests)."""
+    return Path(os.environ.get("PIPELINE_LOCAL_DB") or Path(__file__).resolve().parents[3] / "services" / "api" / "inventory" / "db.sqlite")
+
+
+def app_local_url() -> str:
+    """Where the API's telemetry lives in local development."""
+    return f"{_SQLITE_PREFIX}{_app_local_path()}"
+
+
+@lru_cache(maxsize=1)
+def load_api_env() -> None:
+    """Read the file the API itself reads (``services/api/.env``, or PIPELINE_ENV_FILE) so the pipeline sees the same
+    DATABASE_URL as the API. Variables already set in the environment win. Without python-dotenv or without the file,
+    nothing happens."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(os.environ.get("PIPELINE_ENV_FILE") or Path(__file__).resolve().parents[3] / "services" / "api" / ".env", override=False)
+
+
+def database_configured() -> bool:
+    """True when a real database was configured through the environment or the API's .env (DATABASE_URL or TELEMETRY_DATABASE_URL)."""
+    load_api_env()
+    if blocks.enabled():  # the credentials live in Secret blocks: a real database is configured by definition
+        return True
+    return bool(os.environ.get("TELEMETRY_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip())
+
+
+def local_telemetry_available() -> bool:
+    """Does the API's local SQLite file already hold ``telemetry_events``? Opened read-only, so asking never creates the file."""
+    path = _app_local_path()
+    if not path.exists():
+        return False
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return connection.execute("select 1 from sqlite_master where type = 'table' and name = 'telemetry_events'").fetchone() is not None
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return False
+
+
+def demo_url() -> str:
+    """A throw-away SQLite file for ``--demo`` runs (PIPELINE_DEMO_DB to choose it): never the app's own database."""
+    path = Path(os.environ.get("PIPELINE_DEMO_DB") or Path(__file__).resolve().parents[2] / ".local" / "demo.sqlite")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return f"{_SQLITE_PREFIX}{path}"
+
+
+def database_url(env: str = "DATABASE_URL") -> str:
+    """Connection string: ``env``, else DATABASE_URL, else the API's local SQLite file."""
+    load_api_env()
+    if blocks.enabled() and env in blocks.DATABASE_BLOCKS:  # production: the credential comes from its Secret block, and only from there
+        raw = blocks.database_url(env)
+    else:
+        raw = os.environ.get(env, "").strip() or os.environ.get("DATABASE_URL", "").strip()
+    if not raw:
+        return app_local_url()
+    for scheme in ("postgres://", "postgresql://"):
+        if raw.startswith(scheme):
+            return "postgresql+psycopg2://" + raw[len(scheme):]
+    return raw
+
+
+def default_environment() -> str:
+    """Telemetry environment to report on (PIPELINE_ENVIRONMENT, default ``production``): test and development
+    events must never reach a report the CEO reads."""
+    return os.environ.get("PIPELINE_ENVIRONMENT", "").strip() or DEFAULT_ENVIRONMENT
+
+
+def build_engine(url: str) -> Engine:
+    """Engine for ``url``. On SQLite, attach the ``reporting`` database on every connection."""
+    if not url.startswith(_SQLITE_PREFIX):
+        return create_engine(url, pool_pre_ping=True)
+    engine = create_engine(url)
+    reporting_file = url[len(_SQLITE_PREFIX):] + ".reporting"
+
+    @event.listens_for(engine, "connect")
+    def _attach(dbapi_connection, _record):  # noqa: ANN001
+        dbapi_connection.execute(f"ATTACH DATABASE '{reporting_file}' AS {REPORTING_SCHEMA}")
+
+    return engine
+
+
+def create_reporting_schema(engine: Engine) -> None:
+    """Create the ``reporting`` schema and its tables if missing (idempotent).
+
+    On PostgreSQL the reference DDL is ``sql/001_reporting_schema.sql``; this mirrors it.
+
+    The schema is created ONLY when it does not exist. ``create schema if not exists`` needs the privilege to create schemas
+    in the database even when the schema is already there, so running it on every run would make a role with least privilege
+    (``sql/002_roles.sql``: it can read and write the two tables and nothing else) fail with "permission denied for database".
+    ``create_all`` only creates the tables that are missing, so with them in place it needs no privilege either.
+    """
+    with engine.begin() as connection:
+        if engine.dialect.name == "postgresql":
+            exists = connection.execute(text("select 1 from pg_namespace where nspname = :name"), {"name": REPORTING_SCHEMA}).first()
+            if exists is None:
+                connection.execute(text(f"create schema if not exists {REPORTING_SCHEMA}"))
+    metadata.create_all(engine)

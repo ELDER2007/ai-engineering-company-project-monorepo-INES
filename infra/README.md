@@ -18,3 +18,9 @@ Run `docker compose up` from the repo root: it works with no configuration. Opti
 
 Both join the explicit `nexova-net` network; the backoffice reaches the API as `http://api:8000` (`API_PROXY_TARGET`).
 Production uses the same compose file with the `.env` that lives on the VPS (never in Git).
+
+### Nightly job (`scheduler`)
+
+| Service | Port | Notes |
+| --- | --- | --- |
+| `scheduler` | none | runs `scripts/nightly_export.py` every night at 02:00 UTC. **Off by default**: `docker compose --profile scheduler up -d scheduler`. Details and the reasons for this choice: [`infra/scheduler/`](./scheduler/README.md) |
