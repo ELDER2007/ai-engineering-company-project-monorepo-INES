@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  BarChart3,
   Boxes,
   ClipboardList,
   FileBarChart,
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/inventory/orders/inbound", label: "Entrada de activos", icon: PackagePlus, end: true },
   { href: "/inventory/orders/outbound", label: "Salida de activos", icon: PackageMinus, end: true },
   { href: "/inventory/orders", label: "Historial de órdenes", icon: ScrollText, end: true },
+  { href: "/reporting", label: "Desempeño semanal", icon: BarChart3, end: true },
   { href: "/account/profile", label: "Mi perfil", icon: UserCircle, end: false },
 ];
 

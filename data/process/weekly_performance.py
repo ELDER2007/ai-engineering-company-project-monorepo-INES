@@ -15,7 +15,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Iterable, Mapping
+from statistics import median
+from typing import Any, Iterable, Mapping, Sequence
 
 INBOUND = "inbound_order_created"
 OUTBOUND = "outbound_order_created"
@@ -163,6 +164,8 @@ def validate_events(events: Iterable[TelemetryEvent]) -> ValidationResult:
 def _reject_reason(event: TelemetryEvent) -> str | None:
     if event.event_type not in EVENT_TYPES:
         return "unsupported event_type"
+    if event.tags is not None and not isinstance(event.tags, Mapping):
+        return "malformed tags"  # a JSON array or a string where the contract says an object: reject it, never crash on it
     tags = event.tags or {}
     if str(tags.get("office") or "").strip().lower() not in OFFICE_CURRENCY:
         return "missing or unknown office"
@@ -202,36 +205,82 @@ def dedupe_events(events: Iterable[CleanEvent]) -> tuple[list[CleanEvent], int]:
     return unique, len(events) - len(unique)
 
 
-def aggregate_by_office_programme(events: Iterable[CleanEvent], week_start: date) -> Aggregation:
-    """De-duplicate, then compute the four KPIs per (office, programme_id). Sorted for deterministic output."""
-    unique, duplicates = dedupe_events(list(events))
-    buckets: dict[tuple[str, str], dict[str, Any]] = {}
-    for e in unique:
-        b = buckets.setdefault(
-            (e.office, e.programme_id),
-            {"cost": Decimal(0), "kits": 0, "short": 0, "var": 0, "currency": OFFICE_CURRENCY[e.office]},
-        )
+GroupKey = tuple[str, str]  # (office, programme_id): the grain of the report, together with the week
+
+
+def _group(event: CleanEvent) -> GroupKey:
+    return (event.office, event.programme_id)
+
+
+def total_material_cost_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, Decimal]:
+    """KPI ``total_material_cost`` ("Costo de material por oficina/programa"): the SUM of the cost of the
+    ``inbound_order_created`` events of each office and programme, in the currency of the office."""
+    totals: dict[GroupKey, Decimal] = {}
+    for e in events:
         if e.event_type == INBOUND:
-            b["cost"] += e.cost
-        elif e.event_type == OUTBOUND:
-            b["kits"] += 1
-        elif e.event_type == SHORTAGE:
-            b["short"] += 1
-        elif e.event_type == COST_VARIANCE:
-            b["var"] += 1
-    rows = [
+            totals[_group(e)] = totals.get(_group(e), Decimal(0)) + e.cost
+    return totals
+
+
+def _count_by_group(events: Iterable[CleanEvent], event_type: str) -> dict[GroupKey, int]:
+    counts: dict[GroupKey, int] = {}
+    for e in events:
+        if e.event_type == event_type:
+            counts[_group(e)] = counts.get(_group(e), 0) + 1
+    return counts
+
+
+def kits_delivered_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, int]:
+    """KPI ``kits_delivered_count`` ("Kits entregados"): the COUNT of ``outbound_order_created`` events of each office and
+    programme. One delivery order counts once, whatever its quantity (the briefing: "conteo de outbound_order_created")."""
+    return _count_by_group(events, OUTBOUND)
+
+
+def shortage_events_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, int]:
+    """KPI ``shortage_events_count`` ("Frecuencia de escasez"): the COUNT of ``stock_threshold_triggered`` events."""
+    return _count_by_group(events, SHORTAGE)
+
+
+def cost_variance_events_by_group(events: Iterable[CleanEvent]) -> dict[GroupKey, int]:
+    """KPI ``cost_variance_events_count`` ("Frecuencia de variación de costo"): the COUNT of ``kit_cost_variance_detected``."""
+    return _count_by_group(events, COST_VARIANCE)
+
+
+def build_weekly_rows(
+    week_start: date,
+    total_material_cost: Mapping[GroupKey, Decimal],
+    kits_delivered: Mapping[GroupKey, int],
+    shortage_events: Mapping[GroupKey, int],
+    cost_variance_events: Mapping[GroupKey, int],
+) -> list[WeeklyRow]:
+    """One row per (office, programme) that has at least one of the four KPI events, sorted so the output is deterministic.
+    A KPI the group has no event for is zero. The currency is the office's: valencia is EUR, miami is USD, never mixed."""
+    keys = set(total_material_cost) | set(kits_delivered) | set(shortage_events) | set(cost_variance_events)
+    return [
         WeeklyRow(
             office=office,
             programme_id=programme,
             week_start=week_start,
-            total_material_cost=b["cost"],
-            kits_delivered_count=b["kits"],
-            shortage_events_count=b["short"],
-            cost_variance_events_count=b["var"],
-            currency=b["currency"],
+            total_material_cost=total_material_cost.get((office, programme), Decimal(0)),
+            kits_delivered_count=kits_delivered.get((office, programme), 0),
+            shortage_events_count=shortage_events.get((office, programme), 0),
+            cost_variance_events_count=cost_variance_events.get((office, programme), 0),
+            currency=OFFICE_CURRENCY[office],
         )
-        for (office, programme), b in sorted(buckets.items())
+        for office, programme in sorted(keys)
     ]
+
+
+def aggregate_by_office_programme(events: Iterable[CleanEvent], week_start: date) -> Aggregation:
+    """De-duplicate, then compute the four KPIs per (office, programme_id) with the functions above."""
+    unique, duplicates = dedupe_events(list(events))
+    rows = build_weekly_rows(
+        week_start,
+        total_material_cost_by_group(unique),
+        kits_delivered_by_group(unique),
+        shortage_events_by_group(unique),
+        cost_variance_events_by_group(unique),
+    )
     return Aggregation(rows=rows, events=unique, duplicates_removed=duplicates)
 
 
@@ -264,3 +313,41 @@ def reconcile(aggregation: Aggregation, *, events_read: int, rejected_count: int
         raise ReconciliationError("; ".join(problems))
     return {"ok": True, "events_read": events_read, "valid": valid_count, "rejected": rejected_count,
             "unique": len(aggregation.events), "duplicates_removed": aggregation.duplicates_removed}
+
+
+# --------------------------------------------------------------------------- is the capture alive? (design annex, O-1 and O-3)
+#
+# A report of zeros can mean two very different things: nothing happened, or nothing was collected. The pipeline already records how
+# many events of ANY type the window had (``window_events_total``); these functions read that signal, and the history of previous weeks,
+# and say so when the numbers may be misleading. They only raise a WARNING: they never stop the run or change a number.
+
+ALERT_CAPTURE_SILENT = "capture_silent"
+ALERT_VOLUME_DROP = "volume_drop"
+MIN_BASELINE_WEEKS = 3  # fewer previous weeks than this are not a baseline: say nothing rather than guess
+VOLUME_DROP_RATIO = 0.5  # the design's proposal (annex, O-3); it is not an agreed service level and has no real baseline yet
+
+
+@dataclass(frozen=True)
+class ActivityAlert:
+    code: str
+    message: str
+
+
+def assess_activity(window_events_total: int | None, events_read: int, previous_events_read: Sequence[int]) -> list[ActivityAlert]:
+    """Warnings about the activity of a week, from what the run already knows.
+
+    * ``capture_silent``: the window has NO event of any type (``window_events_total == 0``). A quiet week still has navigation events;
+      none at all means the capture, not the business, may be what stopped. An unknown count (``None``, its optional task failed)
+      says nothing: it is never read as zero.
+    * ``volume_drop``: the week has less than half the business events of the median of the previous weeks, with at least
+      ``MIN_BASELINE_WEEKS`` of them. A loss of events and a slow week look alike; this says which one to check first.
+    """
+    if window_events_total == 0:
+        return [ActivityAlert(ALERT_CAPTURE_SILENT, "the window has no event of any type: the capture may have been down, so zeros in the report may be misleading")]
+    usual = median(previous_events_read) if len(previous_events_read) >= MIN_BASELINE_WEEKS else 0
+    if usual > 0 and events_read < VOLUME_DROP_RATIO * usual:
+        return [ActivityAlert(
+            ALERT_VOLUME_DROP,
+            f"{events_read} business events this week against a usual {usual:g} (median of the previous {len(previous_events_read)} weeks): the capture may be losing events",
+        )]
+    return []
