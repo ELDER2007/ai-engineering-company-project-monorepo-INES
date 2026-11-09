@@ -278,8 +278,15 @@ uvicorn main:app --reload --port 8000
 ### Seeing the `/reporting` endpoints with numbers (demo data)
 
 On a clean clone the API starts, but `GET /reporting/weekly-office-program-performance` answers `404 No week has been computed yet`: its database has no telemetry
-events, so the pipeline has nothing to compute. To see numbers without touching the API's own database, let the API read the pipeline's **throw-away demo
-database** (two commands, from the repository root):
+events, so the pipeline has nothing to compute. To see numbers without touching any real database, run **one command** (from any folder):
+
+```bash
+python data/pipelines/serve_demo.py
+```
+
+It computes the demo week with the real pipeline into a throw-away file, starts the API on `http://127.0.0.1:8000/docs` reading from it (every database variable of that
+process points at the demo file), and prints the demo login. `--port 8010` changes the port and `--check` only says what it would do. The same, in two steps
+(this is what the command does), with the pipeline's **throw-away demo database**, from the repository root:
 
 ```bash
 # 1) The pipeline in demo mode: creates data/.local/demo.sqlite with example events and computes the week of 2026-10-26.
