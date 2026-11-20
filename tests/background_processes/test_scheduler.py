@@ -90,15 +90,19 @@ def test_the_scheduler_is_a_service_of_its_own_off_by_default_that_does_not_depe
     assert "./data/raw:/app/data/raw" in scheduler["volumes"] and scheduler["networks"] == ["nexova-net"]
 
 
-def test_the_uis_are_what_they_were_in_main_and_the_api_only_gained_the_one_build_context_it_needs():
+# main as it was just before DEV-53 entered it (merge of #36). A fixed commit, not ``origin/main``: once the work is merged, "main" already contains it.
+BEFORE_DEV53 = "a915b10"
+
+
+def test_the_uis_are_what_they_were_before_dev53_and_the_api_only_gained_the_one_build_context_it_needs():
     """Respecting each project: ``uis`` is untouched, and ``api`` differs from main in exactly one line: the named context ``data`` that its reporting module imports."""
     import copy
 
     if shutil.which("git") is None:
         pytest.skip("needs git")
-    shown = subprocess.run(["git", "show", "origin/main:docker-compose.yml"], cwd=REPO, capture_output=True, text=True, check=False)
+    shown = subprocess.run(["git", "show", f"{BEFORE_DEV53}:docker-compose.yml"], cwd=REPO, capture_output=True, text=True, check=False)
     if shown.returncode != 0:
-        pytest.skip("origin/main is not available here")
+        pytest.skip(f"commit {BEFORE_DEV53} is not available here (shallow clone)")
     before = yaml.safe_load(shown.stdout)
     expected_api = copy.deepcopy(before["services"]["api"])
     expected_api["build"]["additional_contexts"]["data"] = "./data"
