@@ -19,6 +19,10 @@ dependencies = [
     "python-dotenv>=1.0",
     "sqlmodel>=0.0.48",
     "psycopg2-binary>=2.9.13",
+    "jsonschema>=4.21",
+    "rfc3339-validator>=0.1.4",
+    "pandas>=2.2",
+    "prefect>=3",
 ]
 
 [dependency-groups]
@@ -40,11 +44,10 @@ incidents-analyzer = { path = "../../packages/shared/incidents_analyzer", editab
 py-modules = ["main", "seed"]
 
 [tool.setuptools.packages.find]
-include = ["auth*", "core*", "incidents*", "inventory*", "profiles*", "routers*", "suppliers*", "users*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "../.."]  # the repo root makes `data.pipelines` importable
 markers = [
     "ai_suggested: edge case proposed by the AI assistant (see docs/testing-plan.md, section 8); run them with `-m ai_suggested`",
 ]
