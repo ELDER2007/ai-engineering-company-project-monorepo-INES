@@ -10,6 +10,7 @@ Centralized FastAPI backend for Nexova, per [docs/ARCHITECTURE_PROPOSAL.md](../.
 - **`profiles/`** — One `Profile` per user (strictly one-to-one through `user_id`, the `User.id`): the **name and the contact data** (`contact_email`, `phone`, `address`) live here, not in `User`. Stored in TinyDB (`profiles/db.json`, gitignored).
 - **`auth/`** — Login (OAuth2 password flow + JWT carrying the user `id`) and the `get_current_user` dependency used to protect every other domain.
 - **`inventory/`** — Equipment and materials inventory (Hito 5, spec: [CONTEXT — Hito 5](../../CONTEXT%20—%20Hito%205:%20Gestión-de-Inventario-Backend)). The second store of the app: assets and their inbound/outbound orders live in **PostgreSQL (Supabase)** through SQLModel, while users and sessions stay in TinyDB (see [Inventory](#inventory)).
+- **`reporting/`** — HTTP access to the results of the business data pipeline (`data/pipelines/`): the weekly performance report per office and programme, and the status and manual trigger of its runs. It holds no SQL and no ETL logic: it only calls `data/pipelines/weekly_office_performance/interface.py`. Separate from `telemetry/` (it does not touch `GET /telemetry/report`). See [Reporting](#reporting).
 - **`suppliers/`** — Supplier directory ("Directorio de Proveedores", Patricia Solís / Nexova). Replaces the HR spreadsheet with a [TinyDB](https://tinydb.readthedocs.io/)-backed store, seeded on startup with the 15 suppliers from [`suppliers/seed_data.py`](./suppliers/seed_data.py) (spec: [CONTEXT-suppliers.md](./suppliers/CONTEXT-suppliers.md)). Pydantic (`suppliers/schemas.py`) rejects with `422` any missing `country`, a `status` outside `active`/`suspended`, empty `categories`, or a `currency` that doesn't match the country (Spain→EUR, USA→USD). Suspending (not deleting) is the preferred way to retire a supplier.
 
 ## Incident manager
@@ -210,9 +211,17 @@ reads. If the database fails the answer is **503** and nothing is acknowledged: 
 safe. Only the valid events are stored; the rejected ones are reported and kept nowhere. Aggregates, reports and read access for Elena,
 Laura and Patricia are not part of this storage phase.
 
+## Reporting (`reporting/`)
+
+The business side of the telemetry: [`data/pipelines/pipeline.py`](../../data/pipelines/pipeline.py) turns each closed ISO week of `telemetry_events` into `reporting.weekly_office_program_performance`, and this module serves it. Spec: [`PIPELINE_DESIGN.md`](../../data/pipelines/PIPELINE_DESIGN.md), sections 4.6 and 8.
+
+- **Whole router needs a session**, like inventory and suppliers (`401` without one). Triggering a run also needs the `admin` role (`403`), because it recomputes numbers the leadership reads.
+- **No pipeline logic here.** The three routes call `get_latest_run`, `run_weekly_office_performance` and `get_weekly_performance` of the pipeline's `interface.py`. A test fails if this package imports SQL or ETL code.
+- **Money** is in the office's currency (`EUR` valencia, `USD` miami) and is never summed across currencies.
+
 ## Endpoints
 
-Routes are served under one prefix per domain: `/auth`, `/users`, `/profiles`, `/suppliers`, `/inventory`. Supplier routes are also mounted at `/api/suppliers` (hidden from `/docs`): that is the path the backoffice uses through the Vite proxy, which only forwards `/api`. Incident routes live at `/api/incidents`, fixed by the project brief.
+Routes are served under one prefix per domain: `/auth`, `/users`, `/profiles`, `/suppliers`, `/inventory`, `/telemetry`, `/reporting`. Supplier routes are also mounted at `/api/suppliers` (hidden from `/docs`): that is the path the backoffice uses through the Vite proxy, which only forwards `/api`. Incident routes live at `/api/incidents`, fixed by the project brief.
 
 All endpoints below need a session (see above) except `POST /auth/login`, `POST /users` and `/health`.
 
@@ -248,6 +257,9 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `POST` | `/inventory/orders/inbound` | Register a delivery (`AssetEntry`: `asset_id`, `quantity` > 0, `supplier`, `office`); adds stock (`201`). `404` unknown asset. |
 | `POST` | `/inventory/orders/outbound` | Register an allocation or consumption (`AssetExit`: `asset_id`, `quantity` > 0, `exit_type`, `assigned_to`, `office`); removes stock (`201`). `400` if it exceeds the stock, `422` if `assigned_to` does not match `exit_type`, `404` unknown asset. |
 | `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order with its asset, newest first. |
+| `GET` | `/reporting/weekly-office-program-performance?week_start=` | The KPIs of a week, one entry per office and programme: `office` (`valencia`/`miami`), `programme_id`, `total_material_cost`, `kits_delivered_count`, `shortage_events_count`, `cost_variance_events_count`, `currency`. `week_start` is optional (default: the latest computed week); a week without data is `200` with `entries: []`; `404` if no week was ever computed; `422` on a bad date. |
+| `GET` | `/reporting/pipeline-runs/latest` | Status and metadata of the latest pipeline run (`state`, `started_at`, `finished_at`, records processed, `rows_changed`, `rows_deleted`, `warnings`, `error`…). `404` if it never ran. |
+| `POST` | `/reporting/pipeline-runs` | **Admins only** (`403`). Run the pipeline now, for an optional `{"week_start": "2026-10-26"}` (`201` with the run it recorded). `409` if that week is already running, `500` if the run failed (it is logged as `Failed`), `422` on a bad date. |
 | `GET` | `/health` | Public liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running; use *Authorize* there with your email (in the *username* box) and password to try the protected routes.
@@ -262,6 +274,41 @@ cp .env.example .env    # then set SECRET_KEY (openssl rand -hex 32) and, on the
                         # real environment variables take precedence over it.
 uvicorn main:app --reload --port 8000
 ```
+
+### Seeing the `/reporting` endpoints with numbers (demo data)
+
+On a clean clone the API starts, but `GET /reporting/weekly-office-program-performance` answers `404 No week has been computed yet`: its database has no telemetry
+events, so the pipeline has nothing to compute. To see numbers without touching any real database, run **one command** (from any folder):
+
+```bash
+python data/pipelines/serve_demo.py
+```
+
+It computes the demo week with the real pipeline into a throw-away file, starts the API on `http://127.0.0.1:8000/docs` reading from it (every database variable of that
+process points at the demo file), and prints the demo login. `--port 8010` changes the port and `--check` only says what it would do. The same, in two steps
+(this is what the command does), with the pipeline's **throw-away demo database**, from the repository root:
+
+```bash
+# 1) The pipeline in demo mode: creates data/.local/demo.sqlite with example events and computes the week of 2026-10-26.
+python data/pipelines/pipeline.py --demo
+
+# 2) The API, reading the reporting data from that file (the rest of the API keeps using its usual database).
+DEMO="$(pwd)/data/.local/demo.sqlite"
+cd services/api
+REPORTING_DATABASE_URL="sqlite:///$DEMO" TELEMETRY_DATABASE_URL="sqlite:///$DEMO" \
+AUTH_INITIAL_EMAIL=you@example.com AUTH_INITIAL_PASSWORD=choose-a-password \
+uvicorn main:app --port 8000
+```
+
+`AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` only create the first user when there are **no users yet**; if the API already has accounts, use one of them.
+
+Then open `http://localhost:8000/docs`, *Authorize* with that email and password, and call `GET /reporting/weekly-office-program-performance`: five rows (two offices,
+three programmes) for the week of 2026-10-26. `GET /reporting/pipeline-runs/latest` shows the run, and `POST /reporting/pipeline-runs` (admin) runs it again. With
+`curl`: log in with `curl -s -X POST localhost:8000/auth/login -d "username=you@example.com&password=choose-a-password"` and send the `access_token` as
+`Authorization: Bearer <token>`.
+
+> Do **not** run `data/pipelines/weekly_office_performance/seed_telemetry.py` against the API's own database: it **deletes every row of `telemetry_events`**
+> before loading the demo events. It is meant for throw-away files only, which is what `--demo` uses.
 
 To (re)load the initial suppliers into TinyDB by hand (the API also seeds an empty database on startup):
 

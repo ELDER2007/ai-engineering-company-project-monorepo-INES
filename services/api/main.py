@@ -20,6 +20,8 @@ from inventory.database import init_db as init_inventory_db
 from inventory.seeding import seed_local_if_empty
 from profiles import service as profiles_service
 from profiles.router import router as profiles_router
+from reporting.database import init_reporting
+from reporting.router import router as reporting_router
 from routers.inventory import router as inventory_router
 from suppliers.router import router as suppliers_router
 from telemetry.router import router as telemetry_router
@@ -38,6 +40,7 @@ async def lifespan(_: FastAPI):
     users_service.sync_profiles()
     init_inventory_db()  # SQL tables (Supabase, or the local SQLite fallback); TinyDB is untouched
     seed_local_if_empty()
+    init_reporting()  # `reporting` schema (pipeline results); telemetry_events is only ever read
     yield
 
 
@@ -65,6 +68,7 @@ app.include_router(suppliers_router, prefix="/suppliers")
 app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=False)
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
 app.include_router(telemetry_router, prefix="/telemetry")  # public: validates and stores the events
+app.include_router(reporting_router)  # prefix="/reporting" is set on the router itself
 
 
 @app.get("/health")

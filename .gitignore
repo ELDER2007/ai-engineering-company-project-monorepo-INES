@@ -39,3 +39,10 @@ results.csv
 *.log
 npm-debug.log*
 dist-ssr/
+
+# Local pipeline databases (SQLite fallback)
+data/.local/
+
+# Pipeline runtime output (events read and validation report of each run)
+data/raw/weekly_events_*.jsonl
+data/eval/run_*.json
