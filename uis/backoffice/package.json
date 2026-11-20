@@ -17,6 +17,7 @@
     "e2e:guard": "node e2e/guard.e2e.mjs",
     "e2e:token": "node e2e/token.e2e.mjs",
     "e2e:inventory": "node e2e/inventory.e2e.mjs",
+    "e2e:reporting": "node e2e/reporting.e2e.mjs",
     "e2e:telemetry": "node e2e/telemetry.e2e.mjs"
   },
   "dependencies": {

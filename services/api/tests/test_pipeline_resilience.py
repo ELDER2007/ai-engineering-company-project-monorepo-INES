@@ -65,14 +65,14 @@ def test_a_failure_before_the_load_leaves_the_previous_week_untouched(engines):
 def test_a_report_that_does_not_reconcile_is_not_published(engines, monkeypatch):
     from data.process import weekly_performance as wp
 
-    original = wp.aggregate_by_office_programme
+    original = wp.build_weekly_rows
 
-    def losing_a_row(events, week):
-        aggregation = original(events, week)
-        aggregation.rows.pop()  # a bug that drops a combination
-        return aggregation
+    def losing_a_row(*args, **kwargs):
+        rows = original(*args, **kwargs)
+        rows.pop()  # a bug that drops a combination
+        return rows
 
-    monkeypatch.setattr(wp, "aggregate_by_office_programme", losing_a_row)
+    monkeypatch.setattr(wp, "build_weekly_rows", losing_a_row)
     with pytest.raises(wp.ReconciliationError):
         run(engines)
     assert rows(engines[1]) == []
