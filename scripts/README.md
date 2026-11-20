@@ -35,3 +35,18 @@ Loads the historical helpdesk export into the incident manager's database (`serv
   services/api/.venv/bin/python scripts/seed_incidents.py --csv other.csv --db /tmp/incidents.json
   ```
 - **Details and mapping table**: [`services/api/README.md`](../services/api/README.md#incident-manager). The CONTEXT does not define the maps; they live in [`packages/shared/incidents/contract.json`](../packages/shared/incidents/contract.json).
+
+### `nightly_export.py` — the nightly telemetry export (ticket DEV-53)
+
+Every night: exports the telemetry of the previous UTC day to a CSV, launches the data pipeline, and records in the database what happened.
+
+- **What it does**: writes `data/raw/telemetry_YYYY-MM-DD.csv` from `telemetry_events` (only if the file does not exist; a **backup** for audit and recovery, not an input of the pipeline), launches `data/pipelines/pipeline.py` as a subprocess, and keeps one row per execution in the table `job_runs` (`pending → processing → completed | failed`). Lock, idempotency and zombie handling: top of the script and [`services/api/job_runner/README.md`](../services/api/job_runner/README.md).
+- **A process of its own**: it imports no FastAPI and never runs inside the API. It is started from outside, every night, by the scheduler container ([`infra/scheduler/`](../infra/scheduler/README.md), `0 2 * * *` UTC).
+- **Requirements**: the API's environment (`services/api/requirements.txt`) and a database: `DATABASE_URL` (also read from `services/api/.env`).
+- **Usage**:
+  ```bash
+  python scripts/nightly_export.py                            # yesterday, in UTC
+  TARGET_DATE=2026-10-30 python scripts/nightly_export.py     # a given past day, with no change in the code
+  ```
+- **Exit code**: `0` done or skipped (already done / another run is going), `1` it failed, `2` bad usage, `130` interrupted.
+- **Privacy**: the CSV is telemetry; `data/raw/telemetry_*.csv` is git-ignored. Credentials in an error never reach the table or the log.

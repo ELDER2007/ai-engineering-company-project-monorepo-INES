@@ -11,5 +11,5 @@ psycopg2-binary>=2.9.13
 jsonschema>=4.21
 rfc3339-validator>=0.1.4
 pandas>=2.2
-prefect>=3.0
+prefect>=3.9.2  # 3.9.2 declares fastapi<0.151; an older Prefect breaks with the newest FastAPI (Body(min_items=...)) when it starts its server
 -e ../../packages/shared/incidents_analyzer
