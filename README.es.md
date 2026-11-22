@@ -75,6 +75,8 @@ Una petición no debe esperar a un trabajo lento. `POST /tasks/pipeline-runs` de
 | `worker` | Ejecuta las tareas. Un proceso aparte | sin puerto |
 | `flower` | El panel: tareas en cola, en proceso y terminadas | http://localhost:5555 (`admin` / `admin`, se cambia con `FLOWER_BASIC_AUTH`) |
 
+Flower guarda lo que ha visto **en memoria**: si su contenedor se reinicia, su lista queda vacía hasta que se ejecuten tareas nuevas. No se pierde nada: los resultados siguen en Redis un día (`GET /tasks/{task_id}` sigue respondiendo) y las fallidas están en la tabla `task_dead_letters`.
+
 ### Levantar el worker
 
 ```bash

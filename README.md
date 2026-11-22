@@ -75,6 +75,8 @@ A request must not wait for slow work. `POST /tasks/pipeline-runs` leaves a smal
 | `worker` | Runs the tasks. A process of its own | no port |
 | `flower` | The panel: queued, running and finished tasks | http://localhost:5555 (`admin` / `admin`, change it with `FLOWER_BASIC_AUTH`) |
 
+Flower keeps what it has seen **in memory**: if its container restarts, its list is empty until new tasks run. Nothing is lost: the outcomes stay in Redis for a day (`GET /tasks/{task_id}` still answers) and the failed ones are in the table `task_dead_letters`.
+
 ### Start the worker
 
 ```bash

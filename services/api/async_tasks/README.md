@@ -115,7 +115,8 @@ original and the traceback that Celery stores in Redis would print the original 
 ## 6. Flower, and the demo tasks
 
 Flower is on `http://localhost:5555` behind a login (`FLOWER_BASIC_AUTH`, `admin:admin` by default; the port is published on `127.0.0.1` only). The worker sends events (`-E`) and
-the app has `task_send_sent_event`, so Flower shows queued, running and finished tasks.
+the app has `task_send_sent_event`, so Flower shows queued, running and finished tasks. Flower keeps what it has seen in memory: if its container restarts, its list is empty until new tasks run
+(the outcomes stay in Redis for a day, and the failed ones in `task_dead_letters`).
 
 [`demo.py`](./demo.py) has three tasks that only exist to show the machinery: `demo_ok` (succeeds), `demo_flaky` (fails, then succeeds) and `demo_fail` (always fails: retries, then the
 dead-letter queue). They are **not loaded** unless the worker starts with `CELERY_DEMO_TASKS=1`, and they go through the same base class as the real task.
