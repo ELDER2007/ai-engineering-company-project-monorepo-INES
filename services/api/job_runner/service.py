@@ -9,7 +9,6 @@ No FastAPI here, and nothing that needs it: a background job must be a process o
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -17,10 +16,9 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
-from .models import COMPLETED, FAILED, PENDING, PROCESSING, JobRunRow, utcnow
+from core.redaction import MAX_ERROR_LENGTH, redact, strip_credentials  # noqa: F401  (they used to live here: the job and its tests still import them from this module)
 
-MAX_ERROR_LENGTH = 2000
-_CREDENTIALS = re.compile(r"([a-z][a-z0-9+.-]*://)[^\s/@]*@", re.IGNORECASE)  # scheme://user:password@host -> scheme://***@host
+from .models import COMPLETED, FAILED, PENDING, PROCESSING, JobRunRow, utcnow
 
 
 class JobAlreadyRunning(RuntimeError):
@@ -29,17 +27,6 @@ class JobAlreadyRunning(RuntimeError):
 
 class InvalidTransition(RuntimeError):
     """The row is not in a state from which the requested change is allowed."""
-
-
-def strip_credentials(text: str) -> str:
-    """``text`` without the user and password of any connection URL (``scheme://user:password@host`` -> ``scheme://***@host``)."""
-    return _CREDENTIALS.sub(r"\1***@", str(text))
-
-
-def redact(text: str) -> str:
-    """``strip_credentials`` and cut to a size a column can hold. The message of a database error can carry the URL it was
-    connecting to: it must never reach ``error_message`` or a log."""
-    return strip_credentials(text)[:MAX_ERROR_LENGTH]
 
 
 def _aware(value: datetime | None) -> datetime | None:

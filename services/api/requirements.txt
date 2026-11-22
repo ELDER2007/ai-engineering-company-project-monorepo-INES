@@ -12,4 +12,6 @@ jsonschema>=4.21
 rfc3339-validator>=0.1.4
 pandas>=2.2
 prefect>=3.9.2  # 3.9.2 declares fastapi<0.151; an older Prefect breaks with the newest FastAPI (Body(min_items=...)) when it starts its server
+celery[redis]>=5.5
+flower>=2.0
 -e ../../packages/shared/incidents_analyzer

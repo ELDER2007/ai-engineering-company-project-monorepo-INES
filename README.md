@@ -65,6 +65,68 @@ You are building **one company** across many milestones and projects. Each top-l
 
 ---
 
+## Asynchronous tasks: Celery worker, Redis and Flower
+
+A request must not wait for slow work. `POST /tasks/pipeline-runs` leaves a small message in **Redis** and answers `202 Accepted` with a `task_id` at once; a **Celery worker**, a process of its own (never inside FastAPI), takes it and runs the pipeline; `GET /tasks/{task_id}` tells how it goes. **Flower** shows the queue. The code is `services/celery_app.py` (the Celery app) and `services/api/async_tasks/` (tasks, retries, dead-letter queue, endpoints); its README explains the decisions.
+
+| Service | What it is | Where |
+| --- | --- | --- |
+| `redis` | The queue and the outcomes (official image, `noeviction`, 256 MB, persisted) | `127.0.0.1:6379` |
+| `worker` | Runs the tasks. A process of its own | no port |
+| `flower` | The panel: queued, running and finished tasks | http://localhost:5555 (`admin` / `admin`, change it with `FLOWER_BASIC_AUTH`) |
+
+### Start the worker
+
+```bash
+docker compose up -d redis worker flower      # or just `docker compose up`: they start with the rest
+docker compose logs -f worker                 # one line per execution: task_id, attempt, status, duration
+```
+
+Without Docker (from the root of the repository, with Redis on `localhost:6379`, `REDIS_URL` if it is elsewhere):
+
+```bash
+celery -A services.celery_app worker --loglevel=INFO -E --concurrency=1
+```
+
+### Stop the worker
+
+```bash
+docker compose stop worker                    # asks it to finish the task it is running (Warm shutdown), up to 2 minutes
+docker compose stop redis worker flower       # everything of the queue
+```
+
+Without Docker: `Ctrl+C` once (a Warm shutdown: it finishes the running task and takes no more). A second `Ctrl+C`, or `kill -9`, is a cold stop.
+
+### Is it alive?
+
+```bash
+docker compose exec worker celery -A services.celery_app inspect ping     # -> pong
+docker compose ps                                                          # worker: healthy
+```
+
+### Use it
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -d "username=EMAIL&password=PASSWORD" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"week_start":"2026-10-26"}' localhost:8000/tasks/pipeline-runs   # 202 {"task_id": "..."}
+curl -H "Authorization: Bearer $TOKEN" localhost:8000/tasks/TASK_ID    # {"task_id": "...", "status": "pending|started|success|failure", "result": ...}
+```
+
+### What happens when something stops
+
+| What stops | What happens |
+| --- | --- |
+| The **API** | Nothing to the worker: it keeps running what is queued. The messages are in Redis |
+| The **worker**, with `docker compose stop` (Warm shutdown) | It finishes the task it is running. The queued ones wait in Redis until a worker is back |
+| The worker, killed (`kill -9`, out of memory) | The message was not confirmed (`acks_late`: it is confirmed AFTER the work), so Redis delivers it again after 15 minutes. The pipeline is idempotent: running a week twice rewrites the same rows |
+| **Redis**, restarted | The queue survives (`appendonly`). The worker reconnects by itself |
+| **Redis**, down or full | The API answers `503` (not a stack trace) and keeps serving everything else |
+| A task fails | It is retried after 5 s and then 10 s (growing, never immediately). The third failure ends in the table `task_dead_letters` (`task_id`, attempt, error, moment); `GET /tasks/dead-letters` lists it (admins) |
+
+Settings (all optional, see `.env.example`): `REDIS_URL`, `REDIS_PORT`, `REDIS_MAXMEMORY`, `FLOWER_BASIC_AUTH`, `FLOWER_PORT`, `CELERY_CONCURRENCY`, `ASYNC_RETRY_BASE_SECONDS`. Tests: `python -m pytest tests/async_tasks services/api/tests/test_async_tasks_api.py`.
+
+---
+
 ## Current status of the template
 
 > 💡 This repository currently provides a **base folder structure and documentation skeleton** only. It does not include runnable apps or global scripts yet.
