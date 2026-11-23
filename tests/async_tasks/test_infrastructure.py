@@ -129,6 +129,13 @@ def test_celery_redis_and_flower_are_declared_where_docker_installs_them_and_whe
         assert re.search(r"celery\[redis\]>=5\.\d", text) and re.search(r"flower>=2", text)
 
 
+def test_bcrypt_is_declared_on_its_own_because_libpass_no_longer_installs_it():
+    """libpass 1.9.5.post0 requires only passlib: its ``[bcrypt]`` extra stopped pulling bcrypt. The Docker image installs from requirements.txt (not from the
+    lock, which pins bcrypt 5.0.0), so a fresh build got no bcrypt and the API died at import (``passlib.exc.MissingBackendError: bcrypt: no backends available``)."""
+    for text in (REQUIREMENTS, PYPROJECT):
+        assert re.search(r"(?m)^\s*\"?bcrypt>=4", text), "bcrypt must be a direct dependency"
+
+
 def test_the_lock_file_knows_the_new_dependencies():
     lock = (REPO / "services" / "api" / "uv.lock").read_text(encoding="utf-8")
     for package in ("celery", "flower", "redis", "kombu"):
