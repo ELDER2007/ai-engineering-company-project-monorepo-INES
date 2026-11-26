@@ -54,7 +54,7 @@ def test_a_token_carries_only_the_account_id_and_an_expiry(monkeypatch):
 
     claims = jwt.decode(create_access_token(account), get_jwt_secret(), algorithms=[JWT_ALGORITHM])
 
-    assert set(claims) == {"user_id", "exp"}  # no email, no role, no hash: permissions are read live
+    assert set(claims) == {"user_id", "exp", "iat"}  # no email, no role, no hash: permissions are read live
     assert claims["user_id"] == str(account)
     assert DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES == 30
     assert claims["exp"] == pytest.approx(now() + 30 * 60, abs=5)

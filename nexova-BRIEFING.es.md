@@ -4,8 +4,6 @@
 
 <!-- hide -->
 
-_These instructions are [available in English](./nexova-BRIEFING.md)._
-
 <!-- endhide -->
 
 ---

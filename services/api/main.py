@@ -28,6 +28,7 @@ from reporting.database import init_reporting
 from reporting.router import router as reporting_router
 from routers.inventory import router as inventory_router
 from suppliers.router import router as suppliers_router
+from talent.router import router as talent_router
 from telemetry.router import router as telemetry_router
 from users import service as users_service
 from users.router import public_router as users_public_router
@@ -101,6 +102,7 @@ app.include_router(incidents_router)  # CSV analysis; first, so its fixed paths 
 app.include_router(incident_manager_router)
 app.include_router(suppliers_router, prefix="/suppliers")
 app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=False)
+app.include_router(talent_router, prefix="/talent-applications")  # POST is public (website form); GET is admin-only
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
 app.include_router(telemetry_router, prefix="/telemetry")  # public: validates and stores the events
 app.include_router(reporting_router)  # prefix="/reporting" is set on the router itself

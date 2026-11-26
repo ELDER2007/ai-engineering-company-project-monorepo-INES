@@ -25,6 +25,189 @@
 
 ---
 
+## Telemetria: plan de diseno
+
+### Encargo y trabajo realizado
+
+Esta entrega comienza leyendo completo [nexova-BRIEFING.es.md](nexova-BRIEFING.es.md), no levantando un servidor. Nexova necesita observar el inventario de formacion, certificaciones y equipos de incorporacion. Se han creado [docs/telemetry/README.md](docs/telemetry/README.md), [telemetry-plan.md](docs/telemetry/telemetry-plan.md) y [event-schemas.json](docs/telemetry/event-schemas.json). Tambien se han actualizado los README generales para enlazar esta fase sin borrar el historial del proyecto.
+
+El plan recoge las entidades Product, InboundOrder, OutboundOrder, oficina y programa; incluye los cinco eventos obligatorios, sus metricas y los responsables de negocio. El JSON es un contrato Draft 2020-12, no una lista informal de nombres: obliga a incluir los campos necesarios y contiene un ejemplo sintetico por evento.
+
+### Que encontramos y como lo resolvimos
+
+Al contrastar los modelos y el servicio de inventario comprobamos que ya hay trazabilidad de ordenes y stock calculado, pero no programa, precios, minimos ni la misma clasificacion del briefing. Las oficinas actuales se escriben `Valencia`/`Miami`, mientras el contrato exige `valencia`/`miami`. La solucion en esta fase es documentar el adaptador y los prerrequisitos, no cambiar el backend fuera del alcance ni afirmar que la captura ya existe.
+
+El briefing menciona metricas pero no define todos sus calculos. Por eso el plan fija reglas comprobables: que significa cantidad en un rechazo, cuando se cruza un minimo, como se calcula el historico de costes, que pasa en un rollback y como evitar duplicados. Tambien distingue lo que valida JSON Schema de lo que solo puede comprobar el servicio con datos y transacciones.
+
+### Decisiones y motivos
+
+| Decision | Motivo y solucion |
+| --- | --- |
+| Fuente de verdad en backend | Un clic no demuestra una entrega; emitir eventos de exito solo con orden confirmada. |
+| Outbox transaccional propuesta | Guardar orden y evento juntos evita perder el evento si el proceso cae tras confirmar la orden. No esta implementada. |
+| Alerta solo al cruzar el minimo | Evita repetir alertas por cada salida cuando ya hay poco stock; una reposicion rearma el cruce. |
+| Historico de cinco entradas comparables y umbral > 10% | Define un baseline reproducible por producto/proveedor/oficina/moneda; no comparar monedas ni proveedores diferentes. Es una decision de diseno que negocio debe aprobar. |
+| Costes en centimos | Evita errores de decimales financieros; Valencia EUR y Miami USD, sin conversion en telemetria. |
+| Cantidad cero en un rechazo | No hubo movimiento fisico; no copiar un valor arbitrario enviado por el usuario. |
+| Campos cerrados y autor HMAC | Evita exportar nombres, destinatarios y UUID originales; la seudonimizacion no elimina las obligaciones de privacidad. |
+| UUID por evento y deduplicacion | Los reintentos no deben aumentar las compras, entregas ni alertas del informe. |
+| Matriculas/finalizacion fuera de estas metricas | Entregar un kit no demuestra que una persona se matricule o complete un curso. Haran falta otras fuentes. |
+| Conservar documentacion anterior | Los README de raiz orientan sobre la entrega nueva sin eliminar apuntes y entregas anteriores. |
+
+### Verificacion y limites
+
+Las comprobaciones de esta entrega deben validar sintaxis JSON, conformidad del schema, los cinco ejemplos y casos negativos como moneda incorrecta, campos personales extra o propiedades obligatorias ausentes. El comando reproducible para contrato y ejemplos esta en el [README de telemetria](docs/telemetry/README.md#validacion-local-sin-servidor). La validacion del contrato no demuestra instrumentacion en produccion.
+
+Resultado ejecutado en esta entrega: contrato Draft 2020-12 valido, cinco ejemplos aceptados y 90 casos invalidos rechazados. Se comprobaron las seis propiedades comunes y las propiedades especificas obligatorias, moneda/oficina, cantidades negativas, tipo y version desconocidos, fecha invalida y campos extra en envelope y propiedades. Tambien se comprobaron las igualdades de coste y stock y el cruce de umbral de los ejemplos con aserciones adicionales al schema. Se uso `jsonschema` ya disponible, sin instalar dependencias. Estos casos se ejecutaron como comprobacion local; el comando del README reproduce la validacion del contrato y los cinco ejemplos, no toda la bateria negativa.
+
+No se ha arrancado ningun servidor ni alterado modelos, endpoints o dependencias. Quedan para otra fase el enriquecimiento del catalogo, la captura, outbox, almacenamiento, semillas y pruebas de integracion. La retencion, el calendario ejecutivo y el baseline se han marcado como propuestas para aprobacion, no requisitos atribuidos al briefing.
+
+### Ampliacion: responder al RFI completo
+
+El segundo enunciado amplia el alcance: los cinco eventos obligatorios son el piso, no todo el plan. La primera entrega cubria el inventario y no incluia `sessionId`; ademas usaba nombres de envelope distintos. Se ha corregido el contrato antes de instrumentar, no mediante cambios en la aplicacion.
+
+Se ha ampliado el [plan](docs/telemetry/telemetry-plan.md) a 38 tipos que cubren inventario, login/registro/perfil, navegacion y embudos, proveedores, incidencias/analisis, formulario de talento, HTTP, dependencias, errores, procesos internos y fallos de entrega de telemetria. Cada fila expresa hipotesis, decision concreta, responsable, prioridad y batch/stream. Las oportunidades futuras (LMS, lead time, devoluciones, snapshots, Web Vitals, releases e IA) se documentan separadas: no se aceptan como eventos activos sin fuente y contrato.
+
+Se adopta envelope 2.0.0 con `eventId`, `timestamp`, `sessionId`, `userId`, `event_type`, `schemaVersion`, `requestId` y `properties`, mas entorno/fuente. El salto de version deja claro que no es compatible con la primera propuesta. Usuario desconocido y jobs usan null cuando corresponde; inventario conserva autor obligatorio. La correlacion usa cabeceras validadas y no tokens. La sesion analitica rota por cambios de identidad y por inactividad.
+
+Decisiones adicionales: abandono derivado tras 30 minutos sin pasos, provisional hasta 24 horas; procesamiento stream para alertas y batch para tendencias; no recopilar textos buscados ni datos de formularios; el monitor de telemetria debe usar un canal independiente para no producir recursion si falla su propio sink.
+
+Se han revisado puntos concretos del API, login, validacion, sesion y formulario de talento. Encontramos que talento solo confirma en memoria, sin envio al servidor: su evento mide validacion local, no candidatos recibidos. Tambien comprobamos que no existe edicion de productos/stock; `product_updated` queda P2 y un 405 no se interpreta como intento probado de editar stock. Los estados de incidencias se ajustan a open/in_progress/resolved/discarded, sin inventar closed en el gestor operativo.
+
+Verificacion intermedia: 38 variantes validas, 456 casos invalidos rechazados y coincidencia de los 38 nombres entre Markdown y schema; 16 enlaces locales resueltos. Una primera comprobacion fallo porque el generador de datos de prueba omitio las propiedades comunes al combinar `allOf`; se corrigio el generador y se repitio la comprobacion, sin relajar el schema. Los cinco ejemplos iniciales se amplian a ocho para mostrar tambien login anonimo, navegacion sin usuario y job sin sesion. Los resultados de la primera version (90 rechazos) se conservan arriba como historial, no como cobertura del contrato nuevo.
+
+Resultado final de la ampliacion: ocho ejemplos aceptados, 38 variantes validas y 807 casos invalidos rechazados, con coincidencia exacta del catalogo Markdown/JSON. Se retiraron una a una las propiedades obligatorias de envelope y payload; se probaron campos extra, moneda incorrecta, cantidades/tiempos negativos, version anterior, fecha invalida, evento no catalogado, ausencia de sesion en navegador y ausencia de usuario en eventos de inventario. Otro ajuste del generador consistio en no exigir autor a un error tecnico solo por venir de `inventory_api`: modulo de origen no equivale a evento de negocio. Estas comprobaciones se ejecutaron localmente con `jsonschema` existente, sin crear instrumentacion ni dependencias. El README reproduce schema y ocho ejemplos, no la bateria completa de 807 casos ni pruebas funcionales de la aplicacion.
+
+No se han escrito emisores, middleware, colectores ni migraciones. No se ha iniciado servidor ni creado rama, commit o PR. La instruccion del curso de fusionar tras aprobacion se documenta como flujo posterior: no demuestra que exista una PR aprobada para fusionar ahora.
+
+### Revision de Fase 1 a partir de la captura del enunciado
+
+La captura exige hacer visibles dos cosas que antes estaban implicitas: clasificar cada evento por su origen y mapear el recorrido de inventario de principio a fin. Por eso se ha agregado una matriz individual al inicio del plan y un diagrama con 12 puntos (I01-I12) en la seccion 6. No se ha confundido prioridad P0 con requisito obligatorio: hay oportunidades P0 que propone el plan, pero solo cinco eventos proceden del briefing.
+
+Se han leido los formularios reales de entrada y salida para localizar `handleSubmit`, sus validaciones, la llamada al API y la confirmacion. Hallazgo importante: una cantidad mayor al stock mostrado solo avisa, pero se envia para que el servidor compruebe el saldo real. Un aviso no es un rechazo. Ademas, el refresco de stock posterior no debe convertir una orden ya persistida en una orden fallida ni duplicar su evento.
+
+El catalogo pasa de 38 a 40 tipos con dos oportunidades fundamentadas: `section_load_completed` permite saber cuanto tarda el contenido principal y elegir si mejorar cliente o API; `form_validation_failed` observa submits que el navegador bloquea y que, por tanto, nunca llegan a la validacion del servidor. Ambos tienen payload cerrado, restricciones de fuente y sesion, hipotesis, decision, prioridad y modo de procesamiento. No se registra texto de campos ni errores libres. Si coincide con el evento especifico de talento, no se suman como dos intentos.
+
+Validacion ejecutada: schema Draft 2020-12 valido, ocho ejemplos existentes aceptados, dos fixtures nuevos validos y 17 casos invalidos rechazados para los dos tipos nuevos (propiedades ausentes, campos extra, sesion nula, fuente incorrecta y medidas invalidas). Comprobacion documental: 40 nombres coincidentes entre schema/catalogo/clasificacion, exactamente cinco obligatorios iguales a la seccion de metricas del briefing, 35 oportunidades, 12 puntos unicos y 40 filas justificadas. La extraccion inicial del briefing incluia cabeceras/entidades; se limito a la seccion de metricas antes de repetir la comprobacion. Los resultados anteriores de 807 rechazos quedan como historial de las 38 variantes, no como una bateria reejecutada sobre las 40.
+
+Se mantienen las entidades e identificadores de Nexova, y se documentan sus diferencias respecto al backend sin renombrar las entidades operacionales. Se han actualizado los README de raiz y de la entrega. No se ha escrito instrumentacion ni iniciado un servidor: esta fase sigue siendo un diseno para revision.
+
+### README Bilingue Para Portfolio y Busqueda de Empleo
+
+La nueva peticion es presentar el proyecto de forma profesional en espanol e ingles, util para buscar trabajo. Se han actualizado [README.es.md](README.es.md) y [README.md](README.md) con portadas equivalentes: problema de negocio, funcionalidades, tecnologias, tres casos de ingenieria, arquitectura y decisiones, ejecucion local, validacion, alcance, evidencias y creditos.
+
+Problema detectado: los README seguian describiendo el repositorio como una plantilla vacia, lo que ocultaba las aplicaciones ya construidas. Solucion: anteponer una presentacion de portfolio y conservar toda la guia anterior en un bloque desplegable de referencia historica, incluida su atribucion. No se han borrado entregas previas ni presentado una propuesta como una capacidad desplegada.
+
+Los tres casos elegidos se apoyan en evidencias existentes: inventario trazable y control de concurrencia, auditoria de rendimiento con resultados antes/despues y diseno de telemetria de 40 eventos. Las cifras Lighthouse se han contrastado con REPORT.md y se identifican como resultados historicos de laboratorio, no como una medicion realizada ahora ni una garantia de produccion. El proyecto se identifica como formativo de 4Geeks y asistido por IA, sin inventar experiencia laboral, contactos o enlaces de una demo publica.
+
+Los comandos npm se han contrastado con package.json, la preparacion Python con pyproject.toml y las guias del API/backoffice. Se describen los requisitos de credenciales, el fallback SQLite y las limitaciones de TinyDB. La documentacion distingue pruebas disponibles de pruebas ejecutadas: no se han instalado dependencias ni arrancado servicios para esta tarea documental.
+
+Validacion ejecutada: estructura equivalente de ocho secciones en ambos idiomas, 56 enlaces locales resueltos, comandos npm presentes en los scripts reales y un bloque historico desplegable correctamente abierto/cerrado en cada README. Queda guardada la preferencia para proximos proyectos: README en espanol e ingles, enfocados a portfolio y busqueda de empleo, ademas de mantener este registro de decisiones.
+
+### Revision de Fases 2 y 3: Contratos Completos y Estrategia de Entrega
+
+La siguiente captura pide mas que un envelope valido y una etiqueta stream/batch: exige allowlist por evento, detalle de nombre/tipo/presencia/descripcion de las propiedades, tratamiento de datos sensibles y justificacion individual de entrega, ademas de frecuencia, riesgos y exclusiones.
+
+El contrato ya tenia 40 variantes cerradas, pero esa informacion estaba dispersa. Se ha agregado la seccion 15 al plan con un diccionario de 50 claves de payload y una matriz de 40 filas que enlaza evento, categoria, allowlist exacta, perfil PII, modo de entrega y razon operativa. Todas las propiedades actuales del payload son obligatorias para el evento que las admite; userId/sessionId pueden ser null en ciertos contextos pero sus claves del envelope no se omiten. Las descripciones de los diez campos del envelope tambien se han incorporado al propio JSON. Son anotaciones, no cambios de comportamiento ni una nueva version del contrato.
+
+Se conserva Draft 2020-12 porque permite cerrar payloads compuestos con allOf/ref mediante unevaluatedProperties. Usar draft-07 sin adaptar el contrato podria ignorar esa proteccion. La allowlist no basta si un nombre se introduce como ID: el futuro emisor debe resolver IDs autorizados, construir un objeto nuevo y validar antes de emitir. Tampoco se debe guardar en cuarentena el payload invalido completo, pues podria contener el dato que queremos excluir.
+
+Decision de privacidad: HMAC no equivale a anonimato. Todos los eventos pueden ser datos personales seudonimizados o vinculables por usuario/sesion/peticion; incidencias y proveedor pueden enlazar a registros sensibles, y precios son informacion comercial. Los perfiles B/S/U/O/T especifican minimizacion y sanitizacion adicional por evento, ademas del control de acceso y retencion.
+
+Decision de entrega: 16 eventos stream para intervenir durante recepciones, bloqueos, problemas de acceso o fallos tecnicos; 24 batch para mejorar catalogos, perfiles, navegacion y conversion con tendencias. El modo se justifica por urgencia, no por elegir una herramienta. Un envio de red cada cinco segundos no convierte el informe diario en stream.
+
+La seccion 16 documenta debounce trailing de 500 ms en busquedas, deduplicacion de navegacion/hitos, agrupacion de notificaciones sin borrar eventos, buffer cliente limitado y backpressure. Ordenes y seguridad no se descartan para reducir costes. La telemetria del navegador puede perderse por consentimiento, cierre o saturacion: hay que reconocer el sesgo, no llamarlo abandono demostrado. Los gauges/contadores internos no son nuevos event_type aceptados por este schema.
+
+Se agregan riesgos con impacto, mitigacion y comprobacion, y ocho grupos de candidatos descartados: pulsaciones/grabacion, requests/excepciones crudos, texto de busqueda, IP/fingerprinting, actualizacion directa de stock, duplicado de latencia, detalle por recurso y abandono por cierre de pestaña. Se explica que dato/decision alternativa conservamos y por que privacidad, coste o duplicacion justifican excluirlos.
+
+Verificacion ejecutada: schema Draft 2020-12 valido; diez campos del envelope descritos; ocho ejemplos validos y 16 casos extra de campos no permitidos rechazados. Otra comprobacion resuelve los ref/allOf y contrasta las 40 allowlists y required contra las 40 filas del plan; las 50 claves del diccionario coinciden exactamente con la union de propiedades; diez categorias, perfil PII y justificacion de entrega presentes en todos los eventos, con reparto 16 stream/24 batch. No es prueba de instrumentacion ni de cumplimiento legal en produccion. Se actualizan README en espanol e ingles y se conserva el historial de comprobaciones anteriores.
+
+### Reparto de Tareas Para Preparar la Entrega
+
+Se ha pedido distinguir que debe hacer la estudiante y completar lo que corresponde a Copilot. Se ha agregado al README de telemetria una lista operativa: el trabajo tecnico documental esta preparado; la estudiante debe revisar/comprender el plan, confirmar canal/fecha con el docente, autorizar publicacion si quiere que se haga desde aqui y enviar el enlace cuando exista. No necesita configurar servidores, Supabase ni ejecutar de nuevo pruebas para esta fase de diseno.
+
+Comprobacion de estado al preparar esta lista: cambios locales en README.md, README.es.md, este cuaderno y docs/telemetry; rama actual main, sin commit de esta entrega. Hay remoto origin del repositorio ELDER2007 y upstream de la plantilla. La consulta inicial de PR con GitHub CLI no pudo determinar estado porque no hay repositorio predeterminado configurado; eso no demuestra ausencia de PR ni falta de credenciales. No se cambia esa configuracion ni se publica nada de forma implicita.
+
+Se aclara que aprobar retencion, umbrales y calendario es revision de decisiones, no pedir a la estudiante que construya un pipeline fuera de alcance. Las personas del briefing son personajes del caso: en el curso se contrastan propuestas con el docente. Tambien se evita inventar fecha limite o asumir que una PR ya esta aprobada.
+
+Trabajo completado en esta revision: prueba de las 40 variantes con fixtures sinteticos validos, ocho ejemplos aceptados y 637 casos invalidos rechazados al retirar cada clave obligatoria de envelope/payload o anadir un campo email no permitido en ambos niveles. La clasificacion coincide con el catalogo y se resuelven 20 enlaces de la entrega. Esta bateria no es la misma que los 807 casos anteriores, de modo que no se suman ni se atribuye identica cobertura. Se ha usado el validador existente, sin instalar ni arrancar servicios.
+
+La extension de GitHub si muestra una PR abierta titulada "monorepo-nexova 15/8/26". El resultado no proporciona numero, URL ni ramas, y no se ha verificado aprobacion o pertenencia a los cambios locales de telemetria. No se presenta como PR nueva de esta entrega, no se modifica ni se fusiona. La publicacion de los documentos locales sigue pendiente de autorizacion explicita; la lista del README explica como pedirla sin que la estudiante tenga que ejecutar los comandos Git por su cuenta.
+
+### Revision Contra los Diez Criterios de Evaluacion
+
+La captura final aporta la rubrica, no una nueva fase de instrumentacion. Se ha revisado su correspondencia con el plan y agregado una matriz E01-E10 en la seccion 14: cada criterio remite a evidencia concreta y explicita que se comprueba localmente y que queda pendiente de implementacion o aprobacion docente. Los README en espanol e ingles enlazan esa matriz sin prometer nota ni aprobacion.
+
+La revision detecto una incoherencia real: product_created compartia productPayload con product_updated y, por ello, admitia change_kind=classification o threshold, aunque el catalogo define catalogue para un alta. Se ha agregado una constante especifica a la variante de alta, conservando los valores de edicion en product_updated. Es una alineacion del contrato de diseno no instrumentado; no cambia modelos, API, nombres de eventos ni allowlists.
+
+Prueba focal ejecutada: alta con catalogue aceptada, altas con classification/threshold rechazadas, ambas variantes de edicion aceptadas y ocho ejemplos existentes validos. Se mantiene la distincion entre validacion de estructura y reglas transaccionales: el schema no prueba un commit ni el stock real. No se han creado servicios, migraciones, ramas, commits o una PR de esta entrega.
+
+La comprobacion cruzada posterior tambien pasa: diez criterios E01-E10 presentes, cinco obligatorios iguales al briefing, 40 variantes con sus allowlists/required coincidentes, 50 claves del diccionario y perfil PII/justificacion por evento, 16 stream/24 batch, ocho ejemplos y 639 casos invalidos rechazados. Los 639 son la bateria de 637 claves ausentes/extra reejecutada sobre las 40 variantes mas dos regresiones de alta. El historial de 807 de otra bateria permanece separado. Esta autoevaluacion documenta evidencias y limites, no promete nota ni reemplaza la revision docente.
+
+### Preparacion de la Publicacion Para la Entrega
+
+La captura de "Como Entregar" pide una PR contra main titulada exactamente `docs: telemetry design plan`, con numero de eventos obligatorios/adicionales, categorias y una frase sobre la decision de diseno mas dificil. Se ha leido la guia de creacion de PR y se ha pedido confirmacion antes de crear rama, commit o publicar. La estudiante ha autorizado expresamente publicar los seis documentos en su repositorio, sin hacer merge.
+
+Comprobacion previa: main local y origin/main coinciden en e09d564, con cero commits de diferencia. El destino es ELDER2007/ai-engineering-company-project-monorepo-INES, no el remoto upstream de 4Geeks. Se limita el staging a README.md, README.es.md, este cuaderno y los tres archivos de docs/telemetry; no se incluyen archivos de aplicacion ni credenciales.
+
+La descripcion de PR presentara 40 eventos: cinco obligatorios y 35 oportunidades; diez categorias; envelope, allowlists, privacidad, batch/stream, riesgos y comprobaciones. La decision mas dificil se resume como separar hechos confirmados en backend de senales de navegador potencialmente incompletas sin perder trazabilidad ni exponer datos personales. Se han actualizado las notas de autorizacion/publicacion actuales, conservando las anotaciones anteriores como historial.
+
+### Publicacion Real de la PR y Conservacion del Historial
+
+Tras la duda sobre como conservar el trabajo, la estudiante ha pedido ejecutar la recomendacion. Se ha comprobado que el commit a9ed403 sigue en origin/docs/telemetry-design-plan, que main remoto sigue en e09d564 y que no habia otra PR de esta rama contra main. El primer intento de crear la PR se habia cancelado sin borrar los commits ni la rama; esta vez la creacion se ha completado.
+
+Entrega publicada: [PR #24 - docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24), normal, abierta y dirigida a main del repositorio ELDER2007/ai-engineering-company-project-monorepo-INES. Incluye el total de 40 eventos, cinco obligatorios/35 oportunidades, diez categorias y una frase sobre la decision mas dificil. No se ha hecho merge ni eliminado la rama; la aprobacion y revision docente siguen pendientes.
+
+Comprobacion de continuidad (24-10-2026): PR #24 continua abierta y mergeable, sin checks configurados ni decision de revision; no hay comentarios de revision. La rama local coincide con origin; antes de registrar esta comprobacion, el workspace estaba limpio. Se volvio a validar el JSON Schema Draft 2020-12: 40 variantes y ocho ejemplos aceptados. El bundle `/home/codespace/nexova-telemetry-b2d9477.bundle` se verifico integro y contiene la rama de telemetria y el historial; sigue dentro de Codespaces, por lo que aun falta descargarlo a almacenamiento propio para tener una copia independiente. Estas dos anotaciones quedan locales, sin commit ni push. No se modifico ni publico la aplicacion.
+
+Auditoria de cumplimiento del briefing: la comparacion automatica confirma los cinco eventos obligatorios, 40 tipos coincidentes entre schema/clasificacion/matriz, diez categorias, 16 stream y 24 batch, 50 propiedades documentadas y ocho ejemplos validos. Se detectaron dos faltas documentales: el dataset sugerido no existia y el briefing enlazaba una traduccion inglesa ausente. Se agrego un fixture sintetico con ocho productos, tres programas, 15 entradas y 15 salidas; sus saldos comprueban tres cruces de minimo y una variacion del 20% basada en cinco entradas. El fixture no se carga en el API actual porque el modelo legacy no contiene programa, moneda, coste ni minimo; no se altero el seeder antiguo del Hito 5. Se retiro el enlace roto.
+
+Entorno de pruebas habilitado instalando `uv` sin cambiar dependencias del repositorio. Ejecutada la suite completa desde `services/api`: 724 pruebas pasaron, 7 quedaron `xfail` y hubo una advertencia de deprecacion de Starlette/httpx. La ejecucion inicial desde la raiz no uso el `pyproject.toml` del API; la segunda ejecucion, desde `services/api`, si cargo la configuracion correcta. El validador del fixture, schema, ejemplos, eventos derivados, enlaces y `git diff --check` tambien pasan.
+
+Bloqueo para instrumentacion: `inventory.database.init_db()` solo llama a `SQLModel.metadata.create_all()`, que no altera tablas ya existentes, y no hay framework de migraciones en el API. Ademas, las categorias/programas/costes/minimos del briefing no se pueden reconstruir de forma segura desde los campos legacy. Antes de cambiar el modelo operacional se necesita una migracion versionada y un backfill confirmado; no se habilitaron eventos incompletos ni se escribieron datos de telemetria en produccion.
+
+Se registra la publicacion en README y cuaderno mediante un commit adicional de la misma PR, sin reescribir el commit inicial. Para conservacion se prepara un git bundle con todo el historial versionado y verificacion de integridad fuera del repositorio. El bundle no es un backup de comentarios/PR/configuracion de GitHub ni de archivos ignorados, y mientras permanezca en Codespaces sigue dependiendo de ese entorno. Para disponer de copia independiente debe descargarse a un equipo o almacenamiento propio. No se promete permanencia absoluta de GitHub ni del contenedor.
+
+### Conceptos aprendidos
+
+- Evento: hecho de negocio ocurrido; metrica: calculo agregado sobre esos hechos.
+- Envelope: campos comunes que identifican y contextualizan todos los eventos.
+- JSON Schema: contrato verificable de estructura y tipos, no motor de reglas transaccionales.
+- Outbox: registro persistente de eventos pendiente de entrega, guardado junto con la operacion.
+- Idempotencia: repetir una operacion o entrega sin duplicar su efecto.
+- Baseline: referencia historica definida para comparar un precio nuevo.
+
+### Verificacion del estado del proyecto (24-10-2026)
+
+Se revisaron las tareas pendientes, el estado de la rama y la entrega. La PR #24 sigue abierta hacia `main`, sin checks configurados ni decision de revision. La rama de telemetria aun no esta integrada en `main`.
+
+Validacion ejecutada en este checkout, antes de integrar las candidaturas y el endurecimiento: API, 724 tests aprobados y 7 `xfail`; backoffice, 550 tests aprobados; paquete compartido, 9 tests aprobados; ambos typechecks de frontend y el fixture de telemetria pasan. El backend conserva una advertencia de deprecacion de Starlette/httpx. Los `xfail` estan documentados como decisiones pendientes, no como fallos de la suite.
+
+Durante esta revision se actualizaron en `TESTING.md` los conteos de las suites con los resultados actuales.
+
+### Estado final de la entrega (24-10-2026)
+
+Todo el trabajo se entrega en **una sola PR: [#24 docs: telemetry design plan](https://github.com/ELDER2007/ai-engineering-company-project-monorepo-INES/pull/24)**. Su rama contiene el diseno de telemetria (la entrega pedida) y, ademas, las candidaturas persistidas y el endurecimiento del API. Las PR #25 y #26 contenian esos dos bloques por separado (la #26 apilada sobre la #25); se cerraron con un comentario que apunta a la #24, porque su contenido esta integro en ella. Sus ramas se conservan. **Todo el proyecto se revisa y se entrega desde la #24.** Se comprobo con fusiones de prueba que las tres ramas se integran sin conflictos.
+
+| Bloque | Contenido |
+|---|---|
+| Diseno de telemetria (fases 1, 2 y 3) | `docs/telemetry/telemetry-plan.md`, `event-schemas.json`, 40 eventos (5 obligatorios y 35 oportunidades) en 10 categorias. Solo diseno: no se instrumenta la aplicacion. |
+| Candidaturas de talento (#25) | El formulario de talento ya envia y guarda las candidaturas: `POST /talent-applications` publico, `GET` solo admin, validacion igual a la del formulario y cuerpo del envio probado con e2e (26 de 26). |
+| Endurecimiento del API (#26) | Bloqueo de intentos de login fallidos (`429`), limite en el formulario publico y revocacion de tokens al cambiar la contrasena (`iat` + `password_changed_at`). |
+
+Verificacion de la rama con todo integrado: API, 763 tests aprobados y 7 `xfail`; backoffice, 550 tests; typecheck y build de la web correctos; e2e de la web, 26 de 26.
+
+Lo que queda fuera, a proposito y por escrito:
+
+- **Implementar la telemetria** (captura, migracion y backfill del inventario, outbox, consumidor y pruebas de integracion). La entrega pedida es el diseno; el propio plan lo declara fase posterior, con prerrequisitos y aprobaciones (por ejemplo, retencion de datos con el responsable de privacidad) que no dependen de este repositorio.
+- **Persistencia multiproceso.** TinyDB y los contadores de abuso son de un solo proceso; con varios workers hace falta PostgreSQL o un almacen compartido. Esta documentado en las limitaciones del API.
+- **Captcha**, refresh/logout de sesion, borrado de candidaturas y su politica de retencion.
+- **Las siete decisiones pendientes** marcadas con `xfail(strict=True)` en las pruebas (normalizacion Unicode de contrasenas, emails con alfabetos mezclados, etc.): son decisiones de producto del equipo, no tareas.
+- **Integraciones de IA** (RAG, agentes y workflows): alcance futuro, no una funcionalidad desplegada.
+- **Copia independiente.** El bundle Git sigue dentro de Codespaces; descargarlo a otro almacenamiento depende de la persona, no del proyecto.
+
+---
+
 ## 1. ¿Qué es este proyecto?
 
 Nexova es una **consultora de recursos humanos** fundada en 2011 en Valencia, España, con oficina en Miami. Tiene 3 líneas de negocio:
