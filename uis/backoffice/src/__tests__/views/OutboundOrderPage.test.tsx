@@ -8,11 +8,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import OutboundOrderPage from "@/views/OutboundOrderPage";
 import { ApiError } from "@/lib/api";
+import { track } from "@/lib/telemetry";
 
 const mockList = jest.fn();
 const mockGet = jest.fn();
 const mockRegister = jest.fn();
-jest.mock("next/link", () => ({ __esModule: true, default: ({ href, children }: { href: string; children: unknown }) => <a href={href}>{children as never}</a> }));
+jest.mock("next/link", () => ({ __esModule: true, default: ({ href, children, onClick }: { href: string; children: unknown; onClick?: () => void }) => <a href={href} onClick={onClick}>{children as never}</a> }));
 jest.mock("@/lib/api", () => {
   class ApiError extends Error {
     constructor(
@@ -25,6 +26,10 @@ jest.mock("@/lib/api", () => {
   }
   return { ApiError };
 });
+jest.mock("@/lib/telemetry", () => ({ track: jest.fn() }));
+jest.mock("@/lib/telemetry/ids", () => ({ uuidV4: () => "20000000-0000-4000-8000-0000000000bb" }));
+const trackMock = jest.mocked(track);
+const flowTypes = () => trackMock.mock.calls.map(([type]) => type).filter((type) => /^(flow_|form_)/.test(type));
 // The view reaches the API only through lib/inventory.ts: that is the seam.
 jest.mock("@/lib/inventory", () => ({
   listAssets: (...args: unknown[]) => mockList(...args),
@@ -76,7 +81,7 @@ describe("OutboundOrderPage", () => {
     });
 
     it("registers an allocation with the employee and the product's office", async () => {
-      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 2, office: "Valencia" });
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 2, office: "Valencia" });
       render(<OutboundOrderPage />);
       await choose(PAPER);
       fireEvent.change(screen.getByLabelText("Asignado a"), { target: { value: "Ana Pérez" } });
@@ -85,19 +90,16 @@ describe("OutboundOrderPage", () => {
       submit();
 
       await waitFor(() =>
-        expect(mockRegister).toHaveBeenCalledWith({
-          asset_id: 5,
-          quantity: 2,
-          exit_type: "allocation",
-          assigned_to: "Ana Pérez",
-          office: "Valencia",
-        }),
+        expect(mockRegister).toHaveBeenCalledWith(
+          { asset_id: 5, quantity: 2, exit_type: "allocation", assigned_to: "Ana Pérez", office: "Valencia" },
+          expect.objectContaining({ asset: expect.objectContaining({ id: 5 }), requestId: expect.any(String) }),
+        ),
       );
       expect(await screen.findByRole("status")).toHaveTextContent("Salida registrada");
     });
 
     it("registers a consumption without asking for an employee", async () => {
-      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 1, office: "Valencia" });
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 1, office: "Valencia" });
       render(<OutboundOrderPage />);
       await choose(PAPER);
       fireEvent.change(screen.getByLabelText("Tipo de salida"), { target: { value: "consumption" } });
@@ -106,7 +108,7 @@ describe("OutboundOrderPage", () => {
 
       submit();
 
-      await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ exit_type: "consumption", assigned_to: null })));
+      await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ exit_type: "consumption", assigned_to: null }), expect.anything()));
     });
   });
 
@@ -144,7 +146,7 @@ describe("OutboundOrderPage", () => {
     });
 
     it("clears the whole form after a successful send and confirms it", async () => {
-      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 1, office: "Valencia" });
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 1, office: "Valencia" });
       render(<OutboundOrderPage />);
       await choose(PAPER);
       fireEvent.change(screen.getByLabelText("Asignado a"), { target: { value: "Ana" } });
@@ -244,6 +246,49 @@ describe("OutboundOrderPage", () => {
       render(<OutboundOrderPage />);
 
       expect(await screen.findByRole("alert")).toHaveTextContent(/problema/);
+    });
+  });
+
+  describe("telemetry of the flow", () => {
+    it("tells started -> validated -> submitted -> confirmed for an exit, sharing the request id with the API call", async () => {
+      mockRegister.mockResolvedValue({ type: "outbound", id: 9, asset: PAPER, quantity: 1, office: "Valencia" });
+      render(<OutboundOrderPage />);
+      await choose(PAPER);
+      fireEvent.change(screen.getByLabelText("Tipo de salida"), { target: { value: "consumption" } });
+      fireEvent.focus(screen.getByLabelText("Cantidad"));
+      fireEvent.change(screen.getByLabelText("Cantidad"), { target: { value: "1" } });
+
+      submit();
+      await screen.findByRole("status");
+
+      expect(flowTypes()).toEqual(["flow_started", "flow_step_completed", "flow_step_completed", "flow_completed"]);
+      expect(mockRegister.mock.calls[0][1].requestId).toBe("20000000-0000-4000-8000-0000000000bb");
+    });
+
+    it("an allocation without an employee is blocked locally and reported against assigned_to only", async () => {
+      render(<OutboundOrderPage />);
+      await choose(PAPER);
+      fireEvent.change(screen.getByLabelText("Cantidad"), { target: { value: "1" } });
+
+      submit();
+
+      await screen.findByText(/Indica a quién se asigna/);
+      const failed = trackMock.mock.calls.find(([type]) => type === "form_validation_failed")?.[1];
+      expect(failed).toMatchObject({ field: "assigned_to", error_count: 1, flow_name: "outbound" });
+      expect(mockRegister).not.toHaveBeenCalled();
+    });
+
+    it("the 400 for not enough stock leaves the attempt open and is not a completion", async () => {
+      mockRegister.mockRejectedValue(new ApiError("Insufficient stock for asset 'Resma'. Available: 3, requested: 9.", 400));
+      render(<OutboundOrderPage />);
+      await choose(PAPER);
+      fireEvent.change(screen.getByLabelText("Tipo de salida"), { target: { value: "consumption" } });
+      fireEvent.change(screen.getByLabelText("Cantidad"), { target: { value: "9" } });
+
+      submit();
+      await screen.findByText(/No hay stock suficiente/);
+
+      expect(flowTypes()).toEqual(["flow_started", "flow_step_completed", "flow_step_completed"]);
     });
   });
 });

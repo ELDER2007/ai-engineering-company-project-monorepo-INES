@@ -4,8 +4,15 @@ python-multipart>=0.0.9
 tinydb>=4.8
 python-jose[cryptography]>=3.3
 libpass[bcrypt]>=1.9
+bcrypt>=4.1  # declared on its own: libpass 1.9.5 stopped installing it through its [bcrypt] extra, and without it the API does not start (passlib MissingBackendError)
 python-dotenv>=1.0
 email-validator>=2.0
 sqlmodel>=0.0.48
 psycopg2-binary>=2.9.13
+jsonschema>=4.21
+rfc3339-validator>=0.1.4
+pandas>=2.2
+prefect>=3.9.2  # 3.9.2 declares fastapi<0.151; an older Prefect breaks with the newest FastAPI (Body(min_items=...)) when it starts its server
+celery[redis]>=5.5
+flower>=2.0
 -e ../../packages/shared/incidents_analyzer

@@ -1,5 +1,7 @@
 # Auditoría de serialización de la API
 
+> **Nota de integración con `main`:** los pedidos de inventario **conservan el objeto `asset` completo** porque la telemetría lo necesita. La proyección plana (`asset_id`, `asset_name`, `asset_sku`) que describe este informe para `GET /inventory/orders` y `POST /inventory/orders/*`, incluidas sus capturas, **no se aplicó**.
+
 Rama `feature/serialization-audit`. Alcance: los 38 endpoints de `services/api` (más el alias oculto
 `/api/suppliers`, que comparte router con `/suppliers`) y su único consumidor, el backoffice (`uis/backoffice`).
 

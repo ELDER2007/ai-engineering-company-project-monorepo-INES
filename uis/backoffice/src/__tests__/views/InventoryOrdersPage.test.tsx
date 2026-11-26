@@ -22,13 +22,18 @@ jest.mock("@/lib/api", () => {
   return { ApiError, listUserDirectory: (...args: unknown[]) => mockDirectory(...args) };
 });
 jest.mock("@/lib/inventory", () => ({ listOrders: (...args: unknown[]) => mockOrders(...args) }));
+// The real comparator, wrapped so the tests can count how often the list is sorted.
+jest.mock("@/lib/inventoryRules", () => {
+  const actual = jest.requireActual("@/lib/inventoryRules");
+  return { ...actual, compareOrdersNewestFirst: jest.fn(actual.compareOrdersNewestFirst) };
+});
 
 const MARTA = "6f1c2b7e-1111-4000-8000-000000000001";
 const NIL = "00000000-0000-0000-0000-000000000000";
 const PAPER = { id: 5, name: "Resma de papel A4", sku: "NXV-OFF-001", category: "office_supplies", office: "Valencia" };
 const ORDERS = [
-  { type: "inbound", id: 1, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 100, office: "Valencia", created_at: "2026-10-12T08:00:00Z", user_uuid: NIL, supplier: "Office Depot Miami", exit_type: null, assigned_to: null },
-  { type: "outbound", id: 1, asset_id: PAPER.id, asset_name: PAPER.name, asset_sku: PAPER.sku, quantity: 20, office: "Valencia", created_at: "2026-10-13T09:30:00Z", user_uuid: MARTA, supplier: null, exit_type: "allocation", assigned_to: "Ana Pérez" },
+  { type: "inbound", id: 1, asset: PAPER, quantity: 100, office: "Valencia", created_at: "2026-10-12T08:00:00Z", user_uuid: NIL, supplier: "Office Depot Miami", exit_type: null, assigned_to: null },
+  { type: "outbound", id: 1, asset: PAPER, quantity: 20, office: "Valencia", created_at: "2026-10-13T09:30:00Z", user_uuid: MARTA, supplier: null, exit_type: "allocation", assigned_to: "Ana Pérez" },
 ];
 
 beforeEach(() => {
@@ -87,6 +92,27 @@ describe("InventoryOrdersPage", () => {
       fireEvent.change(screen.getByLabelText("Filtrar por tipo"), { target: { value: "inbound" } });
 
       expect(screen.getAllByTestId("order-row")).toHaveLength(1);
+    });
+
+    it("sorts the orders once per load: changing a filter only filters the already sorted list (useMemo)", async () => {
+      const { compareOrdersNewestFirst } = jest.requireMock("@/lib/inventoryRules");
+      const many = Array.from({ length: 200 }, (_, i) => ({
+        ...ORDERS[i % 2],
+        id: i + 1,
+        created_at: new Date(Date.UTC(2026, 9, 1, 0, i)).toISOString(),
+      }));
+      mockOrders.mockResolvedValue(many);
+      render(<InventoryOrdersPage />);
+      await screen.findAllByTestId("order-row");
+      const sortComparisons = compareOrdersNewestFirst.mock.calls.length;
+      expect(sortComparisons).toBeGreaterThan(0);
+
+      fireEvent.change(screen.getByLabelText("Filtrar por tipo"), { target: { value: "inbound" } });
+      fireEvent.change(screen.getByLabelText("Filtrar por oficina"), { target: { value: "Valencia" } });
+      fireEvent.change(screen.getByLabelText("Filtrar por tipo"), { target: { value: "" } });
+
+      expect(screen.getAllByTestId("order-row").length).toBeGreaterThan(0);
+      expect(compareOrdersNewestFirst.mock.calls.length).toBe(sortComparisons); // no sort ran again
     });
 
     it("still lists the orders, with the uuid, when the user directory cannot be read", async () => {

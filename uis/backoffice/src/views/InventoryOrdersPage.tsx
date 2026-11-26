@@ -50,12 +50,13 @@ export default function InventoryOrdersPage() {
     void load();
   }, [load]);
 
+  // Two steps on purpose. Sorting is the expensive part (every comparison parses two dates: ~230 ms for the 30 000
+  // orders of the load seed) and only depends on the orders, so it runs once per load. Filtering keeps that order and
+  // is what a change of the type/office filter re-runs (~1 ms instead of ~80 ms). Measured in CACHING_REPORT.md.
+  const sorted = useMemo(() => [...orders].sort(compareOrdersNewestFirst), [orders]);
   const visible = useMemo(
-    () =>
-      orders
-        .filter((o) => (!type || o.type === type) && (!office || o.office === office))
-        .sort(compareOrdersNewestFirst),
-    [orders, type, office],
+    () => sorted.filter((o) => (!type || o.type === type) && (!office || o.office === office)),
+    [sorted, type, office],
   );
 
   return (
@@ -155,8 +156,8 @@ export default function InventoryOrdersPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-medium text-white">{o.asset_name}</span>
-                        <span className="ml-2 whitespace-nowrap font-mono text-xs text-slate-400">{o.asset_sku}</span>
+                        <span className="font-medium text-white">{o.asset.name}</span>
+                        <span className="ml-2 whitespace-nowrap font-mono text-xs text-slate-400">{o.asset.sku}</span>
                       </td>
                       <td className="px-4 py-3 text-right font-bold tabular-nums">
                         {o.type === "inbound" ? "+" : "−"}

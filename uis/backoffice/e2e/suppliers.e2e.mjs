@@ -1,11 +1,12 @@
-// End-to-end check of the suppliers page (needs Chromium: npx playwright install chromium).
+// End-to-end check of the suppliers page (needs a browser: npx playwright install chromium; set E2E_BROWSER=firefox|webkit to change it).
 // Prerequisites: API on :8000 seeded with a fresh directory (cd services/api && uv run seed --reset)
 // with at least one active user, and the backoffice on :5174 (npm run dev).
 // Run from uis/backoffice:  E2E_EMAIL=you@example.com E2E_PASSWORD=... npm run e2e
 // It creates one supplier and edits/suspends Gusto, so re-seed with --reset before re-running.
 // It also checks the login flow: redirect when logged out, bad password, stateless JWT (no cookies),
 // expired token and logout.
-import { chromium } from "playwright";
+import * as playwright from "playwright";
+const browserName = process.env.E2E_BROWSER ?? "chromium"; // chromium | firefox | webkit
 const SHOTS = process.env.E2E_SCREENSHOTS_DIR; // optional
 const APP = process.env.E2E_APP_URL ?? "http://localhost:5174";
 const API = process.env.E2E_API_URL ?? "http://localhost:8000";
@@ -24,7 +25,7 @@ if (!loginResponse.ok) {
 }
 const AUTH = { Authorization: `Bearer ${(await loginResponse.json()).access_token}` };
 const shot = (name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }) : Promise.resolve());
-const browser = await chromium.launch();
+const browser = await playwright[browserName].launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -165,7 +166,20 @@ await page.getByRole("button", { name: "Activar Gusto" }).click();
 await page.getByRole("button", { name: "Suspender Gusto" }).waitFor();
 ok(/Activo/.test(await rowOf("Gusto").innerText()), "reactivar: vuelve a 'Activo'");
 
-// 6. token caducado/ inválido y cierre de sesión
+// 6. renovaciones próximas: se resaltan solo las que vencen en <= 60 días
+const isoIn = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+for (const [name, n] of [["Renueva en 30 dias", 30], ["Renueva en 61 dias", 61]]) {
+  await fetch(`${API}/suppliers`, { method: "POST", headers: { ...AUTH, "Content-Type": "application/json" }, body: JSON.stringify({ name, country: "Spain", categories: ["job_boards"], monthly_rate: 10, currency: "EUR", status: "active", contract_renewal_date: isoIn(n) }) });
+}
+await page.reload();
+await page.waitForSelector("tbody tr");
+const soonRow = rowOf("Renueva en 30 dias"), lateRow = rowOf("Renueva en 61 dias");
+ok(/Renueva en 30 días/.test(await soonRow.innerText()) && !/Renueva en \d+ días/.test(await lateRow.innerText()), "renovación a 30 días muestra aviso; a 61 días no");
+const border = (r) => r.locator("td").first().evaluate((e) => getComputedStyle(e).borderLeftWidth);
+ok((await border(soonRow)) === "4px" && (await border(lateRow)) === "0px", "renovación próxima: borde ámbar visible en la fila; la lejana no lo tiene");
+ok(/Fecha vencida/.test(await rowOf("LinkedIn").innerText()), "fecha pasada: 'Fecha vencida' en rojo");
+
+// 7. token caducado/ inválido y cierre de sesión
 await page.evaluate(() => localStorage.setItem("nexova.token", "token.caducado.invalido"));
 await page.goto(URL);
 await page.waitForURL("**/login**");

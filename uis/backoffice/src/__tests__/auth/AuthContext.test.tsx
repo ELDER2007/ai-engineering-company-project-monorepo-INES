@@ -9,8 +9,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import * as api from "@/lib/api";
 import { clearToken, getToken, setToken } from "@/lib/token";
+import { track } from "@/lib/telemetry";
 import type { Me } from "@/types/auth";
 
+jest.mock("@/lib/telemetry", () => ({ track: jest.fn() }));
 jest.mock("@/lib/api", () => ({ fetchMe: jest.fn(), login: jest.fn(), register: jest.fn(), updateMyProfile: jest.fn() }));
 
 const fetchMe = jest.mocked(api.fetchMe);
@@ -107,6 +109,18 @@ describe("AuthProvider", () => {
 
       expect(getToken()).toBeNull();
       expect([text("status"), text("email"), text("loggedOut")]).toEqual(["anonymous", "-", "true"]);
+    });
+
+    it("logout: reports logout_completed before the token is cleared (the event belongs to the session that ends)", async () => {
+      await signedInAs("ana@example.com");
+      let tokenWhenTracked: string | null = "unset";
+      jest.mocked(track).mockImplementation(() => void (tokenWhenTracked = getToken()));
+
+      act(() => auth.logout());
+
+      expect(track).toHaveBeenCalledWith("logout_completed", { reason: "user_action" });
+      expect(tokenWhenTracked).not.toBeNull();
+      expect(getToken()).toBeNull();
     });
 
     it("register: creates the account, logs in with the same credentials and reports 'authenticated'", async () => {

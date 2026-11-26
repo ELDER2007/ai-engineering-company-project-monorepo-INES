@@ -14,18 +14,53 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import TypeAdapter
 from sqlmodel import Session
 
 from auth.dependencies import CurrentUser, get_current_user
+from core.cache import TTLCache, cached_json
 from inventory import service
 from inventory.database import get_db
 from inventory.models import AssetCategory, Office
-from inventory.schemas import AssetCreate, AssetEntryCreate, AssetExitCreate, AssetOut, OrderOut
+from inventory.schemas import (
+    DIRECT_STOCK_WRITE_CODE,
+    AssetCreate,
+    AssetEntryCreate,
+    AssetExitCreate,
+    AssetOut,
+    OrderOut,
+)
 
 router = APIRouter(prefix="/inventory", tags=["inventory"], dependencies=[Depends(get_current_user)])
 
 SessionDep = Annotated[Session, Depends(get_db)]
+
+# Cached reads (same answer for every authenticated user). Dropped by every committed write (inventory/service.py);
+# the TTL is the staleness bound for writes made by another worker or process. Short on purpose: stock is what people
+# decide on. ``GET /products/{id}`` is NOT cached: the order forms read it right before and after registering an order.
+#   products 30 s : ~48 ms with 800 assets (correlated SUMs over every order). The key is office x category.
+#   orders   30 s : ~0.9 s and ~10 MB with 30 000 orders. maxsize 4 keeps at most ~40 MB of serialised bodies.
+PRODUCTS_CACHE = TTLCache("inventory.products", group=service.CACHE_GROUP, ttl=30, maxsize=32)
+ORDERS_CACHE = TTLCache("inventory.orders", group=service.CACHE_GROUP, ttl=30, maxsize=4)
+_ASSETS = TypeAdapter(list[AssetOut])
+_ORDERS = TypeAdapter(list[OrderOut])
+
+
+def _refuse_direct_stock(payload: AssetCreate | AssetEntryCreate | AssetExitCreate) -> None:
+    """Stock is derived from the orders: a body that tries to write it is refused with a 422 that names the
+    field and carries a stable code, so callers (and the telemetry) can tell it from any other validation error.
+    It goes before every other check, so one attempt is one rejection. Nothing is written."""
+    field = payload.forbidden_stock_field()
+    if field is not None:
+        raise HTTPException(
+            422,
+            detail={
+                "code": DIRECT_STOCK_WRITE_CODE,
+                "field": field,
+                "message": "Stock cannot be written directly: register an inbound or outbound order.",
+            },
+        )
 
 
 @router.get("/products", response_model=list[AssetOut])
@@ -33,14 +68,15 @@ def list_products(
     session: SessionDep,
     office: Office | None = Query(default=None),
     category: AssetCategory | None = Query(default=None),
-) -> list[AssetOut]:
-    return service.list_assets(
-        session, office=office.value if office else None, category=category.value if category else None
-    )
+) -> Response:
+    office_value, category_value = (office.value if office else None), (category.value if category else None)
+    build = lambda: service.list_assets(session, office=office_value, category=category_value)  # noqa: E731
+    return cached_json(PRODUCTS_CACHE, (office_value, category_value), build, _ASSETS)
 
 
 @router.post("/products", response_model=AssetOut, status_code=status.HTTP_201_CREATED)
 def create_product(payload: AssetCreate, session: SessionDep) -> AssetOut:
+    _refuse_direct_stock(payload)
     try:
         return service.create_asset(session, payload)
     except service.DuplicateSkuError as exc:
@@ -57,6 +93,7 @@ def get_product(asset_id: int, session: SessionDep) -> AssetOut:
 
 @router.post("/orders/inbound", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def register_inbound(payload: AssetEntryCreate, session: SessionDep, current: CurrentUser) -> OrderOut:
+    _refuse_direct_stock(payload)
     try:
         return service.register_inbound(session, payload, str(current.id))
     except service.AssetNotFoundError as exc:
@@ -67,6 +104,7 @@ def register_inbound(payload: AssetEntryCreate, session: SessionDep, current: Cu
 
 @router.post("/orders/outbound", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def register_outbound(payload: AssetExitCreate, session: SessionDep, current: CurrentUser) -> OrderOut:
+    _refuse_direct_stock(payload)
     try:
         return service.register_outbound(session, payload, str(current.id))
     except service.AssetNotFoundError as exc:
@@ -82,6 +120,11 @@ def list_orders(
     session: SessionDep,
     office: Office | None = Query(default=None),
     type: Literal["inbound", "outbound"] | None = Query(default=None),
-) -> list[OrderOut]:
-    orders = service.list_orders(session, office=office.value if office else None)
-    return [order for order in orders if type is None or order.type == type]
+) -> Response:
+    office_value = office.value if office else None
+
+    def build() -> list[OrderOut]:
+        orders = service.list_orders(session, office=office_value)
+        return [order for order in orders if type is None or order.type == type]
+
+    return cached_json(ORDERS_CACHE, (office_value, type), build, _ORDERS)
