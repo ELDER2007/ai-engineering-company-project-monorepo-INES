@@ -9,3 +9,12 @@ users/db.json
 
 # User profiles store (display names and contact data, created at runtime)
 profiles/db.json
+
+# Inventory local fallback database (used when DATABASE_URL is not set)
+inventory/db.sqlite
+
+# Talent applications store (candidate personal data, created at runtime)
+talent/db.json
+
+# Reporting schema emulated next to the local SQLite file (pipeline)
+inventory/db.sqlite.reporting

@@ -50,7 +50,7 @@ async def create_user(payload: UserCreate) -> SignUpOut:
     active: it can sign in straight away."""
     try:
         user = service.create_user(payload)
-        return SignUpOut(**user.model_dump(), message=SIGN_UP_MESSAGE)
+        return SignUpOut(message=SIGN_UP_MESSAGE)
     except service.EmailTakenError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
@@ -75,14 +75,16 @@ async def update_user(user_id: UUID, payload: UserUpdate, current: CurrentUser) 
     except service.UserNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except service.CurrentPasswordRequiredError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(422, detail=str(exc)) from exc
     except service.WrongPasswordError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except (service.EmailTakenError, service.LastAdminError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(owner_or_admin)])
+@router.delete(
+    "/{user_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(owner_or_admin)]
+)
 async def delete_user(user_id: UUID) -> None:
     """Also deletes the user's linked profile."""
     try:

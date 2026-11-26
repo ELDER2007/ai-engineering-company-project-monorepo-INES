@@ -23,12 +23,16 @@ from pydantic import (
     EmailStr,
     Field,
     StringConstraints,
+    ValidationInfo,
+    field_validator,
     model_validator,
 )
 
 from incidents_analyzer.contract import (
     AGENT_ID_PATTERN,
+    BRANCH_MAX,
     CLIENT_COMPANY_MAX,
+    DEFAULT_BRANCH,
     DESCRIPTION_MAX,
     DESCRIPTION_MIN,
     DISCARD_REASON_MAX,
@@ -40,12 +44,10 @@ from incidents_analyzer.contract import (
     STATUSES,
     TITLE_MAX,
     TITLE_MIN,
-    BRANCHES,
-    CATEGORIES,
+    VALID_CATEGORIES,
 )
 
-IncidentCategory = StrEnum("IncidentCategory", {name: name for name in CATEGORIES})
-IncidentBranch = StrEnum("IncidentBranch", {name: name for name in BRANCHES})
+IncidentCategory = StrEnum("IncidentCategory", {name: name for name in VALID_CATEGORIES})
 IncidentStatus = StrEnum("IncidentStatus", {name: name for name in STATUSES})
 IncidentOrigin = StrEnum("IncidentOrigin", {name: name for name in ORIGINS})
 
@@ -53,6 +55,7 @@ _Text = StringConstraints(strip_whitespace=True)
 IncidentId = Annotated[str, _Text, StringConstraints(pattern=ID_PATTERN.pattern)]
 Title = Annotated[str, _Text, StringConstraints(min_length=TITLE_MIN, max_length=TITLE_MAX)]
 Description = Annotated[str, _Text, StringConstraints(min_length=DESCRIPTION_MIN, max_length=DESCRIPTION_MAX)]
+Branch = Annotated[str, _Text, StringConstraints(min_length=1, max_length=BRANCH_MAX)]
 ClientCompany = Annotated[str, _Text, StringConstraints(min_length=1, max_length=CLIENT_COMPANY_MAX)]
 AgentId = Annotated[str, _Text, StringConstraints(pattern=AGENT_ID_PATTERN.pattern)]
 DiscardReason = Annotated[
@@ -64,14 +67,18 @@ Score = Annotated[int, Field(ge=SCORE_MIN, le=SCORE_MAX)]
 REQUIRED_FIELDS = ("title", "description", "category", "origin", "branch")
 
 
-def mask_email(email: str) -> str:
-    """``elena.smith@icloud.com`` -> ``e***@icloud.com``. Lists never expose the full address."""
-    local, _, domain = email.partition("@")
-    return f"{local[:1]}***@{domain}"
+def normalize_branch(branch: str, origin: str | None) -> str:
+    """``Central`` and ``central`` are the same place; and an incident that comes
+    from a branch has to say which one (``central`` is for "does not apply")."""
+    if branch.casefold() == DEFAULT_BRANCH:
+        branch = DEFAULT_BRANCH
+    if origin == IncidentOrigin.branch and branch == DEFAULT_BRANCH:
+        raise ValueError(f"An incident that comes from a branch must name it ('{DEFAULT_BRANCH}' is for when it does not apply)")
+    return branch
 
 
 class _Content(BaseModel):
-    """What the reporter provides."""
+    """What the reporter provides. Field order matters: ``origin`` before ``branch``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -79,10 +86,15 @@ class _Content(BaseModel):
     description: Description
     category: IncidentCategory
     origin: IncidentOrigin
-    branch: IncidentBranch
+    branch: Branch
     client_company: ClientCompany | None = None
     agent_id: AgentId | None = None
     customer_email: EmailStr | None = None
+
+    @field_validator("branch")
+    @classmethod
+    def branch_matches_origin(cls, value: str, info: ValidationInfo) -> str:
+        return normalize_branch(value, info.data.get("origin"))
 
 
 class IncidentCreate(_Content):
@@ -99,7 +111,7 @@ class IncidentUpdate(BaseModel):
     description: Description | None = None
     category: IncidentCategory | None = None
     origin: IncidentOrigin | None = None
-    branch: IncidentBranch | None = None
+    branch: Branch | None = None
     client_company: ClientCompany | None = None
     agent_id: AgentId | None = None
     customer_email: EmailStr | None = None
@@ -162,7 +174,25 @@ class IncidentRecord(_Content):
         return self
 
 
-class _IncidentView(BaseModel):
+class IncidentListItem(BaseModel):
+    """A row of the list, with only what the table shows and sorts by. Not the description
+    (up to ``DESCRIPTION_MAX`` characters per row), the lifecycle data, the customer's address
+    (not even masked), the audit trail or the per-row permissions: the detail has them."""
+
+    id: str
+    title: str
+    category: IncidentCategory
+    status: IncidentStatus
+    origin: IncidentOrigin
+    branch: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentOut(BaseModel):
+    """The full incident, with the audit trail. ``allowed_transitions`` and ``editable`` are
+    computed by the server from the status, so the client does not repeat the lifecycle rules."""
+
     id: str
     title: str
     description: str
@@ -178,37 +208,8 @@ class _IncidentView(BaseModel):
     updated_at: datetime
     allowed_transitions: list[IncidentStatus]
     editable: bool
-
-
-class IncidentListItem(_IncidentView):
-    """A row of the list: the customer's address is masked."""
-
-    customer_email_masked: str | None
-
-
-class IncidentOut(_IncidentView):
-    """The full incident, with the audit trail."""
-
     customer_email: str | None
     history: list[HistoryEntry]
-
-
-class ErrorDetail(BaseModel):
-    detail: str
-
-
-class FieldProblem(BaseModel):
-    field: str | None  # the problematic field (None when it is the body as a whole)
-    loc: list[str | int]
-    msg: str
-    type: str
-
-
-class InvalidRequestResponse(BaseModel):
-    """Body of the ``400`` the incident API answers when a request is invalid."""
-
-    message: str
-    detail: list[FieldProblem]
 
 
 class IncidentPage(BaseModel):
@@ -225,8 +226,7 @@ class CountItem(BaseModel):
 
 
 class IncidentSummary(BaseModel):
-    """Dashboard numbers for the incidents matching the current filters. With none, every
-    count is 0 (and the satisfaction average is ``null``: there is no score to average)."""
+    """Dashboard numbers for the incidents matching the current filters."""
 
     total: int
     status_counts: dict[str, int]
@@ -234,9 +234,6 @@ class IncidentSummary(BaseModel):
     category_counts: dict[str, int]
     category_percentages: dict[str, float]
     origin_counts: dict[str, int]
-    # Per branch ("sede"): the four offices, always all present (0 when none).
-    branch_counts: dict[str, int]
-    branch_percentages: dict[str, float]
     # open + in_progress, per category: the backlog.
     active_by_category: dict[str, int]
     satisfaction_average: float | None

@@ -1,9 +1,8 @@
 // Mirrors GET /auth/me (services/api/auth/schemas.py, MeOut) — keep in sync manually.
 export type Role = "admin" | "manager" | "user";
 
+/** `ProfileMe` in services/api/profiles/schemas.py: the editable data only (no storage id, no user_id). */
 export interface Profile {
-  id: string;
-  user_id: string;
   name: string;
   contact_email: string | null;
   phone: string | null;
@@ -36,11 +35,7 @@ export interface SignUpPayload {
   address?: string;
 }
 
+/** A generic confirmation, nothing else: the email is not echoed back by an unauthenticated flow. */
 export interface SignUpOut {
-  id: string;
-  email: string;
-  role: Role;
-  is_active: boolean;
-  created_at: string;
   message: string;
 }

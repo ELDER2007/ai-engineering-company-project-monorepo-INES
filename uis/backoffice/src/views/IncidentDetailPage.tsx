@@ -1,22 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Loader2, Pencil } from "lucide-react";
-import { BRANCH_LABELS, CATEGORY_LABELS, ORIGIN_LABELS, SCORE_LABELS, type Incident, type IncidentFacets } from "@repo/shared-types";
-import { ErrorBanner } from "../components/incidents/Field";
+import { ArrowLeft, Pencil } from "lucide-react";
+import { CATEGORY_LABELS, ORIGIN_LABELS, SCORE_LABELS, type Incident, type IncidentFacets } from "@repo/shared-types";
+import { ErrorBanner } from "../components/ui/Field";
 import HistoryTimeline from "../components/incidents/HistoryTimeline";
-import IncidentForm from "../components/incidents/IncidentForm";
 import StatusActions from "../components/incidents/StatusActions";
 import StatusBadge from "../components/incidents/StatusBadge";
+import LoadingState from "../components/ui/LoadingState";
 import { getIncident, getIncidentFacets } from "../lib/api";
 import { describeError, isNotFound } from "../lib/errors";
+import { formatDateTime } from "../lib/format";
+
+// The edit form only exists while "Editar" is active; the detail view itself (read-only) does not need its code.
+const preloadForm = () => import("../components/incidents/IncidentForm");
+const IncidentForm = dynamic(preloadForm, { loading: () => <LoadingState label="Cargando formulario…" /> });
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wider text-slate-500">{label}</dt>
+      <dt className="text-xs uppercase tracking-wider text-slate-400">{label}</dt>
       <dd className="mt-1 text-sm text-slate-200">{children}</dd>
     </div>
   );
@@ -61,10 +67,7 @@ export default function IncidentDetailPage() {
 
   if (loading && !incident) {
     return (
-      <div className="mx-auto max-w-4xl flex items-center gap-3 text-slate-300">
-        <Loader2 className="animate-spin" size={20} />
-        Cargando…
-      </div>
+      <LoadingState className="mx-auto max-w-4xl" />
     );
   }
   if (notFound) {
@@ -107,7 +110,7 @@ export default function IncidentDetailPage() {
           <p className="mt-2 text-lg text-slate-300">{incident.title}</p>
         </div>
         {incident.editable && !editing && (
-          <button type="button" onClick={() => setEditing(true)} className="flex items-center gap-2 rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:text-white">
+          <button type="button" onPointerEnter={preloadForm} onFocus={preloadForm} onClick={() => setEditing(true)} className="flex items-center gap-2 rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:text-white">
             <Pencil size={14} />
             Editar
           </button>
@@ -117,13 +120,14 @@ export default function IncidentDetailPage() {
       {notice && <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
       {error && <ErrorBanner message={error} />}
       {!incident.editable && (
-        <p className="text-sm text-slate-500">Las incidencias resueltas o descartadas son finales: no se pueden editar.</p>
+        <p className="text-sm text-slate-400">Las incidencias resueltas o descartadas no se pueden editar. Reábrela para modificarla.</p>
       )}
 
       {editing ? (
         <IncidentForm
           incident={incident}
           agents={facets.agents}
+          branches={facets.branches}
           clients={facets.clients}
           onSaved={(updated) => handleSaved(updated, "Cambios guardados.")}
           onCancel={() => setEditing(false)}
@@ -131,11 +135,11 @@ export default function IncidentDetailPage() {
       ) : (
         <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
           <dl className="grid gap-5 sm:grid-cols-2">
-            <Detail label="Creada">{new Date(incident.created_at).toLocaleString("es-ES")}</Detail>
-            <Detail label="Última modificación">{new Date(incident.updated_at).toLocaleString("es-ES")}</Detail>
+            <Detail label="Creada">{formatDateTime(incident.created_at)}</Detail>
+            <Detail label="Última modificación">{formatDateTime(incident.updated_at)}</Detail>
             <Detail label="Categoría">{CATEGORY_LABELS[incident.category]}</Detail>
             <Detail label="Origen">{ORIGIN_LABELS[incident.origin]}</Detail>
-            <Detail label="Oficina">{BRANCH_LABELS[incident.branch]}</Detail>
+            <Detail label="Sucursal">{incident.branch}</Detail>
             <Detail label="Empresa cliente">{incident.client_company ?? "—"}</Detail>
             <Detail label="Agente">{incident.agent_id ?? "—"}</Detail>
             <Detail label="Email del cliente">{incident.customer_email ?? "—"}</Detail>

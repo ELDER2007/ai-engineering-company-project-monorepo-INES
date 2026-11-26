@@ -9,7 +9,10 @@ Centralized FastAPI backend for Nexova, per [docs/ARCHITECTURE_PROPOSAL.md](../.
 - **`users/`** — Internal accounts (email + password, bcrypt-hashed through `libpass`) with full CRUD, stored in TinyDB.
 - **`profiles/`** — One `Profile` per user (strictly one-to-one through `user_id`, the `User.id`): the **name and the contact data** (`contact_email`, `phone`, `address`) live here, not in `User`. Stored in TinyDB (`profiles/db.json`, gitignored).
 - **`auth/`** — Login (OAuth2 password flow + JWT carrying the user `id`) and the `get_current_user` dependency used to protect every other domain.
+- **`inventory/`** — Equipment and materials inventory (Hito 5, spec: [CONTEXT — Hito 5](../../CONTEXT%20—%20Hito%205:%20Gestión-de-Inventario-Backend)). The second store of the app: assets and their inbound/outbound orders live in **PostgreSQL (Supabase)** through SQLModel, while users and sessions stay in TinyDB (see [Inventory](#inventory)).
+- **`reporting/`** — HTTP access to the results of the business data pipeline (`data/pipelines/`): the weekly performance report per office and programme, and the status and manual trigger of its runs. It holds no SQL and no ETL logic: it only calls `data/pipelines/weekly_office_performance/interface.py`. Separate from `telemetry/` (it does not touch `GET /telemetry/report`). See [Reporting](#reporting).
 - **`suppliers/`** — Supplier directory ("Directorio de Proveedores", Patricia Solís / Nexova). Replaces the HR spreadsheet with a [TinyDB](https://tinydb.readthedocs.io/)-backed store, seeded on startup with the 15 suppliers from [`suppliers/seed_data.py`](./suppliers/seed_data.py) (spec: [CONTEXT-suppliers.md](./suppliers/CONTEXT-suppliers.md)). Pydantic (`suppliers/schemas.py`) rejects with `422` any missing `country`, a `status` outside `active`/`suspended`, empty `categories`, or a `currency` that doesn't match the country (Spain→EUR, USA→USD). Suspending (not deleting) is the preferred way to retire a supplier.
+- **`talent/`** — Talent applications from the website form (`uis/website`, "Únete a nuestro banco de talento"). Stored in TinyDB (`talent/db.json`, gitignored). `POST /talent-applications` is public (a visitor has no account) and answers only a receipt (`id`, `created_at`): no personal data is echoed back. `GET /talent-applications` lists every candidate and is admin-only. Pydantic (`talent/schemas.py`) applies the same rules as the form and rejects with `422` a name without surname, an invalid email, a phone without country code, years outside 0–50, comments over 500 characters, a non-http(s) LinkedIn URL, unknown fields, and any request without `consent: true`.
 
 ## Incident manager
 
@@ -22,14 +25,14 @@ Stored in TinyDB (`incidents/db.json`, gitignored), keyed by `id` (`NXV-000101`,
 | `id` | auto (`NXV-` + 6 digits); never accepted from the client |
 | `title` | required, 3-120 chars |
 | `description` | required, 5-1000 chars |
-| `category` | required, exactly one of `technical_failure`, `process_error`, `client_complaint`, `candidate_issue`, `staff_issue`, `sla_breach`, `data_quality`, `other` (see [CONTEXT-nexova.es.md](../../CONTEXT-nexova.es.md-Gestor%20de%20Incidencias%20Centralizado)). Filtering by `sla_breach` is just `?category=sla_breach` |
+| `category` | required: `TECHNICAL`, `BILLING`, `ACCESS`, `HR_QUERY`, `COMPLAINT` (as in [CONTEXT-nexova.md](../../scripts/CONTEXT-nexova.md)) |
 | `status` | `open`, `in_progress`, `resolved`, `discarded`; `open` on creation, changed only through the status endpoint |
 | `origin` | required: `customer`, `branch`, `internal` |
-| `branch` | required, exactly one of the four offices: `central` (Central — Sede Valencia; also when no office applies), `valencia_operations` (Valencia — Operaciones), `miami_office` (Miami Office), `remote` (Remoto, employee with no fixed office). Any origin can use any office |
+| `branch` | required, ≤ 60 chars; **`central` when it does not apply** (case-insensitive, stored as `central`). If `origin` is `branch` it must name a real branch, not `central` |
 | `created_at`, `updated_at` | auto (UTC); `updated_at` moves on every edit or status change |
-| `client_company`, `agent_id` (`AGT-07`), `customer_email` | optional extras from the helpdesk CSV (the email is sensitive: masked in lists, never searchable, never echoed in errors) |
+| `client_company`, `agent_id` (`AGT-07`), `customer_email` | optional extras from the helpdesk CSV (the email is sensitive: only in the detail, never in the list rows, never searchable, never echoed in errors) |
 | `satisfaction_score` | 1-5, optional, only on `resolved` |
-| `discard_reason` | 5-300 chars, optional, only on `discarded` |
+| `discard_reason` | 5-300 chars, required to discard, only on `discarded` |
 | `history` | audit trail: created / imported / status_changed / edited (edits log the *names* of the fields, never values) |
 
 Unknown fields are rejected (`extra=forbid`), values must match exactly (`"web"`, `"Customer"`, `"closed"` are refused) and `IncidentRecord` re-checks the lifecycle invariants on every write, so no path (API, seed, merge on edit) can store an inconsistent incident.
@@ -38,53 +41,25 @@ Unknown fields are rejected (`extra=forbid`), values must match exactly (`"web"`
 
 ```
 open ──► in_progress ──► resolved      satisfaction_score optional
-  │          │
-  └──────────┴────────► discarded      discard_reason optional
+  │         │  ▲
+  │         ▼  └── back to open
+  └──────► discarded                    discard_reason required
+resolved / discarded ──► open           reopen: score / reason are cleared
 ```
 
-| From | Allowed moves |
-| --- | --- |
-| `open` | `in_progress`, `discarded` |
-| `in_progress` | `resolved`, `discarded` |
-| `resolved`, `discarded` | none: they are **final** |
-
-Anything else is `409` with a message that says why (`cannot go from open to resolved. Allowed: in_progress, discarded.` / `is resolved, a final status: it cannot change to open.`). An incident cannot be resolved without having been worked on, and nothing goes back to `open`. Content can only be edited while `open` or `in_progress`. There is no delete: discarding retires an incident and keeps its history.
+Any other move is `409` (notably `open → resolved`: it has to be worked on first). Content can only be edited while `open` or `in_progress`. There is no delete: discarding retires an incident and keeps its history.
 
 | Method & path | Purpose |
 | --- | --- |
 | `GET /api/incidents` | Paginated list. Filters (AND): `status`, `category`, `origin` (repeatable), `branch`, `agent_id`, `client_company` (contains), `q` (id / title / description / client / branch), `date_from`, `date_to` (creation day). `sort` = `created_at \| id \| updated_at`, `order`, `page`, `page_size` (≤ 100). |
-| `GET /api/incidents/summary` | Totals (and percentages) **by status, category, origin and branch** for the same filters, plus the backlog (`open` + `in_progress`) by category, satisfaction and top branches / clients. **With no data every count is `0`** (`central` is always listed in `branch_counts`; `satisfaction_average` is `null` because there is no score to average). |
+| `GET /api/incidents/summary` | Dashboard numbers for the same filters: totals and percentages by status and category, by origin, backlog (`open` + `in_progress`) by category, satisfaction, top branches and clients. |
 | `GET /api/incidents/facets` | Distinct branches, clients and agents, to fill dropdowns. |
-| `POST /api/incidents` | Create (always `open`; `id`, `created_at`, `updated_at` are set by the server). `201` with the incident and a `Location` header. An invalid request is a **`400`** (see below). |
-| `GET /api/incidents/{id}` | The incident's detail: content, status, full `customer_email`, `history`, `allowed_transitions` and `editable`. `404` (`{"detail": "Incident NXV-000999 not found"}`) if it does not exist. |
+| `POST /api/incidents` | Create (always `open`). |
+| `GET /api/incidents/{id}` | Full incident with `history`, `allowed_transitions` and `editable`. |
 | `PATCH /api/incidents/{id}` | Edit content fields (only the ones sent; required ones cannot be `null`, optional ones can be cleared with `null`). |
-| `PATCH /api/incidents/{id}/status` | Changes **only the status** and returns the updated incident: `{"status": "in_progress"}`. Optional detail of the move: `satisfaction_score` (1-5, only with `resolved`) or `discard_reason` (only with `discarded`). Any other field is rejected (`422`); an unknown status is `422`; an invalid move is `409`; an unknown id is `404` (checked before the move). |
+| `PATCH /api/incidents/{id}/status` | Lifecycle move: `{"status": "in_progress"}`, `{"status": "resolved", "satisfaction_score": 4}`, `{"status": "discarded", "discard_reason": "…"}`, `{"status": "open"}`. |
 
-**Errors** — the same on every `/api/incidents` route:
-
-| Status | When | Body |
-| --- | --- | --- |
-| `400` | Invalid input: a missing or invalid field in the body, a bad filter or paging value, a malformed JSON body, a rule such as origin/branch. | `message` + `detail` naming each problematic field |
-| `401` | No valid session (checked before anything else). | `{"detail": …}` |
-| `404` | The incident does not exist. | `{"detail": "Incident NXV-000999 not found"}` |
-| `409` | The incident's state forbids it: invalid transition, editing a final incident. | `{"detail": …}` |
-| `500` | Anything unexpected. **Always generic**: no stack trace, exception text or path ever reaches the client. | `{"detail": "Internal server error. Please try again later.", "error_id": "9f3a1c2e"}` |
-
-```json
-POST /api/incidents   {"title": "ab", "category": "SPAM", "origin": "web", "branch": "central"}
-
-400 {
-  "message": "The request is not valid: title must have at least 3 characters; description is required; category must be one of: 'technical_failure', 'process_error', 'client_complaint', 'candidate_issue', 'staff_issue', 'sla_breach', 'data_quality' or 'other'; origin must be one of: 'customer', 'branch' or 'internal'.",
-  "detail": [
-    {"field": "title", "loc": ["body", "title"], "msg": "title must have at least 3 characters", "type": "string_too_short"},
-    "…"
-  ]
-}
-```
-
-Every problem is reported at once, and a `400` never quotes what was sent (it could be the customer's email). Other domains (suppliers, users, profiles, auth) keep FastAPI's `422`. The `error_id` of a `500` is also written, with the full traceback, to the server log (`Unhandled error [9f3a1c2e] on GET /api/incidents/summary`), so a report can be matched with its cause; the 500 handler lives in `core/errors.py` (`catch_unhandled_errors`) and sits inside the CORS middleware, so the browser can read it.
-
-**Reads never fail on an empty database**: with no file, an empty or blank file, or no incidents at all, the list is an empty page, the summary is all zeros and the facets are empty lists; asking for one incident is a plain `404`. Documents this version cannot read (e.g. left by an older data model) are skipped and logged instead of breaking every read — their ids are still never reused. A corrupt file is the one case that is a `500`.
+**Errors**: `401` no session · `404` unknown incident · `409` the incident's state forbids it (forbidden transition, editing a resolved incident) · `422` invalid or missing data, per field, as `detail: [{loc, msg}]`. The `422` body never echoes the rejected values.
 
 **Seed** — loads the historical CSV (`data/raw/incidents-nexova.csv`) with [`scripts/seed_incidents.py`](../../scripts/seed_incidents.py) (logic in [`incidents/seeding.py`](./incidents/seeding.py)); run it with this API's environment:
 
@@ -94,25 +69,21 @@ Every problem is reported at once, and a `400` never quotes what was sent (it co
 .venv/bin/python ../../scripts/seed_incidents.py --csv other.csv --db /tmp/incidents.json
 ```
 
-Each row passes the shared `validate_record` (the CSV rules) and is then transformed and validated again by `IncidentRecord`. **Invalid rows are not inserted**; they are listed with line, id and the rules they break, never the email (with the provided file: 96 inserted, 4 rejected — lines 18, 44, 87 and 91). The CSV predates this model, so (maps in the shared contract, as defined by the CONTEXT):
+Each row passes the shared `validate_record` (the CSV rules) and is then transformed and validated again by `IncidentRecord`. **Invalid rows are not inserted**; they are listed with line, id and the rules they break, never the email (with the provided file: 96 inserted, 4 rejected — lines 18, 44, 87 and 91). The CSV predates this model, so (maps in the shared contract; the CONTEXT does not define them):
 
 | CSV | Incident |
 | --- | --- |
-| `ticket_id` | **not stored**: it only controls duplicates (kept in the `seed_imports` table; without a `ticket_id`, `title + created_at` is used). The incident gets its own `id` |
-| `description` | `title` (its first 120 characters, trimmed; a row whose title would be empty is discarded) and `description` (copied literally) |
+| `ticket_id` | `id` |
+| `description` | `title` (shortened at a word boundary if > 120; `description` keeps the full text) |
 | `date` | `created_at` and `updated_at` (00:00 UTC) |
 | `status` `OPEN / CLOSED / DISCARDED` | `open / resolved / discarded` |
-| `category` | `TECHNICAL`, `ACCESS` → `technical_failure`; `BILLING`, `HR_QUERY` → `process_error`; `COMPLAINT` → `client_complaint` |
+| `category` | same value (`csvCategoryMap`, identity today) |
 | `location` / `ubicacion` (optional column) | `branch`; the provided CSV has none, so `central` |
 | — | `origin` = `customer` |
 
-Idempotent: an id already stored is skipped and never overwritten (later work on an incident survives a re-run). At the end the script compares `/api/incidents/summary` with the metrics expected from the transformed CSV (computed with the shared `analyze`) and exits `1` on any difference; with the provided file: 96 incidents, 27 open / 56 resolved / 13 discarded, `technical_failure` 49 / `process_error` 35 / `client_complaint` 12, satisfaction 3.84 over 56 (the figures of the CONTEXT). The comparison is skipped when the database also holds incidents that are not from the CSV. Unlike suppliers, the incidents database is **not** seeded on startup — run the seed once.
+Idempotent: an id already stored is skipped and never overwritten (later work on an incident survives a re-run). At the end the script compares `/api/incidents/summary` with the metrics expected from the transformed CSV (computed with the shared `analyze`) and exits `1` on any difference; with the provided file: 96 incidents, 27 open / 56 resolved / 13 discarded, satisfaction 3.84 over 56. The comparison is skipped when the database also holds incidents that are not from the CSV. Unlike suppliers, the incidents database is **not** seeded on startup — run the seed once.
 
 Limitations: TinyDB and the id counter are single-process (see `incidents/incident_store.py`); a second API worker needs a real database.
-
-### Shared logic
-
-The API owns no copy of the domain rules. The CSV validation (`validate_record`, `analyze`), the lifecycle helpers (`allowed_transitions`, `is_editable`), the office resolver (`branch_value`) and the CSV → incident translation (`transform`) are imported from [`packages/shared/incidents_analyzer`](../../packages/shared/incidents_analyzer); the seed script and `scripts/analyze.py` use the same functions. What stays here is what needs the framework: the pydantic models, the store, the routes. `tests/test_shared_logic.py` fails if a rule is copied outside the shared package.
 
 ## Authentication
 
@@ -122,13 +93,13 @@ Every route except `POST /auth/login`, `POST /users` (sign-up), `GET /health` an
 - **Password rule: never plain text, always bcrypt through `libpass`.** Install `libpass[bcrypt]`, not the unmaintained `passlib`; the import is the same (`from passlib.hash import bcrypt`). All hashing lives in `auth/security.py` (`hash_password` / `verify_password`).
 - **Auth rule: stateless JWT only.** No server-side sessions and no cookies (no `SessionMiddleware`, no `Set-Cookie`, no session store, no token blacklist). The client keeps the token and sends it in `Authorization: Bearer`; CORS runs with `allow_credentials=False`. The only per-request lookup is reading the user from TinyDB to check that it still exists and is active.
 - **Storage rule: users and profiles live only in TinyDB**, now and after Supabase/PostgreSQL is added. No users or profiles tables in Supabase, and no SQLModel models for them. SQL tables of other modules (inventory, …) store just a `user_uuid` column with the TinyDB `User.id`, as a plain reference (no foreign key: there is no users table). Deleting a user therefore does not cascade into those tables by itself.
-- **Login** — `POST /auth/login`, OAuth2 password flow: `application/x-www-form-urlencoded` with `username` = the **email** and `password`. The credentials are checked against the bcrypt hash in TinyDB; an unknown email, a wrong password and a malformed email all give the same `401 {"detail": "Incorrect email or password"}` (and take about the same time). On success:
+- **Login** — `POST /auth/login`, OAuth2 password flow: `application/x-www-form-urlencoded` with `username` = the **email** and `password`. The credentials are checked against the bcrypt hash in TinyDB; an unknown email, a wrong password and a malformed email all give the same `401 {"detail": "Incorrect email or password"}` (and take about the same time). **Abuse control:** only failed attempts count. Five failures from the same client address for the same email in 15 minutes, or twenty from one address whatever the emails, answer `429` with a `Retry-After` header (seconds) and refuse even the right password until the window passes; a successful login clears the pair's counter. The email alone is not locked, so nobody can lock a victim out by failing logins for their address. On success:
 
   ```json
   {"access_token": "<jwt>", "token_type": "bearer", "expires_in": 1800}
   ```
 
-- **Token** — JWT signed with HS256 by `python-jose` using `SECRET_KEY`. Claims are the minimum: `user_id` (the `id` of the user document in TinyDB) and `exp`. Nothing else: no email, no password. The user is re-read on every request, so deleting an account kills its tokens at once, and changing the email keeps the session. Lifetime: `ACCESS_TOKEN_EXPIRE_MINUTES` (default 30, must be a positive integer); `expires_in` is that value in seconds.
+- **Token** — JWT signed with HS256 by `python-jose` using `SECRET_KEY`. Claims are the minimum: `user_id` (the `id` of the user document in TinyDB), `exp` and `iat` (issue time). Nothing else: no email, no password. The user is re-read on every request, so deleting an account kills its tokens at once, and changing the email keeps the session. **Changing the password** stores `password_changed_at` in the user document and every token issued before it (`iat` older, or no `iat`) gets `401` from then on: whoever had the old password's session, a stolen token included, loses it, and the user logs in again with the new password. `iat` has one-second resolution, so a token issued in the very second of the change is not cut off. Lifetime: `ACCESS_TOKEN_EXPIRE_MINUTES` (default 30, must be a positive integer); `expires_in` is that value in seconds.
 - **Who may touch what** (`403 Forbidden` = valid token, not yours; `401` = no valid token). Roles are `admin` | `manager` | `user` (new users are `user`); only `admin` has extra powers today (`manager` is stored and assignable but grants nothing yet). Any valid session can use the suppliers and incidents APIs. For accounts and profiles: **reading** someone's user or profile is for its owner or an admin, **listing** every user or profile is for admins, **changing or deleting** a user is for the owner or an admin, and **writing a profile** is for the owner only. Only an admin can change a `role` or `is_active`, and only the owner can change their own password. The last active admin can be neither demoted, deactivated nor deleted (`409`). The `403` comes before any lookup, so an unknown id answers `403` too: nobody can probe which accounts exist.
 
 Protection is applied on the routers themselves (`dependencies=[Depends(get_current_user)]`), so a route added to `suppliers/`, `incidents/`, `users/` or `profiles/` is private by default, and `tests/test_auth.py` fails if any documented operation is left open.
@@ -148,14 +119,112 @@ Protection is applied on the routers themselves (`dependencies=[Depends(get_curr
 | `SECRET_KEY` | JWT signing key, at least 32 characters (`openssl rand -hex 32`). **Required in production.** If unset, a random per-process key is used (sessions die on restart, and it breaks with several workers). |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime in minutes (default `30`). An invalid value (`0`, negative, not an integer) stops the API at startup. |
 | `AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` | Creates the first user on startup, only if the user store is empty. |
+| `DATABASE_URL` | SQL connection for the inventory: the Supabase *Transaction pooler* URI. If unset, a local SQLite file is used (development only). Users and sessions never use it. |
+| `TELEMETRY_HMAC_KEY` | Key of the telemetry `userId` pseudonym (HMAC-SHA256), at least 32 characters, separate per environment and stable while the events are kept. If unset it is derived from `SECRET_KEY` (development only: the pseudonyms change whenever `SECRET_KEY` does). |
+| `TELEMETRY_ENDPOINT` | Informational: an external collector. Logged at startup, **not used**: this API stores the events itself and forwards nothing. Not the frontend's `NEXT_PUBLIC_TELEMETRY_ENDPOINT`, which is where the browser posts (this receiver). |
+| `TELEMETRY_SCHEMA_PATH` | The event contract the receiver validates against. Default: `docs/telemetry/event-schemas.json` of this repo. |
 
 Without them the API starts with no users; create one with `uv run create-user --email <email>` (prompts for the password).
 
+## Inventory
+
+Two stores, each request reaching the right one: **TinyDB** for `users/` and `profiles/` (authentication, untouched) and **SQL** for `inventory/`.
+
+| File | Role |
+|---|---|
+| `inventory/models.py` | ORM tables (SQLModel): `assets`, `asset_entries` (inbound), `asset_exits` (outbound). FKs to `assets`, `CHECK`s on quantities and on `assigned_to` vs `exit_type`, `UNIQUE` SKU. |
+| `inventory/schemas.py` | Pydantic request/response shapes. An ORM object is never returned from an endpoint. |
+| `inventory/service.py` | Stock derivation, the insufficient-stock rule, the queries. |
+| `routers/inventory.py` | `APIRouter(prefix="/inventory")`, every route behind `get_current_user` (the path the Hito 5 CONTEXT gives it). |
+| `inventory/database.py` | Both connections: the existing TinyDB client and the SQLModel engine. `init_db()` starts them (and creates the tables) on startup; `get_db` is the per-request SQL session dependency. |
+| `inventory/seeding.py` | The CONTEXT's seed data and the `seed-inventory` command. |
+
+- **Stock is never stored or editable.** `current_stock = SUM(entries) − SUM(exits)`, computed on every read and present only in responses. There is no `PUT`/`PATCH`/`DELETE` on assets or orders; the only way to move stock is to register an order. A new asset starts at 0.
+- **An outbound order above the stock is `400`** (`Insufficient stock for asset '<name>'. Available: <n>, requested: <q>.`) and nothing is written. On PostgreSQL the asset row is locked (`SELECT … FOR UPDATE`) while the check and the insert run, so two simultaneous orders cannot both pass.
+- **`office` is the partition key.** Both offices share the tables, but each asset belongs to one: an order from a different office is refused (`422`) and the stock only sums the orders of the asset's own office. The same product in two offices is two assets (`NXV-IT-001` Valencia, `NXV-IT-002` Miami).
+- **`assigned_to`** is required for `exit_type = "allocation"` and must be null for `"consumption"` (`422`; also a `CHECK` in the database).
+- **Traceability.** Each order stores `user_uuid`, the TinyDB `User.id` of the authenticated user. It is never read from the request body. There is no users table in SQL and no foreign key on `user_uuid`.
+- **No N+1.** The product list is one statement (a correlated aggregate for the stock); the order list is two (one `JOIN assets` per order table), however many rows there are.
+
+Connection: set `DATABASE_URL` in `.env` to the Supabase **Transaction pooler** URI (*Connect → Transaction pooler → URI*). Without it the API uses a local SQLite file (`inventory/db.sqlite`, gitignored) and seeds it on startup if empty. With Supabase, load the seed yourself:
+
+```bash
+uv run seed-inventory            # seed only if the inventory is empty
+uv run seed-inventory --reset    # wipe assets and orders, then reload
+```
+
+### Telemetry hooks of the inventory
+
+The classification and the facts the telemetry needs live in the inventory, not in the browser
+([docs/telemetry/](../../docs/telemetry/README.md)):
+
+- **An asset carries** `programme_id`, `product_category` (`training_kit` / `certification` / `onboarding_equipment`, a business
+  classification kept apart from the legacy `category`) and `minimum_stock` (`0` switches the alert off). All optional: an
+  asset without a programme or category is **not classified** and emits no inventory events (nothing is invented). The seed
+  classifies what is obvious and leaves the paper unclassified on purpose; Elena validates the proposal.
+- **An inbound order carries** `unit_cost_minor` (cents of the office's currency: EUR for Valencia, USD for Miami, never converted)
+  and a `supplier_id` the API derives from the supplier text (`sup-` + 12 hex of a hash of the normalised name; interim until
+  the suppliers registry feeds the inventory). The name itself never reaches the telemetry.
+- **The response that creates an order has `effects`**, computed in the order's transaction: `stock_before`, `stock_after`,
+  `minimum_stock`, `threshold_crossed` (outbound: stock went from `>= minimum` to `< minimum`, strict, not repeated while it stays
+  below) and `cost_variance` (inbound: the unit cost is more than 10 % away, up or down, from the quantity-weighted mean of the
+  last 5 entries of the same asset, supplier and office, rounded half up; fewer than 5 eligible entries means no baseline).
+  Listings never carry `effects`.
+- **A body with `stock` or `current_stock`** on `POST /inventory/products`, `/orders/inbound` or `/orders/outbound` is refused with
+  `422` and `detail = {code: "direct_stock_write_forbidden", field, message}` before any other check, instead of being ignored.
+- **Older databases** get the new columns at startup (`add_missing_columns`, additive `ALTER TABLE ADD COLUMN`; nothing is dropped,
+  retyped or backfilled; existing assets stay unclassified until someone classifies them).
+
+## Telemetry receiver (`telemetry/`)
+
+`POST /telemetry/events` takes a batch `{"events": [...]}` (at most 100 events / 256 KB) from the backoffice and answers **200**
+`{"received", "accepted", "rejected": [{index, event_id, path, rule, detail}]}`. The valid events are
+**stored** (see "Storage" below) before the 200 is sent, and it logs how many events arrived and the type of each. The envelope is the
+Pydantic model `TelemetryEvent` (`telemetry/schemas.py`, with `TelemetryBatch`). Every event is
+validated first against that model and then against `docs/telemetry/event-schemas.json` (Draft 2020-12, `format` checked); a
+bad event is reported in `rejected` without costing the good ones, and a rejection names the field and the rule, never the value.
+The server stamps what a browser cannot be trusted with: `userId` is the HMAC pseudonym of the bearer token's user (null without a
+valid token) and the inventory events are sourced `inventory_api`. The endpoint is public (a `sendBeacon` cannot carry
+`Authorization`; website visitors are anonymous) and reads the body whatever its `Content-Type` (a beacon sends `text/plain`).
+The URL, request and response are the ones of the stub the frontend was built against, so the frontend did not change.
+
+### Storage (`telemetry/models.py`, `telemetry/store.py`)
+
+Events go to **one immutable table, `telemetry_events`**, in the same SQL store as the inventory (`DATABASE_URL`: Supabase/PostgreSQL,
+or the local SQLite fallback). `init_db()` creates it at startup if it is missing; the SQL to create it by hand in Supabase is
+[docs/telemetry/telemetry_events.sql](../../docs/telemetry/telemetry_events.sql). No new database, as the plan asks (section 12).
+
+| Column | Content |
+|---|---|
+| `event_id` (PK) | The envelope's `eventId`. A delivery retry carries the same id, so it is stored once (`INSERT ... ON CONFLICT DO NOTHING`). |
+| `event_type`, `timestamp`, `service` | The fixed columns of the analytical queries. `timestamp` is when the event happened (UTC); `service` is the envelope's `source`, as the server stamped it, never what the browser declared. |
+| `user_id`, `session_id`, `environment` | The rest of the identity. `user_id` is the HMAC pseudonym, never the operational id. |
+| `tags` (JSONB) | The envelope's `properties`, unchanged: already the closed allowlist of the event type, so a new property needs no schema change. The dimensions of the briefing (`office`, `programme_id`, `product_id`, `product_category`, `currency`, `quantity`) live here and are searched with the GIN index. |
+
+Three indexes: `timestamp`, `event_type` and a **GIN on `tags`** (PostgreSQL only). `requestId` and `schemaVersion` of the envelope are
+validated but not stored. The table is **immutable**: the application only INSERTs (a test fails if update or delete logic appears in
+`telemetry/`). Retention (the plan proposes 90 days, pending approval) is not implemented: it would need its own reviewed job.
+
+The whole valid part of a batch is written in **one statement and one transaction** (bulk insert). The answer is
+`{"received", "accepted", "stored", "rejected": [...]}`: `stored` is the rows really written (`accepted - stored` = events an earlier
+delivery had already stored) and `rejected` stays a list of `{index, event_id, path, rule, detail}`, which is what the frontend already
+reads. If the database fails the answer is **503** and nothing is acknowledged: the frontend retries the same batch (same ids), which is
+safe. Only the valid events are stored; the rejected ones are reported and kept nowhere. Aggregates, reports and read access for Elena,
+Laura and Patricia are not part of this storage phase.
+
+## Reporting (`reporting/`)
+
+The business side of the telemetry: [`data/pipelines/pipeline.py`](../../data/pipelines/pipeline.py) turns each closed ISO week of `telemetry_events` into `reporting.weekly_office_program_performance`, and this module serves it. Spec: [`PIPELINE_DESIGN.md`](../../data/pipelines/PIPELINE_DESIGN.md), sections 4.6 and 8.
+
+- **Whole router needs a session**, like inventory and suppliers (`401` without one). Triggering a run also needs the `admin` role (`403`), because it recomputes numbers the leadership reads.
+- **No pipeline logic here.** The three routes call `get_latest_run`, `run_weekly_office_performance` and `get_weekly_performance` of the pipeline's `interface.py`. A test fails if this package imports SQL or ETL code.
+- **Money** is in the office's currency (`EUR` valencia, `USD` miami) and is never summed across currencies.
+
 ## Endpoints
 
-Routes are served under one prefix per domain: `/auth`, `/users`, `/profiles`, `/suppliers`. Supplier routes are also mounted at `/api/suppliers` (hidden from `/docs`): that is the path the backoffice uses through the Vite proxy, which only forwards `/api`. Incident routes live at `/api/incidents`, fixed by the project brief.
+Routes are served under one prefix per domain: `/auth`, `/users`, `/profiles`, `/suppliers`, `/inventory`, `/telemetry`, `/reporting`. Supplier routes are also mounted at `/api/suppliers` (hidden from `/docs`): that is the path the backoffice uses through the Vite proxy, which only forwards `/api`. Incident routes live at `/api/incidents`, fixed by the project brief.
 
-All endpoints below need a session (see above) except `POST /auth/login`, `POST /users` and `/health`.
+All endpoints below need a session (see above) except `POST /auth/login`, `POST /users`, `POST /talent-applications` and `/health`.
 
 | Method | Path | Description |
 |---|---|---|
@@ -163,11 +232,11 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `GET` | `/auth/me` | The user of the current session (`id`, `email`, `is_active`, `role`, `created_at`) plus its linked `profile` (`name`, `contact_email`, `phone`, `address`, …). Never the hash. |
 | `GET` | `/users` | **Admins only** (`403`). List users (`id`, `email`, `is_active`, `role`, `created_at`; never the hash). |
 | `GET` | `/users/directory` | Any session. Who is who: `[{user_id, name}]` of the **active** users, sorted by name. Nothing else (no email, role or contact data), so it is the way to show names without listing accounts. |
-| `POST` | `/users` | Register a user: `{"email", "password"}` (password 8-72 bytes) plus optional initial profile `name`, `phone`, `address`. The password is hashed before storing and the linked Profile is created in the same operation (`201`). The new user is always a `user`. **Public** (no session needed): it is the sign-up. The account is **active** straight away (`is_active=true`): it can sign in at once with `POST /auth/login`. The `201` answer carries a `message` saying so. `409` if the email exists, `422` on invalid data (nothing is created). |
+| `POST` | `/users` | Register a user: `{"email", "password"}` (password 8-72 bytes) plus optional initial profile `name`, `phone`, `address`. The password is hashed before storing and the linked Profile is created in the same operation (`201`). The new user is always a `user`. **Public** (no session needed): it is the sign-up. The account is **active** straight away (`is_active=true`): it can sign in at once with `POST /auth/login`. The `201` answer is only `{"message": ...}`: the email, id and role are not echoed back by this unauthenticated flow. `409` if the email exists, `422` on invalid data (nothing is created). |
 | `GET` | `/users/{user_id}` | One user: the owner or an admin (`403` otherwise). `404` if missing (admins only ever see that). |
 | `PUT` | `/users/{user_id}` | Partial update (omitted fields are kept) of `email`, `password` and, for admins only, `role` and `is_active` (this is how an account is switched off, or back on). Allowed to the owner or an admin (`403` otherwise). The owner needs `current_password` to change their email or password (`422` if missing, `400` if wrong); an admin editing someone else does not, but cannot change their password (`403`). `409` if the email is taken or it would demote, deactivate or remove the last active admin. |
 | `DELETE` | `/users/{user_id}` | Delete a user and its linked profile (`204`). Allowed to the owner or an admin (`403` otherwise); `404` if missing; `409` if it is the last user or the last active admin. |
-| `GET` | `/profiles` | **Admins only** (`403`). List all profiles (`id`, `user_id`, `name`, `contact_email`, `phone`, `address`). |
+| `GET` | `/profiles` | **Admins only** (`403`). List all profiles (`user_id`, `name`, `contact_email`, `phone`, `address`; the profile's own storage `id` is never returned). |
 | `GET` | `/profiles/me` | Your own profile. |
 | `GET` | `/profiles/{user_id}` | One user's profile: the owner or an admin (`403` otherwise). `404` if missing. |
 | `PUT` | `/profiles/me` | Partial update of your own `name`, `phone`, `address` (and `contact_email`); omitted fields are kept and an explicit `null` clears `phone`, `address` or `contact_email` (not `name`). `id` and `user_id` can't be sent (`422`). `422` on invalid data. |
@@ -182,7 +251,18 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `PATCH` | `/suppliers/{id}` | Partial update. Changing `monthly_rate` stamps `updated_at` (audit). The merged record is re-validated, so changing `country` alone (currency mismatch) is a `422`. |
 | `PATCH` | `/suppliers/{id}/rate` | Update the monthly rate (`{"monthly_rate": 350}`). Always stamps `updated_at` with the time of the change. `422` if the rate is `<= 0`; `404` if the supplier doesn't exist. |
 | `PATCH` | `/suppliers/{id}/status` | Activate/suspend (`{"status": "active" \| "suspended"}`). |
-| `DELETE` | `/suppliers/{id}` | Remove a supplier (`204`). `404` if it doesn't exist. The CONTEXT prefers suspending to keep the relationship history; use this for entries made by mistake. |
+| `DELETE` | `/suppliers/{id}` | Remove an **active** supplier (`204`). `404` if it doesn't exist. `409` if it is suspended: the CONTEXT keeps suspended suppliers in the directory for the commercial history, so suspend first and never delete. |
+| `GET` | `/inventory/products?office=&category=` | List the assets with their derived `current_stock`; both filters are optional. |
+| `POST` | `/inventory/products` | Register an asset (`name`, `sku`, `category`, `office`); it starts with `current_stock: 0` (`201`). `409` if the SKU exists, `422` on an unknown `category`/`office` or blank text. |
+| `GET` | `/inventory/products/{id}` | One asset with its current stock. `404` if missing. |
+| `POST` | `/inventory/orders/inbound` | Register a delivery (`AssetEntry`: `asset_id`, `quantity` > 0, `supplier`, `office`); adds stock (`201`). `404` unknown asset. |
+| `POST` | `/inventory/orders/outbound` | Register an allocation or consumption (`AssetExit`: `asset_id`, `quantity` > 0, `exit_type`, `assigned_to`, `office`); removes stock (`201`). `400` if it exceeds the stock, `422` if `assigned_to` does not match `exit_type`, `404` unknown asset. |
+| `GET` | `/inventory/orders?office=&type=inbound\|outbound` | Every inbound and outbound order with its asset, newest first. |
+| `GET` | `/reporting/weekly-office-program-performance?week_start=` | The KPIs of a week, one entry per office and programme: `office` (`valencia`/`miami`), `programme_id`, `total_material_cost`, `kits_delivered_count`, `shortage_events_count`, `cost_variance_events_count`, `currency`. `week_start` is optional (default: the latest computed week); a week without data is `200` with `entries: []`; `404` if no week was ever computed; `422` on a bad date. |
+| `GET` | `/reporting/pipeline-runs/latest` | Status and metadata of the latest pipeline run (`state`, `started_at`, `finished_at`, records processed, `rows_changed`, `rows_deleted`, `warnings`, `error`…). `404` if it never ran. |
+| `POST` | `/reporting/pipeline-runs` | **Admins only** (`403`). Run the pipeline now, for an optional `{"week_start": "2026-10-26"}` (`201` with the run it recorded). `409` if that week is already running, `500` if the run failed (it is logged as `Failed`), `422` on a bad date. |
+| `POST` | `/talent-applications` | Public. Store a candidate application (`full_name`, `email`, `phone`, `country`, `experience_years`, `sector`, `english_level`, `availability`, optional `linkedin_url` and `comments`, `consent: true`); answers `201` with `id` and `created_at` only. `422` on invalid data. |
+| `GET` | `/talent-applications` | Admin-only. Every application, newest first. `401` without a session, `403` for non-admins. |
 | `GET` | `/health` | Public liveness check. |
 
 Interactive docs (Swagger UI) are available at `/docs` when the server is running; use *Authorize* there with your email (in the *username* box) and password to try the protected routes.
@@ -197,6 +277,41 @@ cp .env.example .env    # then set SECRET_KEY (openssl rand -hex 32) and, on the
                         # real environment variables take precedence over it.
 uvicorn main:app --reload --port 8000
 ```
+
+### Seeing the `/reporting` endpoints with numbers (demo data)
+
+On a clean clone the API starts, but `GET /reporting/weekly-office-program-performance` answers `404 No week has been computed yet`: its database has no telemetry
+events, so the pipeline has nothing to compute. To see numbers without touching any real database, run **one command** (from any folder):
+
+```bash
+python data/pipelines/serve_demo.py
+```
+
+It computes the demo week with the real pipeline into a throw-away file, starts the API on `http://127.0.0.1:8000/docs` reading from it (every database variable of that
+process points at the demo file), and prints the demo login. `--port 8010` changes the port and `--check` only says what it would do. The same, in two steps
+(this is what the command does), with the pipeline's **throw-away demo database**, from the repository root:
+
+```bash
+# 1) The pipeline in demo mode: creates data/.local/demo.sqlite with example events and computes the week of 2026-10-26.
+python data/pipelines/pipeline.py --demo
+
+# 2) The API, reading the reporting data from that file (the rest of the API keeps using its usual database).
+DEMO="$(pwd)/data/.local/demo.sqlite"
+cd services/api
+REPORTING_DATABASE_URL="sqlite:///$DEMO" TELEMETRY_DATABASE_URL="sqlite:///$DEMO" \
+AUTH_INITIAL_EMAIL=you@example.com AUTH_INITIAL_PASSWORD=choose-a-password \
+uvicorn main:app --port 8000
+```
+
+`AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` only create the first user when there are **no users yet**; if the API already has accounts, use one of them.
+
+Then open `http://localhost:8000/docs`, *Authorize* with that email and password, and call `GET /reporting/weekly-office-program-performance`: five rows (two offices,
+three programmes) for the week of 2026-10-26. `GET /reporting/pipeline-runs/latest` shows the run, and `POST /reporting/pipeline-runs` (admin) runs it again. With
+`curl`: log in with `curl -s -X POST localhost:8000/auth/login -d "username=you@example.com&password=choose-a-password"` and send the `access_token` as
+`Authorization: Bearer <token>`.
+
+> Do **not** run `data/pipelines/weekly_office_performance/seed_telemetry.py` against the API's own database: it **deletes every row of `telemetry_events`**
+> before loading the demo events. It is meant for throw-away files only, which is what `--demo` uses.
 
 To (re)load the initial suppliers into TinyDB by hand (the API also seeds an empty database on startup):
 
@@ -213,5 +328,7 @@ uv run seed --reset      # wipe and reload the 15 initial suppliers
 
 - The "last analysis" used by the export endpoint is kept in an in-memory, module-level variable — it is lost on restart and is not shared across multiple worker processes. Acceptable for this feature's current scope; documented rather than hidden.
 - The suppliers directory is stored at `suppliers/db.json`, a TinyDB flat file that's regenerated (and reseeded) whenever it's missing — it's gitignored, not source. A second worker process would not see writes made by another one; fine for the current single-process scope, and the reason the project brief already earmarks a move to Postgres once the ORM is ready.
-- Login has no rate limiting or lockout yet, and a token stays valid until it expires or its account is deleted: changing a password does **not** revoke the tokens already issued (they carry no `iat`), and there is no refresh or logout endpoint, so keep `ACCESS_TOKEN_EXPIRE_MINUTES` short. Put the API behind a reverse proxy with rate limits until that is added.
-- `uis/backoffice` does not send a token yet, so its calls to `/api/suppliers` and `/api/incidents` now get `401` until a login screen is added.
+- A token stays valid until it expires, its account is deleted or deactivated, or the password changes. There is no refresh or logout endpoint and no way to revoke a single token, so keep `ACCESS_TOKEN_EXPIRE_MINUTES` short.
+- The login lockout and the limit on `POST /talent-applications` (`core/ratelimit.py`) are in-memory counters: they are per process (a second worker keeps its own), they are forgotten on restart, and they key on the client address the server sees. Behind a reverse proxy that is the proxy's address unless uvicorn runs with `--proxy-headers` and trusts the proxy (`--forwarded-allow-ips`); without it every visitor shares one counter. A shared store (Redis or the database) is needed for several workers.
+- The backoffice login stores the JWT and protected API calls send it as a bearer token. Calls made before login, or after a token expires or its account is disabled, receive `401` and return the user to sign-in.
+- `POST /talent-applications` is public: each client address may send 10 attempts per hour (`429` after that, valid or not), but there is no captcha, so a determined attacker rotating addresses can still fill the store with junk. It holds candidates' personal data in a plain TinyDB file (single-process, unencrypted), accepts duplicate emails on purpose, and has no retention or deletion endpoint yet.

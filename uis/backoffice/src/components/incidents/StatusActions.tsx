@@ -11,17 +11,14 @@ import {
 } from "@repo/shared-types";
 import { ApiError, changeIncidentStatus } from "../../lib/api";
 import { describeError, isConflict } from "../../lib/errors";
-import { ErrorBanner, inputClass } from "./Field";
+import { statusActionLabel } from "../../lib/labels";
+import { ErrorBanner, inputClass } from "../ui/Field";
 
 interface Props {
   incident: Incident;
   onChanged: (incident: Incident) => void;
   /** The incident changed under us (409): the page reloads it. */
   onConflict: () => void;
-}
-
-function actionLabel(target: IncidentStatus): string {
-  return { open: "Abrir", in_progress: "Poner en curso", resolved: "Resolver", discarded: "Descartar" }[target];
 }
 
 export default function StatusActions({ incident, onChanged, onConflict }: Props) {
@@ -40,15 +37,7 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
     setError(null);
   };
 
-  if (incident.allowed_transitions.length === 0)
-    return (
-      <section aria-label="Cambiar estado" className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h2 className="text-lg font-semibold text-white">Ciclo de vida</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          Estado actual: <strong className="text-slate-200">{STATUS_LABELS[incident.status]}</strong>. Es un estado final: la incidencia ya no puede cambiar de estado ni editarse.
-        </p>
-      </section>
-    );
+  if (incident.allowed_transitions.length === 0) return null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -104,7 +93,7 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
               target === status ? "border-cyan-400 bg-cyan-400/10 text-cyan-300" : "border-slate-700 text-slate-300 hover:text-white"
             }`}
           >
-            {actionLabel(status)}
+            {statusActionLabel(incident.status, status)}
           </button>
         ))}
       </div>
@@ -128,13 +117,13 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
                   </label>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-slate-500">Pulsa de nuevo la puntuación elegida para quitarla.</p>
+              <p className="mt-2 text-xs text-slate-400">Pulsa de nuevo la puntuación elegida para quitarla.</p>
               {errors.satisfaction_score && <p id="score-error" className="mt-2 text-xs text-rose-300">{errors.satisfaction_score}</p>}
             </fieldset>
           )}
           {target === "discarded" && (
             <div className="text-sm text-slate-300">
-              <label htmlFor="discard-reason">Motivo del descarte (opcional)</label>
+              <label htmlFor="discard-reason">Motivo del descarte</label>
               <textarea
                 id="discard-reason"
                 rows={2}
@@ -148,11 +137,16 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
               {errors.discard_reason && <p id="reason-error" className="mt-1 text-xs text-rose-300">{errors.discard_reason}</p>}
             </div>
           )}
+          {target === "open" && incident.status !== "in_progress" && (
+            <p className="text-sm text-slate-400">
+              Al reabrir se borra {incident.status === "resolved" ? "la puntuación de satisfacción" : "el motivo del descarte"} y la incidencia vuelve a poder editarse.
+            </p>
+          )}
           {error && <ErrorBanner message={error} />}
           <div className="flex gap-3">
             <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-full bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300 disabled:opacity-60">
               {saving && <Loader2 className="animate-spin" size={14} />}
-              Confirmar: {actionLabel(target).toLowerCase()}
+              Confirmar: {statusActionLabel(incident.status, target).toLowerCase()}
             </button>
             <button type="button" onClick={reset} className="rounded-full px-5 py-2 text-sm text-slate-300 hover:text-white">
               Cancelar

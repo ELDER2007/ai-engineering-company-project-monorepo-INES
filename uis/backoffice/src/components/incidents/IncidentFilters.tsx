@@ -1,22 +1,19 @@
 import { X } from "lucide-react";
 import {
-  BRANCH_LABELS,
   CATEGORY_LABELS,
   EMPTY_FILTERS,
-  INCIDENT_BRANCHES,
   INCIDENT_CATEGORIES,
   INCIDENT_ORIGINS,
   INCIDENT_STATUSES,
   ORIGIN_LABELS,
   STATUS_LABELS,
-  type IncidentBranch,
   type IncidentCategory,
   type IncidentFacets,
   type IncidentFilters,
   type IncidentOrigin,
   type IncidentStatus,
 } from "@repo/shared-types";
-import { inputClass } from "./Field";
+import { inputClass, selectClass } from "../ui/Field";
 
 interface Props {
   filters: IncidentFilters;
@@ -24,7 +21,6 @@ interface Props {
   onChange: (filters: IncidentFilters) => void;
 }
 
-const selectClass = inputClass.replace("w-full", "w-auto");
 
 export default function IncidentFiltersBar({ filters, facets, onChange }: Props) {
   const set = <K extends keyof IncidentFilters>(key: K, value: IncidentFilters[K]) => onChange({ ...filters, [key]: value });
@@ -38,8 +34,8 @@ export default function IncidentFiltersBar({ filters, facets, onChange }: Props)
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="search"
-          aria-label="Buscar por id, título, cliente u oficina"
-          placeholder="Buscar id, título, cliente u oficina…"
+          aria-label="Buscar por id, título, cliente o sucursal"
+          placeholder="Buscar id, título, cliente o sucursal…"
           value={filters.q}
           onChange={(e) => set("q", e.target.value)}
           className={`${inputClass} max-w-xs`}
@@ -60,11 +56,11 @@ export default function IncidentFiltersBar({ filters, facets, onChange }: Props)
             </option>
           ))}
         </select>
-        <select aria-label="Filtrar por oficina" value={filters.branch} onChange={(e) => set("branch", e.target.value as IncidentBranch | "")} className={selectClass}>
-          <option value="">Todas las oficinas</option>
-          {INCIDENT_BRANCHES.map((b) => (
+        <select aria-label="Filtrar por sucursal" value={filters.branch} onChange={(e) => set("branch", e.target.value)} className={selectClass}>
+          <option value="">Todas las sucursales</option>
+          {facets.branches.map((b) => (
             <option key={b} value={b}>
-              {BRANCH_LABELS[b]}
+              {b}
             </option>
           ))}
         </select>

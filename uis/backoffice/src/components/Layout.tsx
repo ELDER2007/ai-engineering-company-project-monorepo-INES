@@ -3,32 +3,55 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, FilePlus2, FileBarChart, LayoutDashboard, LogOut, Truck, UserCircle } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Boxes,
+  ClipboardList,
+  FileBarChart,
+  LayoutDashboard,
+  LogOut,
+  PackageMinus,
+  PackagePlus,
+  ScrollText,
+  Truck,
+  UserCircle,
+} from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
 
 const navItems = [
   { href: "/", label: "Inicio", icon: LayoutDashboard, end: true },
-  { href: "/incidents", label: "Incidencias", icon: ClipboardList, end: false, exclude: ["/incidents/analysis", "/incidents/new"] },
-  { href: "/incidents/new", label: "Nueva incidencia", icon: FilePlus2, end: false },
+  { href: "/incidents", label: "Incidencias", icon: ClipboardList, end: false, exclude: "/incidents/analysis" },
   { href: "/incidents/analysis", label: "Análisis de incidentes", icon: FileBarChart, end: false },
   { href: "/suppliers", label: "Proveedores", icon: Truck, end: false },
+  { href: "/inventory/products", label: "Inventario de activos", icon: Boxes, end: true },
+  { href: "/inventory/orders/inbound", label: "Entrada de activos", icon: PackagePlus, end: true },
+  { href: "/inventory/orders/outbound", label: "Salida de activos", icon: PackageMinus, end: true },
+  { href: "/inventory/orders", label: "Historial de órdenes", icon: ScrollText, end: true },
+  { href: "/reporting", label: "Desempeño semanal", icon: BarChart3, end: true },
   { href: "/account/profile", label: "Mi perfil", icon: UserCircle, end: false },
 ];
+
+// Only for admins: GET /telemetry/report reads everybody's telemetry and answers 403 to anybody else.
+const adminNavItems = [{ href: "/system-health", label: "Salud del sistema", icon: Activity, end: true }];
+
+type NavItem = { href: string; label: string; icon: typeof Boxes; end: boolean; exclude?: string };
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900/60 px-4 py-6">
+      {/* sticky + h-screen: the menu is as tall as the window, not as the page, so its user block does not slide down (a layout shift) when a long table loads. */}
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900/60 px-4 py-6">
         <p className="px-2 text-xl font-black text-white">
           nexova<span className="text-cyan-400">.</span>
         </p>
-        <p className="px-2 text-xs uppercase tracking-widest text-slate-500">Backoffice</p>
+        <p className="px-2 text-xs uppercase tracking-widest text-slate-400">Backoffice</p>
         <nav className="mt-8 space-y-1" aria-label="Navegación principal">
-          {navItems.map(({ href, label, icon: Icon, end, exclude }) => {
+          {[...navItems, ...(user?.role === "admin" ? adminNavItems : [])].map(({ href, label, icon: Icon, end, exclude }: NavItem) => {
             const isActive =
-              !exclude?.some((path) => pathname.startsWith(path)) &&
+              !(exclude && pathname.startsWith(exclude)) &&
               (end ? pathname === href : pathname === href || pathname.startsWith(`${href}/`));
             return (
               <Link
@@ -49,7 +72,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <p className="truncate text-sm font-medium text-white" data-testid="current-user">
             {user?.profile.name ?? user?.email}
           </p>
-          <p className="truncate text-xs text-slate-500">{user?.email}</p>
+          <p className="truncate text-xs text-slate-400">{user?.email}</p>
           <button
             type="button"
             onClick={logout}

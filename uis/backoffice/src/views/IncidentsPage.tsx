@@ -1,56 +1,52 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
+import dynamic from "next/dynamic";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import {
   EMPTY_FILTERS,
-  STATUS_LABELS,
+  type Incident,
   type IncidentFacets,
   type IncidentFilters,
-  type IncidentListItem,
   type IncidentPage,
-  type IncidentStatus,
+  type IncidentSummary,
 } from "@repo/shared-types";
 import IncidentFiltersBar from "../components/incidents/IncidentFilters";
-import SummarySection from "../components/incidents/SummarySection";
+import IncidentSummaryPanel, { IncidentSummarySkeleton } from "../components/incidents/IncidentSummaryPanel";
 import IncidentTable from "../components/incidents/IncidentTable";
-import { ErrorBanner } from "../components/incidents/Field";
+import { ErrorBanner } from "../components/ui/Field";
+import LoadingState from "../components/ui/LoadingState";
 import {
-  changeIncidentStatus,
   getIncidentFacets,
+  getIncidentSummary,
   listIncidents,
   type SortField,
   type SortOrder,
 } from "../lib/api";
-import { describeError, isConflict } from "../lib/errors";
+import { describeError } from "../lib/errors";
+import { useDebounced } from "../lib/useDebounced";
 
 const PAGE_SIZE = 15;
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, ms]);
-  return debounced;
-}
+// The creation form is only needed after "Nueva incidencia" is pressed: it stays out of the first bundle of the list.
+// `preloadForm` (hover/focus on the button) starts the download before the click, so it rarely has to wait.
+const preloadForm = () => import("../components/incidents/IncidentForm");
+const IncidentForm = dynamic(preloadForm, { loading: () => <LoadingState label="Cargando formulario…" /> });
 
 export default function IncidentsPage() {
   const [filters, setFilters] = useState<IncidentFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<SortField>("created_at");
   const [order, setOrder] = useState<SortOrder>("desc");
   const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [list, setList] = useState<IncidentPage | null>(null);
-  const [summaryVersion, setSummaryVersion] = useState(0); // bump to reload the summary cards
+  const [summary, setSummary] = useState<IncidentSummary | null>(null);
   const [facets, setFacets] = useState<IncidentFacets>({ branches: [], clients: [], agents: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  // Status changes made from the list: the new status is shown at once and undone if the server refuses it.
-  const [saving, setSaving] = useState<Record<string, IncidentStatus>>({});
-  const [statusFailure, setStatusFailure] = useState<{ id: string; message: string } | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Typing in the search box must not fire a request per keystroke.
   const applied = useDebounced(filters, 300);
@@ -64,21 +60,22 @@ export default function IncidentsPage() {
     if (rangeInvalid) return;
     const request = ++latest.current;
     setLoading(true);
-    listIncidents(applied, { sort, order, page, pageSize: PAGE_SIZE })
-      .then((nextList) => {
+    Promise.all([listIncidents(applied, { sort, order, page, pageSize: PAGE_SIZE }), getIncidentSummary(applied)])
+      .then(([nextList, nextSummary]) => {
         if (request !== latest.current) return;
         setList(nextList);
+        setSummary(nextSummary);
         setError(null);
         // A page that no longer exists (e.g. after filtering) falls back to the last one.
         if (nextList.pages > 0 && page > nextList.pages) setPage(nextList.pages);
       })
       .catch((err) => request === latest.current && setError(describeError(err, "No se pudieron cargar las incidencias.")))
       .finally(() => request === latest.current && setLoading(false));
-  }, [applied, sort, order, page, rangeInvalid, reloadKey]);
+  }, [applied, sort, order, page, reloadKey, rangeInvalid]);
 
   useEffect(() => {
     getIncidentFacets().then(setFacets).catch(() => undefined); // only fills dropdowns; the list reports real errors
-  }, []);
+  }, [reloadKey]);
 
   const changeFilters = useCallback((next: IncidentFilters) => {
     setFilters(next);
@@ -94,43 +91,12 @@ export default function IncidentsPage() {
     setPage(1);
   };
 
-  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
-
-  const replaceItem = (id: string, change: (item: IncidentListItem) => IncidentListItem) =>
-    setList((current) => (current ? { ...current, items: current.items.map((item) => (item.id === id ? change(item) : item)) } : current));
-
-  const handleChangeStatus = async (item: IncidentListItem, target: IncidentStatus) => {
-    if (saving[item.id]) return;
-    const before = item; // what to go back to
-    setStatusFailure(null);
-    setSaving((current) => ({ ...current, [item.id]: target }));
-    replaceItem(item.id, (row) => ({ ...row, status: target, allowed_transitions: [], editable: false })); // optimistic
-    try {
-      const saved = await changeIncidentStatus(item.id, { status: target });
-      replaceItem(item.id, (row) => ({
-        ...row,
-        status: saved.status,
-        satisfaction_score: saved.satisfaction_score,
-        discard_reason: saved.discard_reason,
-        updated_at: saved.updated_at,
-        allowed_transitions: saved.allowed_transitions,
-        editable: saved.editable,
-      }));
-      setSummaryVersion((v) => v + 1); // the totals follow the change
-    } catch (err) {
-      replaceItem(item.id, () => before); // undo
-      const why = describeError(err, "No se pudo cambiar el estado.");
-      setStatusFailure({
-        id: item.id,
-        message: `No se pudo pasar ${item.id} a «${STATUS_LABELS[target]}»: ${why} Se ha restaurado su estado anterior (${STATUS_LABELS[before.status]}).`,
-      });
-      if (isConflict(err)) reload(); // someone else changed it: show the real state
-    } finally {
-      setSaving((current) => {
-        const { [item.id]: _done, ...rest } = current;
-        return rest;
-      });
-    }
+  const handleCreated = (incident: Incident) => {
+    setShowForm(false);
+    setNotice(`Incidencia ${incident.id} creada.`);
+    setFilters(EMPTY_FILTERS);
+    setPage(1);
+    setReloadKey((k) => k + 1);
   };
 
   const pages = list?.pages ?? 0;
@@ -139,79 +105,60 @@ export default function IncidentsPage() {
     <div className="mx-auto max-w-7xl">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Panel de incidencias</h1>
-          <p className="mt-2 text-slate-400">Gestión centralizada de las incidencias de clientes, oficinas y equipos internos de Nexova.</p>
+          <h1 className="text-3xl font-bold text-white">Incidencias</h1>
+          <p className="mt-2 text-slate-400">Gestión centralizada de las incidencias de clientes, sucursales y equipos internos de Nexova.</p>
         </div>
-        <Link
-          href="/incidents/new"
+        <button
+          type="button"
+          onPointerEnter={preloadForm}
+          onFocus={preloadForm}
+          onClick={() => {
+            setShowForm((v) => !v);
+            setNotice(null);
+          }}
           className="flex items-center gap-2 rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
         >
           <Plus size={16} />
           Nueva incidencia
-        </Link>
+        </button>
       </header>
 
-      <div className="mt-8">
-        <SummarySection filters={applied} refreshKey={summaryVersion + reloadKey} paused={rangeInvalid} />
-      </div>
+      {notice && (
+        <p role="status" className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          {notice}
+        </p>
+      )}
+
+      {showForm && (
+        <div className="mt-6">
+          <IncidentForm branches={facets.branches} agents={facets.agents} clients={facets.clients} onSaved={handleCreated} onCancel={() => setShowForm(false)} />
+        </div>
+      )}
+
+      <div className="mt-8">{summary ? <IncidentSummaryPanel summary={summary} /> : <IncidentSummarySkeleton />}</div>
 
       <div className="mt-8">
         <IncidentFiltersBar filters={filters} facets={facets} onChange={changeFilters} />
       </div>
 
-      {statusFailure && (
-        <div className="mt-6">
-          <ErrorBanner message={statusFailure.message} onDismiss={() => setStatusFailure(null)} />
-        </div>
-      )}
-
       {error && (
         <div className="mt-6">
-          <ErrorBanner message={error} onRetry={reload} retrying={loading} />
+          <ErrorBanner message={error} />
         </div>
       )}
 
       <div className="mt-6" aria-busy={loading}>
-        {loading && (
-          <p role="status" className="mb-3 flex items-center gap-2 text-sm text-slate-300">
-            <Loader2 className="animate-spin text-cyan-300" size={16} aria-hidden="true" />
-            {list === null ? "Cargando incidencias…" : "Actualizando…"}
+        {list === null && loading ? (
+          <LoadingState reserveSpace />
+        ) : list && list.total === 0 ? (
+          <p className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-10 text-center text-sm text-slate-400">
+            {hasFilters
+              ? "Ninguna incidencia coincide con estos filtros."
+              : "Todavía no hay incidencias. Crea la primera o carga el histórico con «scripts/seed_incidents.py»."}
           </p>
-        )}
-        {list === null ? null : list.total === 0 ? (
-          <div className={`rounded-2xl border border-slate-800 bg-slate-900 px-4 py-10 text-center text-sm text-slate-400 ${loading ? "opacity-60" : ""}`}>
-            {hasFilters ? (
-              <>
-                <p>Ninguna incidencia coincide con estos filtros.</p>
-                <button
-                  type="button"
-                  onClick={() => changeFilters(EMPTY_FILTERS)}
-                  className="mt-3 rounded-full border border-slate-700 px-4 py-1.5 text-slate-200 hover:text-white"
-                >
-                  Limpiar filtros
-                </button>
-              </>
-            ) : (
-              <>
-                <p>Todavía no hay incidencias registradas.</p>
-                <p className="mt-1 text-xs text-slate-500">También puedes cargar el histórico con «scripts/seed_incidents.py».</p>
-                <Link href="/incidents/new" className="mt-3 inline-block rounded-full bg-cyan-400 px-4 py-1.5 font-semibold text-slate-950 hover:bg-cyan-300">
-                  Registrar la primera incidencia
-                </Link>
-              </>
-            )}
-          </div>
-        ) : (
+        ) : list ? (
           <div className={loading ? "opacity-60 transition" : "transition"}>
-            <IncidentTable
-              items={list.items}
-              sort={sort}
-              order={order}
-              onSort={handleSort}
-              saving={saving}
-              failedId={statusFailure?.id ?? null}
-              onChangeStatus={handleChangeStatus}
-            />
+            <IncidentTable items={list.items} sort={sort} order={order} onSort={handleSort} />
             <nav aria-label="Paginación" className="mt-4 flex items-center justify-between text-sm text-slate-400">
               <p>
                 {list.total} incidencias · página {list.page} de {pages}
@@ -226,7 +173,7 @@ export default function IncidentsPage() {
               </div>
             </nav>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

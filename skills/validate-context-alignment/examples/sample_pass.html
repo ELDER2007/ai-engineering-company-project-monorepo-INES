@@ -1,0 +1,123 @@
+<!-- Minimal fixture used to prove check_content_against_context.py actually
+     detects a match. Not a real page — just enough literal text/markup to
+     satisfy every requirement extracted from CONTEXT.md. -->
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Nexova</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Nexova",
+    "description": "Consultora de recursos humanos y adquisición de talento",
+    "url": "https://nexova.com",
+    "foundingDate": "2011",
+    "address": [
+      { "@type": "PostalAddress", "addressCountry": "ES", "addressLocality": "Valencia", "addressRegion": "Comunidad Valenciana" },
+      { "@type": "PostalAddress", "addressCountry": "US", "addressLocality": "Miami", "addressRegion": "Florida" }
+    ],
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+34-960-123-456",
+      "contactType": "customer service",
+      "availableLanguage": ["Spanish", "English"]
+    },
+    "sameAs": ["https://linkedin.com/company/nexova", "https://instagram.com/nexova"]
+  }
+  </script>
+</head>
+<body>
+  <header>
+    <span>Nexova</span>
+    <nav>Inicio Servicios Talento Contacto</nav>
+  </header>
+
+  <section id="hero">
+    <h1>Construimos equipos excepcionales para empresas en crecimiento</h1>
+    <p>Consultora de recursos humanos y adquisición de talento con más de 10 años ayudando a empresas de tecnología, retail y servicios financieros a encontrar y desarrollar el mejor talento.</p>
+    <a href="#talento">Únete a nuestro banco de talento</a>
+  </section>
+
+  <section id="servicios">
+    <article>
+      <h3>Headhunting Ejecutivo</h3>
+      <p>Búsqueda y selección de perfiles ejecutivos y mandos medios</p>
+      <p>Proceso personalizado con garantía de reemplazo</p>
+    </article>
+    <article>
+      <h3>Outsourcing de Atención al Cliente</h3>
+      <p>Equipos especializados para empresas tecnológicas</p>
+      <p>Formación continua y supervisión dedicada</p>
+    </article>
+    <article>
+      <h3>Formación Corporativa</h3>
+      <p>Programas de soft skills y liderazgo</p>
+      <p>Cursos presenciales y en línea adaptados a cada organización</p>
+    </article>
+  </section>
+
+  <section id="por-que-nexova">
+    <p>12 años de experiencia en el mercado latinoamericano</p>
+    <p>Presencia regional: España y Estados Unidos</p>
+    <p>+500 procesos exitosos de selección completados</p>
+    <p>Especialización sectorial en tecnología, retail y finanzas</p>
+  </section>
+
+  <section id="contacto">
+    <p>contacto@nexova.com</p>
+    <p>+34 960 123 456</p>
+    <p>+1 305 555 0191</p>
+  </section>
+
+  <form>
+    <label>Nombre completo<input name="nombre" /></label>
+    <span class="error">El nombre debe contener al menos nombre y apellido</span>
+
+    <label>Email<input name="email" type="email" /></label>
+    <span class="error">Ingresa un email válido (ejemplo: nombre@empresa.com)</span>
+
+    <label>Teléfono<input name="telefono" /></label>
+    <span class="error">El teléfono debe incluir código de país (ejemplo: +34 612 345 678)</span>
+
+    <label>País de residencia<select name="pais"></select></label>
+    <span class="error">Selecciona tu país de residencia</span>
+
+    <label>Años de experiencia<input name="experiencia" type="number" /></label>
+    <span class="error">Los años de experiencia deben estar entre 0 y 50</span>
+
+    <label>Sector de interés<select name="sector"></select></label>
+    <span class="error">Selecciona el sector de tu interés</span>
+
+    <label>Nivel de inglés<select name="ingles"></select></label>
+    <span class="error">Indica tu nivel de inglés</span>
+
+    <label>Disponibilidad<input type="radio" name="disponibilidad" /></label>
+    <span class="error">Selecciona tu disponibilidad</span>
+
+    <label>LinkedIn (URL del perfil)<input name="linkedin" type="url" /></label>
+    <span class="error">Si incluyes LinkedIn, debe ser una URL válida</span>
+
+    <label>Comentarios adicionales<textarea name="comentarios" maxlength="500"></textarea></label>
+    <span class="counter">Los comentarios no pueden exceder 500 caracteres (quedan 500)</span>
+
+    <label>Acepto política de datos<input type="checkbox" name="consentimiento" /></label>
+    <span class="error">Debes aceptar la política de tratamiento de datos para continuar</span>
+
+    <p class="empresa-notice">¿Eres una empresa buscando talento? Escríbenos a contacto@nexova.com</p>
+  </form>
+
+  <div id="success" hidden>
+    <h2>¡Gracias por tu interés en Nexova!</h2>
+    <p>Hemos recibido tu información. Nuestro equipo de selección la revisará y te contactaremos en caso de que tu perfil encaje con alguna de nuestras oportunidades actuales o futuras.</p>
+    <p>Mientras tanto, síguenos en LinkedIn para estar al día de nuestras vacantes y contenido sobre desarrollo profesional.</p>
+  </div>
+
+  <footer>
+    <p>© 2025 Nexova. Todos los derechos reservados.</p>
+    <a href="https://linkedin.com/company/nexova">LinkedIn</a>
+    <a href="https://instagram.com/nexova">Instagram</a>
+  </footer>
+</body>
+</html>

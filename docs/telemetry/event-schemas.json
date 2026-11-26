@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nexova application telemetry event v2.1.0",
+  "description": "One event per JSON object. All 41 variants use explicit property allowlists. Field descriptions, requiredness, per-event privacy profiles and delivery rationale are specified in telemetry-plan.md, sections 15 and 16. Arithmetic and transactional invariants must also be checked by the service.",
+  "$comment": "Version 2.1.0 is additive over 2.0.0: it adds the web_vital_reported variant (which requires schemaVersion 2.1.0) and still accepts every 2.0.0 event unchanged, so an emitter on 2.0.0 keeps working. Draft 2020-12 is required: unevaluatedProperties closes payloads composed with allOf/$ref. Enable format checking. All declared payload fields are required; null userId/sessionId is an explicit value, not permission to omit a key. Descriptive annotations do not change contract version 2.0.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "event_type", "schemaVersion", "timestamp", "userId", "sessionId", "requestId", "environment", "source", "properties"],
+  "properties": {
+    "eventId": { "$ref": "#/$defs/uuidV4", "description": "Required. Stable UUID v4 of the logical event, reused on delivery retries." },
+    "event_type": { "type": "string", "pattern": "^[a-z]+(?:_[a-z]+)+$", "description": "Required. Entity-action name; oneOf permits only the 40 catalogued event types." },
+    "schemaVersion": { "enum": ["2.0.0", "2.1.0"], "description": "Required. Event contract version, not application release. 2.1.0 only adds web_vital_reported; the 40 older variants are identical in both." },
+    "timestamp": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "Required. UTC occurrence time in ISO 8601/RFC 3339, ending in Z; not delivery time." },
+    "userId": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$", "description": "Required key. Backend-generated HMAC-SHA256 pseudonym, or null without an identified actor. Inventory and successful login/registration require a non-null value." },
+    "sessionId": { "anyOf": [{ "$ref": "#/$defs/uuidV4" }, { "type": "null" }], "description": "Required key. Analytics-session UUID, never a JWT. Non-null for browser events; null allowed for direct API calls and internal jobs." },
+    "requestId": { "$ref": "#/$defs/uuidV4", "description": "Required. Validated request/operation UUID propagated across frontend, backend and sanitized logs." },
+    "environment": { "enum": ["development", "test", "staging", "production"], "description": "Required. Isolates operational environments and their analytics datasets." },
+    "source": { "enum": ["inventory_api", "api", "backoffice", "website", "worker"], "description": "Required. Verified emitter class, further restricted by each event variant." },
+    "properties": { "type": "object", "description": "Required. Event-specific allowlisted payload; undeclared keys are rejected, including nested inventory payloads composed from shared definitions." }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event_type": { "enum": ["inbound_order_created", "outbound_order_created", "stock_threshold_triggered", "direct_stock_edit_rejected", "kit_cost_variance_detected", "product_created", "product_updated", "inventory_order_rejected", "inventory_validation_failed"] } } },
+      "then": { "properties": { "source": { "const": "inventory_api" }, "userId": { "type": "string" } } }
+    },
+    {
+      "if": { "properties": { "source": { "enum": ["backoffice", "website"] } } },
+      "then": { "properties": { "sessionId": { "$ref": "#/$defs/uuidV4" } } }
+    }
+  ],
+  "oneOf": [
+    {
+      "properties": {
+        "event_type": { "const": "inbound_order_created" },
+        "properties": {
+          "allOf": [
+            { "$ref": "#/$defs/inventoryProperties" },
+            {
+              "properties": {
+                "quantity": { "minimum": 1 },
+                "order_id": { "$ref": "#/$defs/id" },
+                "supplier_id": { "$ref": "#/$defs/id" },
+                "unit_cost_minor": { "$ref": "#/$defs/nonnegativeInteger" },
+                "total_cost_minor": { "$ref": "#/$defs/nonnegativeInteger" }
+              },
+              "required": ["order_id", "supplier_id", "unit_cost_minor", "total_cost_minor"]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": { "const": "outbound_order_created" },
+        "properties": {
+          "allOf": [
+            { "$ref": "#/$defs/inventoryProperties" },
+            {
+              "properties": {
+                "quantity": { "minimum": 1 },
+                "order_id": { "$ref": "#/$defs/id" },
+                "stock_before": { "$ref": "#/$defs/nonnegativeInteger" },
+                "stock_after": { "$ref": "#/$defs/nonnegativeInteger" }
+              },
+              "required": ["order_id", "stock_before", "stock_after"]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": { "const": "stock_threshold_triggered" },
+        "properties": {
+          "allOf": [
+            { "$ref": "#/$defs/inventoryProperties" },
+            {
+              "properties": {
+                "quantity": { "minimum": 1 },
+                "order_id": { "$ref": "#/$defs/id" },
+                "stock_before": { "$ref": "#/$defs/nonnegativeInteger" },
+                "stock_after": { "$ref": "#/$defs/nonnegativeInteger" },
+                "minimum_stock": { "type": "integer", "minimum": 1 }
+              },
+              "required": ["order_id", "stock_before", "stock_after", "minimum_stock"]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": { "const": "direct_stock_edit_rejected" },
+        "properties": {
+          "allOf": [
+            { "$ref": "#/$defs/inventoryProperties" },
+            {
+              "properties": {
+                "quantity": { "const": 0 },
+                "attempted_field": { "enum": ["stock", "current_stock"] },
+                "reason": { "const": "direct_stock_write_forbidden" }
+              },
+              "required": ["attempted_field", "reason"]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "event_type": { "const": "kit_cost_variance_detected" },
+        "properties": {
+          "allOf": [
+            { "$ref": "#/$defs/inventoryProperties" },
+            {
+              "properties": {
+                "quantity": { "minimum": 1 },
+                "order_id": { "$ref": "#/$defs/id" },
+                "supplier_id": { "$ref": "#/$defs/id" },
+                "unit_cost_minor": { "$ref": "#/$defs/nonnegativeInteger" },
+                "reference_unit_cost_minor": { "type": "integer", "minimum": 1 },
+                "baseline_order_count": { "const": 5 },
+                "variance_percent": { "type": "number", "exclusiveMinimum": 10 },
+                "threshold_percent": { "const": 10 }
+              },
+              "required": ["order_id", "supplier_id", "unit_cost_minor", "reference_unit_cost_minor", "baseline_order_count", "variance_percent", "threshold_percent"]
+            }
+          ],
+          "unevaluatedProperties": false
+        }
+      }
+    }
+    ,{ "properties": { "event_type": { "const": "product_created" }, "source": { "const": "inventory_api" }, "properties": { "$ref": "#/$defs/productPayload", "properties": { "change_kind": { "const": "catalogue" } } } } }
+    ,{ "properties": { "event_type": { "const": "product_updated" }, "source": { "const": "inventory_api" }, "properties": { "$ref": "#/$defs/productPayload" } } }
+    ,{ "properties": { "event_type": { "const": "inventory_order_rejected" }, "source": { "const": "inventory_api" }, "properties": { "$ref": "#/$defs/inventoryFailure" } } }
+    ,{ "properties": { "event_type": { "const": "inventory_validation_failed" }, "source": { "const": "inventory_api" }, "properties": { "$ref": "#/$defs/inventoryFailure" } } }
+    ,{ "properties": { "event_type": { "const": "login_attempted" }, "source": { "const": "api" }, "userId": { "type": "null" }, "properties": { "$ref": "#/$defs/authPayload", "properties": { "duration_ms": { "const": 0 } } } } }
+    ,{ "properties": { "event_type": { "const": "login_succeeded" }, "source": { "const": "api" }, "userId": { "type": "string" }, "properties": { "$ref": "#/$defs/authPayload" } } }
+    ,{ "properties": { "event_type": { "const": "login_failed" }, "source": { "const": "api" }, "userId": { "type": "null" }, "properties": { "$ref": "#/$defs/loginFailure" } } }
+    ,{ "properties": { "event_type": { "const": "logout_completed" }, "source": { "const": "backoffice" }, "properties": { "$ref": "#/$defs/sessionPayload", "properties": { "reason": { "const": "user_action" } } } } }
+    ,{ "properties": { "event_type": { "const": "session_expired" }, "source": { "const": "backoffice" }, "properties": { "$ref": "#/$defs/sessionPayload", "properties": { "reason": { "enum": ["token_expired", "unauthorized_response"] } } } } }
+    ,{ "properties": { "event_type": { "const": "authorization_denied" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/authorizationPayload" } } }
+    ,{ "properties": { "event_type": { "const": "registration_completed" }, "source": { "const": "api" }, "userId": { "type": "string" }, "properties": { "$ref": "#/$defs/authPayload" } } }
+    ,{ "properties": { "event_type": { "const": "registration_failed" }, "source": { "const": "api" }, "userId": { "type": "null" }, "properties": { "$ref": "#/$defs/registrationFailure" } } }
+    ,{ "properties": { "event_type": { "const": "profile_updated" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/profilePayload" } } }
+    ,{ "properties": { "event_type": { "const": "section_viewed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/sectionPayload" } } }
+    ,{ "properties": { "event_type": { "const": "search_performed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/searchPayload" } } }
+    ,{ "properties": { "event_type": { "const": "flow_started" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/flowPayload", "properties": { "step": { "const": "form" }, "elapsed_ms": { "const": 0 } } } } }
+    ,{ "properties": { "event_type": { "const": "flow_step_completed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/flowPayload" } } }
+    ,{ "properties": { "event_type": { "const": "flow_completed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/flowPayload", "properties": { "step": { "const": "confirmed" } } } } }
+    ,{ "properties": { "event_type": { "const": "flow_cancelled" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/flowPayload" } } }
+    ,{ "properties": { "event_type": { "const": "supplier_created" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/supplierPayload" } } }
+    ,{ "properties": { "event_type": { "const": "supplier_updated" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/supplierPayload" } } }
+    ,{ "properties": { "event_type": { "const": "supplier_deleted" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/supplierPayload" } } }
+    ,{ "properties": { "event_type": { "const": "incident_created" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/incidentPayload" } } }
+    ,{ "properties": { "event_type": { "const": "incident_status_changed" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/incidentTransition" } } }
+    ,{ "properties": { "event_type": { "const": "incident_analysis_completed" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/analysisPayload" } } }
+    ,{ "properties": { "event_type": { "const": "incident_analysis_failed" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/analysisFailure" } } }
+    ,{ "properties": { "event_type": { "const": "talent_form_submitted" }, "source": { "const": "website" }, "properties": { "$ref": "#/$defs/talentPayload", "properties": { "validation_error_count": { "const": 0 } } } } }
+    ,{ "properties": { "event_type": { "const": "talent_form_rejected" }, "source": { "const": "website" }, "properties": { "$ref": "#/$defs/talentPayload", "properties": { "validation_error_count": { "minimum": 1 } } } } }
+    ,{ "properties": { "event_type": { "const": "http_request_completed" }, "source": { "const": "api" }, "properties": { "$ref": "#/$defs/httpPayload" } } }
+    ,{ "properties": { "event_type": { "const": "dependency_call_completed" }, "source": { "enum": ["api", "worker"] }, "properties": { "$ref": "#/$defs/dependencyPayload" } } }
+    ,{ "properties": { "event_type": { "const": "application_error_occurred" }, "properties": { "$ref": "#/$defs/errorPayload" } } }
+    ,{ "properties": { "event_type": { "const": "background_job_completed" }, "source": { "enum": ["api", "worker"] }, "properties": { "$ref": "#/$defs/jobPayload" } } }
+    ,{ "properties": { "event_type": { "const": "telemetry_delivery_failed" }, "source": { "const": "worker" }, "properties": { "$ref": "#/$defs/deliveryPayload" } } }
+    ,{ "properties": { "event_type": { "const": "section_load_completed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/sectionLoadPayload" } } }
+    ,{ "properties": { "event_type": { "const": "form_validation_failed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/formValidationPayload" } } }
+    ,{ "properties": { "event_type": { "const": "web_vital_reported" }, "schemaVersion": { "const": "2.1.0" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/webVitalPayload" } } }
+  ],
+  "$defs": {
+    "webVitalPayload": { "type": "object", "additionalProperties": false, "required": ["metric", "value", "rating", "section"], "properties": { "metric": { "enum": ["LCP", "CLS", "INP", "FCP", "TTFB"] }, "value": { "type": "number", "minimum": 0 }, "rating": { "enum": ["good", "needs-improvement", "poor"] }, "section": { "$ref": "#/$defs/section" } } },
+    "sectionLoadPayload": { "type": "object", "additionalProperties": false, "required": ["section", "duration_ms", "outcome"], "properties": { "section": { "$ref": "#/$defs/section" }, "duration_ms": { "$ref": "#/$defs/duration" }, "outcome": { "enum": ["success", "error"] } } },
+    "formValidationPayload": { "type": "object", "additionalProperties": false, "required": ["flow_id", "flow_name", "field", "error_count"], "properties": { "flow_id": { "$ref": "#/$defs/uuidV4" }, "flow_name": { "enum": ["inbound", "outbound", "supplier", "incident", "analysis", "registration", "talent"] }, "field": { "enum": ["product_id", "quantity", "supplier", "assigned_to", "multiple", "other"] }, "error_count": { "type": "integer", "minimum": 1 } } },
+    "section": { "enum": ["home", "inventory", "inbound", "outbound", "orders", "suppliers", "incidents", "analysis", "profile", "login", "register", "talent"] },
+    "route": { "enum": ["auth_login", "auth_me", "users", "profiles", "inventory_assets", "inventory_inbound", "inventory_outbound", "inventory_orders", "suppliers", "incidents", "incident_analysis", "health", "unmatched"] },
+    "duration": { "type": "number", "minimum": 0 },
+    "productPayload": {
+      "allOf": [{ "$ref": "#/$defs/inventoryProperties" }, { "properties": { "quantity": { "const": 0 }, "change_kind": { "enum": ["catalogue", "classification", "threshold"] } }, "required": ["change_kind"] }],
+      "unevaluatedProperties": false
+    },
+    "inventoryFailure": {
+      "allOf": [{ "$ref": "#/$defs/inventoryProperties" }, { "properties": { "quantity": { "const": 0 }, "operation": { "enum": ["create_product", "inbound", "outbound"] }, "field": { "enum": ["quantity", "office", "product_id", "supplier_id", "unit_cost_minor", "sku", "multiple", "none"] }, "error_code": { "enum": ["insufficient_stock", "office_mismatch", "duplicate_sku", "invalid_quantity", "invalid_field", "conflict"] } }, "required": ["operation", "field", "error_code"] }],
+      "unevaluatedProperties": false
+    },
+    "authPayload": { "type": "object", "additionalProperties": false, "required": ["method", "duration_ms"], "properties": { "method": { "const": "password" }, "duration_ms": { "$ref": "#/$defs/duration" } } },
+    "loginFailure": { "type": "object", "additionalProperties": false, "required": ["method", "duration_ms", "reason"], "properties": { "method": { "const": "password" }, "duration_ms": { "$ref": "#/$defs/duration" }, "reason": { "enum": ["invalid_credentials", "invalid_request", "rate_limited", "internal_error"] } } },
+    "registrationFailure": { "type": "object", "additionalProperties": false, "required": ["reason"], "properties": { "reason": { "enum": ["invalid_request", "unavailable", "rate_limited", "internal_error"] } } },
+    "sessionPayload": { "type": "object", "additionalProperties": false, "required": ["reason"], "properties": { "reason": { "enum": ["user_action", "token_expired", "unauthorized_response"] } } },
+    "authorizationPayload": { "type": "object", "additionalProperties": false, "required": ["route_id", "status_code"], "properties": { "route_id": { "$ref": "#/$defs/route" }, "status_code": { "enum": [401, 403] } } },
+    "profilePayload": { "type": "object", "additionalProperties": false, "required": ["changed_field_count"], "properties": { "changed_field_count": { "type": "integer", "minimum": 1 } } },
+    "sectionPayload": { "type": "object", "additionalProperties": false, "required": ["section", "locale"], "properties": { "section": { "$ref": "#/$defs/section" }, "locale": { "enum": ["es", "en"] } } },
+    "searchPayload": { "type": "object", "additionalProperties": false, "required": ["section", "result_count", "filter_count"], "properties": { "section": { "$ref": "#/$defs/section" }, "result_count": { "$ref": "#/$defs/nonnegativeInteger" }, "filter_count": { "$ref": "#/$defs/nonnegativeInteger" } } },
+    "flowPayload": { "type": "object", "additionalProperties": false, "required": ["flow_id", "flow_name", "step", "elapsed_ms"], "properties": { "flow_id": { "$ref": "#/$defs/uuidV4" }, "flow_name": { "enum": ["inbound", "outbound", "supplier", "incident", "analysis", "registration", "talent"] }, "step": { "enum": ["form", "validated", "submitted", "confirmed"] }, "elapsed_ms": { "$ref": "#/$defs/duration" } } },
+    "supplierPayload": { "type": "object", "additionalProperties": false, "required": ["supplier_id"], "properties": { "supplier_id": { "$ref": "#/$defs/id" } } },
+    "incidentPayload": { "type": "object", "additionalProperties": false, "required": ["incident_id"], "properties": { "incident_id": { "$ref": "#/$defs/id" } } },
+    "incidentTransition": { "type": "object", "additionalProperties": false, "required": ["incident_id", "from_status", "to_status"], "properties": { "incident_id": { "$ref": "#/$defs/id" }, "from_status": { "enum": ["open", "in_progress", "resolved", "discarded"] }, "to_status": { "enum": ["open", "in_progress", "resolved", "discarded"] } } },
+    "analysisPayload": { "type": "object", "additionalProperties": false, "required": ["analysis_id", "row_count", "duration_ms"], "properties": { "analysis_id": { "$ref": "#/$defs/uuidV4" }, "row_count": { "$ref": "#/$defs/nonnegativeInteger" }, "duration_ms": { "$ref": "#/$defs/duration" } } },
+    "analysisFailure": { "type": "object", "additionalProperties": false, "required": ["analysis_id", "reason"], "properties": { "analysis_id": { "$ref": "#/$defs/uuidV4" }, "reason": { "enum": ["invalid_csv", "size_limit", "timeout", "internal_error"] } } },
+    "talentPayload": { "type": "object", "additionalProperties": false, "required": ["flow_id", "validation_error_count"], "properties": { "flow_id": { "$ref": "#/$defs/uuidV4" }, "validation_error_count": { "$ref": "#/$defs/nonnegativeInteger" } } },
+    "httpPayload": { "type": "object", "additionalProperties": false, "required": ["route_id", "method", "status_code", "duration_ms"], "properties": { "route_id": { "$ref": "#/$defs/route" }, "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"] }, "status_code": { "type": "integer", "minimum": 100, "maximum": 599 }, "duration_ms": { "$ref": "#/$defs/duration" } } },
+    "dependencyPayload": { "type": "object", "additionalProperties": false, "required": ["dependency", "outcome", "duration_ms"], "properties": { "dependency": { "enum": ["supabase", "tinydb", "telemetry_sink"] }, "outcome": { "enum": ["success", "timeout", "error"] }, "duration_ms": { "$ref": "#/$defs/duration" } } },
+    "errorPayload": { "type": "object", "additionalProperties": false, "required": ["error_code", "component"], "properties": { "error_code": { "enum": ["unhandled_exception", "render_failed", "network_failed", "invalid_response"] }, "component": { "enum": ["auth", "inventory", "suppliers", "incidents", "profile", "website", "telemetry"] } } },
+    "jobPayload": { "type": "object", "additionalProperties": false, "required": ["job_id", "job_name", "outcome", "duration_ms"], "properties": { "job_id": { "$ref": "#/$defs/uuidV4" }, "job_name": { "enum": ["bootstrap", "profile_sync", "telemetry_publish", "telemetry_aggregate", "telemetry_purge"] }, "outcome": { "enum": ["success", "failure"] }, "duration_ms": { "$ref": "#/$defs/duration" } } },
+    "deliveryPayload": { "type": "object", "additionalProperties": false, "required": ["failed_event_id", "attempt", "reason"], "properties": { "failed_event_id": { "$ref": "#/$defs/uuidV4" }, "attempt": { "type": "integer", "minimum": 1 }, "reason": { "enum": ["invalid_schema", "timeout", "sink_unavailable", "retry_exhausted"] } } },
+    "uuidV4": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+    },
+    "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$" },
+    "nonnegativeInteger": { "type": "integer", "minimum": 0 },
+    "inventoryProperties": {
+      "type": "object",
+      "required": ["office", "product_id", "product_category", "programme_id", "quantity", "currency"],
+      "properties": {
+        "office": { "enum": ["valencia", "miami"] },
+        "product_id": { "$ref": "#/$defs/id" },
+        "product_category": { "enum": ["training_kit", "certification", "onboarding_equipment"] },
+        "programme_id": { "$ref": "#/$defs/id" },
+        "quantity": { "$ref": "#/$defs/nonnegativeInteger" },
+        "currency": { "enum": ["EUR", "USD"] }
+      },
+      "allOf": [
+        { "if": { "properties": { "office": { "const": "valencia" } } }, "then": { "properties": { "currency": { "const": "EUR" } } } },
+        { "if": { "properties": { "office": { "const": "miami" } } }, "then": { "properties": { "currency": { "const": "USD" } } } }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "eventId": "10000000-0000-4000-8000-000000000001",
+      "event_type": "inbound_order_created",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T09:00:00Z",
+      "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sessionId": "30000000-0000-4000-8000-000000000001",
+      "requestId": "20000000-0000-4000-8000-000000000001",
+      "environment": "test",
+      "source": "inventory_api",
+      "properties": { "office": "valencia", "product_id": "101", "product_category": "training_kit", "programme_id": "ventas-b2b", "quantity": 10, "currency": "EUR", "order_id": "501", "supplier_id": "supplier-01", "unit_cost_minor": 1200, "total_cost_minor": 12000 }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000002",
+      "event_type": "outbound_order_created",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T10:00:00Z",
+      "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sessionId": "30000000-0000-4000-8000-000000000001",
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "environment": "test",
+      "source": "inventory_api",
+      "properties": { "office": "miami", "product_id": "102", "product_category": "certification", "programme_id": "liderazgo-basico", "quantity": 5, "currency": "USD", "order_id": "601", "stock_before": 12, "stock_after": 7 }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000003",
+      "event_type": "stock_threshold_triggered",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T10:00:00Z",
+      "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sessionId": "30000000-0000-4000-8000-000000000001",
+      "requestId": "20000000-0000-4000-8000-000000000002",
+      "environment": "test",
+      "source": "inventory_api",
+      "properties": { "office": "miami", "product_id": "102", "product_category": "certification", "programme_id": "liderazgo-basico", "quantity": 5, "currency": "USD", "order_id": "601", "stock_before": 12, "stock_after": 7, "minimum_stock": 10 }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000004",
+      "event_type": "direct_stock_edit_rejected",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T11:00:00Z",
+      "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sessionId": "30000000-0000-4000-8000-000000000001",
+      "requestId": "20000000-0000-4000-8000-000000000003",
+      "environment": "test",
+      "source": "inventory_api",
+      "properties": { "office": "valencia", "product_id": "103", "product_category": "onboarding_equipment", "programme_id": "onboarding-soporte", "quantity": 0, "currency": "EUR", "attempted_field": "current_stock", "reason": "direct_stock_write_forbidden" }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000005",
+      "event_type": "kit_cost_variance_detected",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T09:00:00Z",
+      "userId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sessionId": "30000000-0000-4000-8000-000000000001",
+      "requestId": "20000000-0000-4000-8000-000000000001",
+      "environment": "test",
+      "source": "inventory_api",
+      "properties": { "office": "valencia", "product_id": "101", "product_category": "training_kit", "programme_id": "ventas-b2b", "quantity": 10, "currency": "EUR", "order_id": "501", "supplier_id": "supplier-01", "unit_cost_minor": 1200, "reference_unit_cost_minor": 1000, "baseline_order_count": 5, "variance_percent": 20, "threshold_percent": 10 }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000006",
+      "event_type": "login_failed",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T11:01:00Z",
+      "userId": null,
+      "sessionId": "30000000-0000-4000-8000-000000000002",
+      "requestId": "20000000-0000-4000-8000-000000000004",
+      "environment": "test",
+      "source": "api",
+      "properties": { "method": "password", "duration_ms": 120, "reason": "invalid_credentials" }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000007",
+      "event_type": "section_viewed",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T11:02:00Z",
+      "userId": null,
+      "sessionId": "30000000-0000-4000-8000-000000000003",
+      "requestId": "20000000-0000-4000-8000-000000000005",
+      "environment": "test",
+      "source": "website",
+      "properties": { "section": "talent", "locale": "es" }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000008",
+      "event_type": "background_job_completed",
+      "schemaVersion": "2.0.0",
+      "timestamp": "2026-10-23T11:03:00Z",
+      "userId": null,
+      "sessionId": null,
+      "requestId": "20000000-0000-4000-8000-000000000006",
+      "environment": "test",
+      "source": "worker",
+      "properties": { "job_id": "40000000-0000-4000-8000-000000000001", "job_name": "telemetry_aggregate", "outcome": "success", "duration_ms": 250 }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000009",
+      "event_type": "web_vital_reported",
+      "schemaVersion": "2.1.0",
+      "timestamp": "2026-10-27T11:04:00Z",
+      "userId": null,
+      "sessionId": "30000000-0000-4000-8000-000000000003",
+      "requestId": "20000000-0000-4000-8000-000000000007",
+      "environment": "test",
+      "source": "backoffice",
+      "properties": { "metric": "LCP", "value": 1840.5, "rating": "good", "section": "inventory" }
+    }
+  ]
+}

@@ -1,20 +1,12 @@
 import { FormEvent, useState } from "react";
 import { Check, Pencil, Power, X } from "lucide-react";
+import { daysUntil, formatDateTime, formatMoney, renewalState } from "../../lib/format";
 import { CATEGORY_LABELS, type Supplier } from "../../types/suppliers";
 
 interface Props {
   supplier: Supplier;
   onRateChange: (id: number, rate: number) => Promise<void>;
   onToggleStatus: (supplier: Supplier) => Promise<void>;
-}
-
-const RENEWAL_WARNING_DAYS = 60;
-
-function daysUntil(dateStr: string): number {
-  const target = new Date(`${dateStr}T00:00:00`);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
 export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: Props) {
@@ -24,10 +16,8 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
 
   const suspended = supplier.status === "suspended";
   const days = supplier.contract_renewal_date ? daysUntil(supplier.contract_renewal_date) : null;
-  const renewalSoon = days !== null && days >= 0 && days <= RENEWAL_WARNING_DAYS;
-  const renewalOverdue = days !== null && days < 0;
-
-  const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: supplier.currency });
+  const renewalSoon = renewalState(days) === "soon";
+  const renewalOverdue = renewalState(days) === "overdue";
 
   const submitRate = async (event: FormEvent) => {
     event.preventDefault();
@@ -53,12 +43,13 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
     }
   };
 
+  // A suspended supplier is dimmed, but only to 80 %: at 60 % its grey text fell to 3.3:1 (WCAG AA needs 4.5:1).
   return (
-    <tr className={`border-t border-slate-800 ${suspended ? "opacity-60" : ""} ${renewalSoon ? "bg-amber-400/5" : ""}`}>
-      <td className="px-4 py-3">
+    <tr className={`border-t border-slate-800 ${suspended ? "opacity-80" : ""} ${renewalSoon ? "bg-amber-400/10" : ""}`}>
+      <td className={`px-4 py-3 ${renewalSoon ? "border-l-4 border-amber-400" : ""}`}>
         <p className="font-medium text-white">{supplier.name}</p>
         {supplier.contact_email && <p className="mt-0.5 text-xs text-slate-400">{supplier.contact_email}</p>}
-        {supplier.notes && <p className="mt-0.5 max-w-xs text-xs text-slate-500">{supplier.notes}</p>}
+        {supplier.notes && <p className="mt-0.5 max-w-xs text-xs text-slate-400">{supplier.notes}</p>}
       </td>
       <td className="px-4 py-3 text-sm text-slate-300">{supplier.country}</td>
       <td className="px-4 py-3">
@@ -92,21 +83,21 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
           </form>
         ) : (
           <div className="flex items-center gap-2">
-            {money.format(supplier.monthly_rate)}
+            {formatMoney(supplier.monthly_rate, supplier.currency)}
             <button
               onClick={() => {
                 setDraft(String(supplier.monthly_rate));
                 setEditing(true);
               }}
               aria-label={`Editar tarifa de ${supplier.name}`}
-              className="text-slate-500 hover:text-cyan-300"
+              className="text-slate-400 hover:text-cyan-300"
             >
               <Pencil size={14} />
             </button>
           </div>
         )}
-        <p className="mt-0.5 text-xs text-slate-500">
-          Actualizada {new Date(supplier.updated_at).toLocaleString("es-ES")}
+        <p className="mt-0.5 text-xs text-slate-400">
+          Actualizada {formatDateTime(supplier.updated_at)}
         </p>
       </td>
       <td className="px-4 py-3 text-sm">
@@ -117,14 +108,15 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
             {renewalOverdue && <span className="block text-xs">Fecha vencida</span>}
           </span>
         ) : (
-          <span className="text-slate-600">—</span>
+          <span className="text-slate-400">—</span>
         )}
       </td>
       <td className="px-4 py-3">
         <button
           onClick={toggle}
           disabled={busy}
-          aria-label={suspended ? `Activar ${supplier.name}` : `Suspender ${supplier.name}`}
+          // WCAG 2.5.3 (label in name): the accessible name starts with the visible text ("Activo"/"Suspendido").
+          aria-label={suspended ? `Suspendido: activar ${supplier.name}` : `Activo: suspender ${supplier.name}`}
           className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition disabled:opacity-60 ${
             suspended
               ? "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
