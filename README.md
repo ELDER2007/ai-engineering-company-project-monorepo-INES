@@ -1,4 +1,134 @@
-# AI Engineering Company Project — Student Template
+# Nexova | Full-Stack Operations Platform
+
+**A portfolio project by Ines, developed through the 4Geeks Academy AI Engineering programme.**
+
+[English](README.md) | [Español](README.es.md)
+
+Nexova is an HR consultancy case study used to build a public website and an internal operations platform. The repository brings together authenticated workflows, traceable inventory movements, supplier management, support incidents, and a business-driven telemetry design.
+
+**Core stack:** Python · FastAPI · SQLModel · PostgreSQL / Supabase · React · Next.js · TypeScript · Tailwind CSS.
+
+This is a learning and portfolio project developed from a course template with AI assistance. Implementation status, design proposals, and reproducible measurements are documented separately below.
+
+## Project Highlights
+
+| Area | What the repository demonstrates | Evidence |
+| --- | --- | --- |
+| Inventory | Stock derived from inbound/outbound orders; authenticated authors; insufficient-stock rejection; PostgreSQL row locking for concurrent withdrawals. | [Business logic](services/api/inventory/service.py) |
+| Authentication | JWT bearer authentication, bcrypt password hashing, account/profile separation, permissions, and protected backoffice navigation. | [API documentation](services/api/README.md), [backoffice](uis/backoffice/README.md) |
+| Operations | Supplier workflows, incident lifecycle/history, and CSV analysis using shared validation logic. | [Shared package](packages/shared/README.md), [API domains](services/api/README.md) |
+| Performance | Documented before/after measurements, root-cause analysis, and experiments that were reverted when evidence did not support them. | [Audit](AUDIT.md), [results](REPORT.md), [raw evidence](docs/performance/) |
+| Telemetry design | 40 event contracts: five mandatory and 35 identified opportunities; 12 inventory instrumentation points, privacy rules, correlation, and batch/stream decisions. Not instrumented yet. | [Telemetry plan](docs/telemetry/telemetry-plan.md), [JSON Schema](docs/telemetry/event-schemas.json) |
+
+## Engineering Case Studies
+
+### Traceable Inventory Instead of Editable Stock
+
+Stock is calculated from orders rather than stored as an editable balance. The API records the authenticated author, enforces office consistency, and refuses withdrawals above available stock. PostgreSQL locks the asset row while checking and registering a withdrawal. These choices keep business rules in the backend rather than relying on the browser's displayed balance.
+
+### Performance Improvements With Evidence
+
+The recorded Lighthouse audit shows Performance increasing from **87 to 100** on incidents and **83 to 100** on suppliers. CLS fell from **0.255 to 0.014** and **0.351 to 0**, respectively. These are historical laboratory results for the audited production builds, not live production monitoring, current-run results, or guarantees for every device. See the [measurement method and limitations](REPORT.md).
+
+### Turning Business Questions Into Event Contracts
+
+The [telemetry deliverable](docs/telemetry/README.md) translates an operations RFI into event hypotheses, concrete decisions, owners, priorities, schemas, and acceptance scenarios. Its 40 allowlists are matched against a 50-key typed data dictionary, with per-event privacy treatment and a business rationale for 16 stream and 24 batch events. Frequency controls, risks, and deliberately excluded data are documented. It separates committed orders from clicks, local validation from API rejection, and a locally confirmed talent form from an application actually received by a server. Capture, outbox, ingestion, and dashboards remain future implementation work.
+
+The [evaluation matrix](docs/telemetry/telemetry-plan.md#matriz-de-la-rubrica-de-evaluacion) maps the ten assignment criteria to concrete design evidence and distinguishes local validation from instructor approval and future implementation.
+
+## Architecture and Trade-Offs
+
+```text
+Public website: React + Vite          Internal backoffice: Next.js
+			     FastAPI API
+		Inventory: SQLModel + PostgreSQL / Supabase
+	Accounts, profiles, suppliers, incidents: TinyDB
+```
+
+- **Modular monolith:** one API with domain routers and service-layer business logic, rather than premature microservices.
+- **Two persistence layers:** relational inventory plus existing TinyDB domains. TinyDB limits multi-worker operation and is not presented as a scalable production database.
+- **Shared contracts:** incident rules are reused across the API, CLI, and backoffice to reduce validation drift.
+- **Explicit security boundary:** browser guards improve navigation; API authentication and authorization enforce access.
+
+See the [architecture proposal](docs/ARCHITECTURE_PROPOSAL.md) and [backend documentation](services/api/README.md) for implementation details and constraints.
+
+## Run Locally
+
+Prerequisites: Node.js 22.12+ with npm, Python 3.10+, and uv. Run these commands from a local clone; do not commit credentials.
+
+Backend, starting from the repository root:
+
+```bash
+cd services/api
+uv sync
+cp -n .env.example .env
+```
+
+Before starting, configure `SECRET_KEY` and first-run `AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` locally, following the [API configuration guide](services/api/README.md#configuration). Set `DATABASE_URL` for Supabase; without it, inventory uses the development-only SQLite fallback. Keep TinyDB-backed domains on a single API worker.
+
+```bash
+uv run uvicorn main:app --reload --port 8000
+```
+
+In a second terminal at the repository root:
+
+```bash
+npm install
+npm run dev:backoffice
+```
+
+In a third terminal at the repository root:
+
+```bash
+npm run dev
+```
+
+Default local URLs: website `http://localhost:5173`, backoffice `http://localhost:5174`, API documentation `http://localhost:8000/docs`. Proxy configuration and end-to-end prerequisites are explained in the [backoffice guide](uis/backoffice/README.md).
+
+## Validation and Reproducibility
+
+Available checks from the repository root:
+
+```bash
+npm run typecheck
+npm run typecheck:backoffice
+npm run test:shared
+npm run test:backoffice
+```
+
+For backend tests, run `uv run pytest` from the API directory. This README lists available checks, not a claim that every suite currently passes. Setup, fixtures, coverage scope, and end-to-end requirements are documented in [TESTING.md](TESTING.md) and the [testing plan](docs/testing-plan.md). Telemetry schema validation is documented in its [README](docs/telemetry/README.md).
+
+## Scope and Next Steps
+
+Implemented: public website, authenticated backoffice, API domains, relational inventory, shared incident rules, and test suites. Documented: performance evidence and telemetry design. Pending: telemetry instrumentation and storage, production hardening, and future AI integrations. The current talent form only confirms locally; it does not persist applications to the API. Do not infer deployed RAG, agents, or automated workflows from template directories.
+
+## Explore the Work
+
+- [Business briefing](nexova-BRIEFING.es.md) and [architecture](docs/ARCHITECTURE_PROPOSAL.md).
+- [Learning journal](aprendiendo%20con%20la%20ia.md): decisions, mistakes, solutions, and the role of AI assistance.
+- [Authentication case study](aprendiendo%20con%20la%20ia%20-%20AUTH-02.md) and [performance case study](aprendiendo%20con%20la%20ia%20-%20PERF-AUDIT.md).
+- [Public website source](uis/website/) and [backoffice source](uis/backoffice/).
+
+## Credits
+
+Developed as part of the 4Geeks Academy AI Engineering programme, from its company-project template. Original template attribution and historical guidance are preserved below. The learning journal documents implementation decisions, verification, and AI-assisted work.
+
+<details>
+<summary>Historical Course Template and Earlier Milestone Notes</summary>
+
+The following material is preserved for provenance. Its template-only status statements and earlier milestone snapshots do not describe the current project.
+
+# Nexova — AI Engineering Company Project
+
+## Current Project: Inventory Telemetry Design
+
+Nexova's monorepo contains the public website (`uis/website`), internal backoffice (`uis/backoffice`), centralized FastAPI API (`services/api`), shared packages, scripts, and cross-cutting documentation. The inventory API already derives stock from inbound/outbound orders; this milestone designs telemetry for training materials, certifications, and onboarding equipment without changing the running applications.
+
+Start with the [telemetry project README](docs/telemetry/README.md), the [telemetry plan](docs/telemetry/telemetry-plan.md), and the [event schemas and examples](docs/telemetry/event-schemas.json). Requirements come from the [Nexova briefing](nexova-BRIEFING.es.md). Decisions, findings, and verification are recorded in the [learning journal](aprendiendo%20con%20la%20ia.md#telemetria-plan-de-diseno).
+
+The expanded management RFI covers 40 event types: five explicitly classified as mandatory and 35 identified opportunities across inventory, authentication, navigation, flow abandonment, suppliers, incidents, website interactions, technical health, and internal processes. Phase 1 maps the complete inventory workflow with 12 instrumentation points, including rejected direct stock edits, failed validations, and minimum-stock crossings. The plan assigns hypotheses, decisions, owners, priorities, and batch/stream processing; it also covers section loading and client-side validation failures. Schema 2.0.0 adopts the requested session/correlation envelope and includes eight examples.
+
+This milestone delivers design documentation only. No new server, collector, database, or dashboard has been deployed. No PR has been created or merged. The original template guide and previous milestones remain below as historical/reference material; its template-only status does not describe the current implemented applications.
 
 [![4Geeks Academy](https://img.shields.io/badge/4Geeks-Academy-blue)](https://4geeksacademy.com)
 [![AI Engineering](https://img.shields.io/badge/track-AI%20Engineering-green)](https://4geeksacademy.com/es/programas-de-carrera/ingenieria-ia)
@@ -6,6 +136,34 @@
 _Base template for transversal projects in the AI Engineering Career Program — 4Geeks Academy._
 
 _Estas instrucciones tambien estan disponibles en [espanol](./README.es.md)._
+
+---
+
+## 📦 Delivery: performance audit (Lighthouse)
+
+Everything of the audit is in this repository, on `main`:
+
+| What | Where |
+|---|---|
+| **Audit**: baseline scores, root cause of every problem, duplication cases, what the agent skills identify | [`AUDIT.md`](./AUDIT.md) |
+| **Report**: every improvement, before/after scores, impact of each commit, INP, what had most impact | [`REPORT.md`](./REPORT.md) |
+| **Lighthouse screenshots** | [`audit/before/`](./audit/before/) · [`audit/after/`](./audit/after/) |
+| Raw evidence (Lighthouse JSON, per-commit results, INP, A/B runs) | [`docs/performance/`](./docs/performance/) |
+| Study notes (how it was done, decisions, mistakes) | [`aprendiendo con la ia - PERF-AUDIT.md`](./aprendiendo%20con%20la%20ia%20-%20PERF-AUDIT.md) |
+
+In one line: all four Lighthouse categories went to 100 on the website (mobile and desktop) and on the backoffice, the backoffice's layout shifts (CLS 0.255 and 0.351) were fixed (Performance 87 and 83 → 100), and every commit fixes one problem and was measured. How to reproduce it: [`REPORT.md` §8](./REPORT.md#8-cómo-reproducir).
+
+---
+
+## 📦 Delivery: caching optimisation
+
+| What | Where |
+|---|---|
+| **Technical report**: evidence, frontend and backend decisions, TTLs and invalidation, trade-offs, what was not cached and why | [`CACHING_REPORT.md`](./CACHING_REPORT.md) |
+| Raw measurements (before/after benchmarks, small vs large volume, bundle sizes) | [`docs/caching/`](./docs/caching/) |
+| Tools to reproduce it (load seeder, endpoint benchmark, bundle size) | [`scripts/seed_load.py`](./scripts/seed_load.py) · [`scripts/bench_endpoints.py`](./scripts/bench_endpoints.py) · [`scripts/bundle-size.mjs`](./scripts/bundle-size.mjs) |
+
+In one line: five read endpoints are cached in process with a TTL and explicit invalidation (`GET /inventory/orders` 914 ms → 20 ms), three on-demand components are lazy loaded and the order history sorts once per load instead of on every filter change. How to reproduce it: [`CACHING_REPORT.md` §8](./CACHING_REPORT.md#8-cómo-reproducir).
 
 ---
 
@@ -49,7 +207,71 @@ You are building **one company** across many milestones and projects. Each top-l
 
 ---
 
-## Current project status
+## Asynchronous tasks: Celery worker, Redis and Flower
+
+A request must not wait for slow work. `POST /tasks/pipeline-runs` leaves a small message in **Redis** and answers `202 Accepted` with a `task_id` at once; a **Celery worker**, a process of its own (never inside FastAPI), takes it and runs the pipeline; `GET /tasks/{task_id}` tells how it goes. **Flower** shows the queue. The code is `services/celery_app.py` (the Celery app) and `services/api/async_tasks/` (tasks, retries, dead-letter queue, endpoints); its README explains the decisions.
+
+| Service | What it is | Where |
+| --- | --- | --- |
+| `redis` | The queue and the outcomes (official image, `noeviction`, 256 MB, persisted) | `127.0.0.1:6379` |
+| `worker` | Runs the tasks. A process of its own | no port |
+| `flower` | The panel: queued, running and finished tasks | http://localhost:5555 (`admin` / `admin`, change it with `FLOWER_BASIC_AUTH`) |
+
+Flower keeps what it has seen **in memory**: if its container restarts, its list is empty until new tasks run. Nothing is lost: the outcomes stay in Redis for a day (`GET /tasks/{task_id}` still answers) and the failed ones are in the table `task_dead_letters`.
+
+### Start the worker
+
+```bash
+docker compose up -d redis worker flower      # or just `docker compose up`: they start with the rest
+docker compose logs -f worker                 # one line per execution: task_id, attempt, status, duration
+```
+
+Without Docker (from the root of the repository, with Redis on `localhost:6379`, `REDIS_URL` if it is elsewhere):
+
+```bash
+celery -A services.celery_app worker --loglevel=INFO -E --concurrency=1
+```
+
+### Stop the worker
+
+```bash
+docker compose stop worker                    # asks it to finish the task it is running (Warm shutdown), up to 2 minutes
+docker compose stop redis worker flower       # everything of the queue
+```
+
+Without Docker: `Ctrl+C` once (a Warm shutdown: it finishes the running task and takes no more). A second `Ctrl+C`, or `kill -9`, is a cold stop.
+
+### Is it alive?
+
+```bash
+docker compose exec worker celery -A services.celery_app inspect ping     # -> pong
+docker compose ps                                                          # worker: healthy
+```
+
+### Use it
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -d "username=EMAIL&password=PASSWORD" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"week_start":"2026-10-26"}' localhost:8000/tasks/pipeline-runs   # 202 {"task_id": "..."}
+curl -H "Authorization: Bearer $TOKEN" localhost:8000/tasks/TASK_ID    # {"task_id": "...", "status": "pending|started|success|failure", "result": ...}
+```
+
+### What happens when something stops
+
+| What stops | What happens |
+| --- | --- |
+| The **API** | Nothing to the worker: it keeps running what is queued. The messages are in Redis |
+| The **worker**, with `docker compose stop` (Warm shutdown) | It finishes the task it is running. The queued ones wait in Redis until a worker is back |
+| The worker, killed (`kill -9`, out of memory) | The message was not confirmed (`acks_late`: it is confirmed AFTER the work), so Redis delivers it again after 15 minutes. The pipeline is idempotent: running a week twice rewrites the same rows |
+| **Redis**, restarted | The queue survives (`appendonly`). The worker reconnects by itself |
+| **Redis**, down or full | The API answers `503` (not a stack trace) and keeps serving everything else |
+| A task fails | It is retried after 5 s and then 10 s (growing, never immediately). The third failure ends in the table `task_dead_letters` (`task_id`, attempt, error, moment); `GET /tasks/dead-letters` lists it (admins) |
+
+Settings (all optional, see `.env.example`): `REDIS_URL`, `REDIS_PORT`, `REDIS_MAXMEMORY`, `FLOWER_BASIC_AUTH`, `FLOWER_PORT`, `CELERY_CONCURRENCY`, `ASYNC_RETRY_BASE_SECONDS`. Tests: `python -m pytest tests/async_tasks services/api/tests/test_async_tasks_api.py`.
+
+---
+
+## Current status of the template
 
 This monorepo already contains runnable applications for Nexova:
 
@@ -309,3 +531,5 @@ This template was built as part of the 4Geeks Academy AI Engineering Career Prog
 You can find other templates and resources like this at the [4Geeks Academy GitHub page](https://github.com/4geeksacademy).
 
 _This template is maintained by 4Geeks Academy for the AI Engineering track. For exclusive use in the programme._
+
+</details>

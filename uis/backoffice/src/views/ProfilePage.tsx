@@ -3,30 +3,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import { ErrorBanner, inputClass } from "../components/ui/Field";
 import { ApiError } from "../lib/api";
-import { validateProfileFields, type ProfileFieldValues } from "../lib/profileFields";
-import type { Me, ProfileUpdate } from "../types/auth";
-
-const inputClass =
-  "mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none aria-[invalid=true]:border-rose-500";
+import { profileChanges, toProfileForm, validateProfileFields, type ProfileFieldValues } from "../lib/profileFields";
 
 type Field = keyof ProfileFieldValues;
 type FieldErrors = Partial<Record<Field, string>>;
-
-const toForm = (me: Me): ProfileFieldValues => ({
-  name: me.profile.name,
-  phone: me.profile.phone ?? "",
-  address: me.profile.address ?? "",
-});
-
-/** Only what changed; an emptied optional field is sent as null, which the API reads as "clear it". */
-function diff(saved: ProfileFieldValues, form: ProfileFieldValues): ProfileUpdate {
-  const update: ProfileUpdate = {};
-  if (form.name.trim() !== saved.name) update.name = form.name.trim();
-  if (form.phone.trim() !== saved.phone) update.phone = form.phone.trim() || null;
-  if (form.address.trim() !== saved.address) update.address = form.address.trim() || null;
-  return update;
-}
 
 export default function ProfilePage() {
   const { user, refreshUser, saveProfile } = useAuth();
@@ -50,19 +32,17 @@ export default function ProfilePage() {
   }, [refreshUser]);
 
   useEffect(() => {
-    if (loaded && user) setForm(toForm(user));
+    if (loaded && user) setForm(toProfileForm(user));
   }, [loaded, user]);
 
   if (loadError) {
     return (
-      <div role="alert" className="mx-auto max-w-2xl rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-        {loadError}
-      </div>
+      <ErrorBanner message={loadError} className="mx-auto max-w-2xl" />
     );
   }
   if (!user || !form) return <p className="text-sm text-slate-400">Cargando tu perfil…</p>;
 
-  const update = diff(toForm(user), form);
+  const update = profileChanges(toProfileForm(user), form);
   const dirty = Object.keys(update).length > 0;
 
   const change = (field: Field) => (value: string) => {
@@ -107,7 +87,7 @@ export default function ProfilePage() {
     onChange: (e: { target: { value: string } }) => change(field)(e.target.value),
     "aria-invalid": fieldErrors[field] ? true : undefined,
     "aria-describedby": fieldErrors[field] ? `${field}-error` : undefined,
-    className: inputClass,
+    className: `${inputClass} mt-1`,
   });
   const fieldError = (field: Field) =>
     fieldErrors[field] && (
@@ -124,8 +104,8 @@ export default function ProfilePage() {
       <form onSubmit={handleSubmit} noValidate className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
         <div className="text-sm text-slate-300">
           <label htmlFor="email">Email</label>
-          <input id="email" type="email" value={user.email} readOnly aria-readonly className={`${inputClass} cursor-not-allowed text-slate-400`} />
-          <span className="mt-1 block text-xs text-slate-500">Es el email con el que inicias sesión; no se cambia desde aquí.</span>
+          <input id="email" type="email" value={user.email} readOnly aria-readonly className={`${inputClass} mt-1 cursor-not-allowed text-slate-400`} />
+          <span className="mt-1 block text-xs text-slate-400">Es el email con el que inicias sesión; no se cambia desde aquí.</span>
         </div>
         <div className="mt-4 text-sm text-slate-300">
           <label htmlFor="name">Nombre</label>
@@ -144,9 +124,7 @@ export default function ProfilePage() {
         </div>
 
         {error && (
-          <div role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-            {error}
-          </div>
+          <ErrorBanner message={error} className="mt-4" />
         )}
         {saved && (
           <div role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
@@ -168,7 +146,7 @@ export default function ProfilePage() {
             type="button"
             disabled={saving || !dirty}
             onClick={() => {
-              setForm(toForm(user));
+              setForm(toProfileForm(user));
               setFieldErrors({});
               setError(null);
             }}

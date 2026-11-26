@@ -177,7 +177,14 @@ await fill(current, THIRD);
 await page.getByRole("status").waitFor();
 ok(/Contraseña cambiada/.test(await page.getByRole("status").innerText()) && (await page.getByLabel("Contraseña actual").inputValue()) === "", "contraseña cambiada: aviso y formulario vacío");
 ok(!(await apiLogin(current)).ok && (await apiLogin(THIRD)).ok, "en la API: la contraseña anterior ya no entra y la nueva sí");
-ok((await token()) === sessionToken, "la sesión abierta sigue activa");
+// el cambio cierra la sesión: la siguiente llamada a la API responde 401 y se pide login
+await page.reload();
+await page.waitForURL("**/login**");
+ok((await token()) === null, "tras cambiar la contraseña, la sesión anterior deja de valer");
+await page.getByLabel("Email").fill(EMAIL);
+await page.getByLabel("Contraseña").fill(THIRD);
+await page.getByRole("button", { name: "Entrar" }).click();
+await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 
 // 6. con sesión, /forgot-password devuelve a la app; sin sesión, /account/change-password pide login
 await page.goto(`${APP}/forgot-password`);

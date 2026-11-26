@@ -1,61 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
-import AuthShell from "../components/AuthShell";
-import { ApiError } from "../lib/api";
-import { validateNewPassword } from "../lib/password";
-import { validateProfileFields } from "../lib/profileFields";
+import { ErrorBanner, inputClass } from "../components/ui/Field";
+import { emptyForm, signUpErrorFromApi, validateSignUp, type Field, type FieldErrors, type Form } from "../lib/signUpForm";
 import type { SignUpPayload } from "../types/auth";
-
-const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none aria-[invalid=true]:border-rose-500";
-
-// The API's own limits (services/api/users/schemas.py, UserCreate) live in lib/password and lib/profileFields.
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-type Field = "email" | "password" | "confirmPassword" | "name" | "phone" | "address";
-type FieldErrors = Partial<Record<Field, string>>;
-type Form = Record<Field, string>;
-
-const emptyForm: Form = { email: "", password: "", confirmPassword: "", name: "", phone: "", address: "" };
-
-function validate(form: Form): FieldErrors {
-  const errors: FieldErrors = {};
-  const email = form.email.trim();
-  if (!email) errors.email = "El email es obligatorio.";
-  else if (!EMAIL_PATTERN.test(email)) errors.email = "El email no es válido.";
-
-  const passwordError = validateNewPassword(form.password);
-  if (passwordError) errors.password = passwordError;
-
-  if (form.confirmPassword !== form.password) errors.confirmPassword = "Las contraseñas no coinciden.";
-
-  return { ...errors, ...validateProfileFields(form, { nameRequired: false }) };
-}
-
-/** Translates the API's rejection into per-field messages where possible, plus a general one. */
-function fromApiError(err: unknown): { fields: FieldErrors; general: string | null } {
-  if (!(err instanceof ApiError)) {
-    return { fields: {}, general: "No se pudo crear la cuenta. Comprueba tu conexión e inténtalo de nuevo." };
-  }
-  if (err.status === 409) return { fields: { email: "Ya existe una cuenta con ese email." }, general: null };
-  if (err.status === 422) {
-    const fields: FieldErrors = {};
-    const unknown: string[] = [];
-    for (const [field, message] of Object.entries(err.fieldErrors)) {
-      if (field in emptyForm) fields[field as Field] = message;
-      else unknown.push(message);
-    }
-    const general =
-      unknown.length || !Object.keys(fields).length ? `Revisa los datos del formulario. ${unknown.join(" ")}`.trim() : null;
-    return { fields, general };
-  }
-  return { fields: {}, general: "No se pudo crear la cuenta. Inténtalo de nuevo." };
-}
 
 export default function RegisterPage() {
   const { status, register } = useAuth();
@@ -81,7 +33,7 @@ export default function RegisterPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    const errors = validate(form);
+    const errors = validateSignUp(form);
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
 
@@ -97,7 +49,7 @@ export default function RegisterPage() {
       const outcome = await register(payload);
       if (outcome !== "authenticated") setCreated(true); // otherwise the effect above redirects
     } catch (err) {
-      const { fields, general } = fromApiError(err);
+      const { fields, general } = signUpErrorFromApi(err);
       setFieldErrors(fields);
       setError(general);
     } finally {
@@ -107,7 +59,7 @@ export default function RegisterPage() {
 
   if (created) {
     return (
-      <AuthShell title="Crear cuenta">
+      <Shell>
         <div role="status" className="mt-6 flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
           <p>Cuenta creada, pero no se pudo iniciar sesión automáticamente. Inicia sesión con tus datos.</p>
@@ -118,7 +70,7 @@ export default function RegisterPage() {
         >
           Ir a iniciar sesión
         </Link>
-      </AuthShell>
+      </Shell>
     );
   }
 
@@ -137,7 +89,7 @@ export default function RegisterPage() {
     );
 
   return (
-    <AuthShell title="Crear cuenta">
+    <Shell>
       <form onSubmit={handleSubmit} noValidate>
         <div className="mt-4 text-sm text-slate-300">
           <label className="block">
@@ -161,7 +113,7 @@ export default function RegisterPage() {
           {fieldError("confirmPassword")}
         </div>
 
-        <p className="mt-6 text-xs uppercase tracking-widest text-slate-500">Perfil (opcional)</p>
+        <p className="mt-6 text-xs uppercase tracking-widest text-slate-400">Perfil (opcional)</p>
         <div className="mt-2 text-sm text-slate-300">
           <label className="block">
             Nombre
@@ -185,9 +137,7 @@ export default function RegisterPage() {
         </div>
 
         {error && (
-          <div role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-            {error}
-          </div>
+          <ErrorBanner message={error} className="mt-4" />
         )}
 
         <button
@@ -201,10 +151,25 @@ export default function RegisterPage() {
       </form>
       <p className="mt-4 text-center text-sm text-slate-400">
         ¿Ya tienes cuenta?{" "}
-        <Link href="/login" className="text-cyan-300 hover:text-cyan-200">
+        <Link href="/login" className="text-cyan-300 underline hover:text-cyan-200">
           Inicia sesión
         </Link>
       </p>
-    </AuthShell>
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        <p className="text-xl font-black text-white">
+          nexova<span className="text-cyan-400">.</span>
+        </p>
+        <p className="text-xs uppercase tracking-widest text-slate-400">Backoffice</p>
+        <h1 className="mt-6 text-lg font-semibold text-white">Crear cuenta</h1>
+        {children}
+      </div>
+    </div>
   );
 }

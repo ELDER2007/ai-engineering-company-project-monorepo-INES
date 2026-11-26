@@ -38,6 +38,9 @@ def _normalize_email(value):
 def _check_password_bytes(value: str | None) -> str | None:
     if value is not None and len(value.encode("utf-8")) > MAX_PASSWORD_BYTES:
         raise ValueError(f"password must be at most {MAX_PASSWORD_BYTES} bytes long")
+    # bcrypt raises on a NUL byte: refuse it here (422) instead of crashing in hash_password (500).
+    if value is not None and "\x00" in value:
+        raise ValueError("password must not contain NUL characters")
     return value
 
 
@@ -71,6 +74,8 @@ class User(BaseModel):
     is_active: bool = True
     role: Role = Role.user
     created_at: datetime = Field(default_factory=_utcnow)
+    # Set whenever the password changes: tokens issued before it stop working (see auth.dependencies).
+    password_changed_at: datetime | None = None
 
 
 # Optional initial profile data. Stripped per field: a blanket ``str_strip_whitespace``
@@ -132,8 +137,11 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
-class SignUpOut(UserOut):
-    """Answer of the public sign-up: the new (active) user and what happens next."""
+class SignUpOut(BaseModel):
+    """Answer of the public sign-up: a generic confirmation and nothing else. The email is in
+    the request and is not sent back (an unauthenticated flow must not echo it); the role
+    (always ``user``), the state (always active), the id and ``created_at`` are not echoed
+    either. The client signs in next, with the credentials it already has."""
 
     message: str
 

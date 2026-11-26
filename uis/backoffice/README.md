@@ -1,7 +1,8 @@
 # Nexova Backoffice (`uis/backoffice`)
 
-Internal operations app, built with **Next.js 16 (App Router)**, React 19 and Tailwind. Tools: **Análisis de
-incidentes** (uploads a support-ticket CSV to `services/api` and shows the validation/metrics report),
+Internal operations app, built with **Next.js 16 (App Router)**, React 19 and Tailwind. Tools: **Incidencias**
+(the incident manager: summary panel, filters by status/category/origin/branch, list, report/edit form, detail with lifecycle and history),
+**Análisis de incidentes** (uploads a support-ticket CSV to `services/api` and shows the validation/metrics report),
 **Proveedores** (supplier directory), **Mi perfil** and **Cambiar contraseña**.
 
 ## Structure
@@ -18,7 +19,7 @@ src/
 │   ├── (app)/                session required
 │   │   ├── layout.tsx        layout guard: <RequireAuth> + sidebar
 │   │   ├── page.tsx          /
-│   │   ├── incidents/        /incidents
+│   │   ├── incidents/        /incidents (manager), /incidents/[incidentId] (detail), /incidents/analysis (CSV report)
 │   │   ├── suppliers/        /suppliers
 │   │   ├── account/profile/  /account/profile
 │   │   └── account/change-password/ /account/change-password
@@ -90,7 +91,7 @@ it is never reported as a failed sign-up.
   The page declares a `no-referrer` policy, so the token in the URL is never sent to another site.
 - **Changed** — `/account/change-password` (sidebar: "Cambiar contraseña") asks for the current password and the new one
   twice, and posts to `POST /auth/change-password`. A wrong current password is a `400`, shown next to the field;
-  it is not a `401`, so it does not end the session. The open session keeps working after the change.
+  it is not a `401`, so it does not end the session. The change closes every earlier session, this one included: the next call to the API answers `401` and the app asks to log in again.
 - The three forms check the API's password rules (8 characters, 72 bytes) before sending (`src/lib/password.ts`).
 - In development the API prints the emails instead of sending them (`EMAIL_BACKEND=console`): copy the reset link
   from the API's terminal. See `services/api/README.md`.
@@ -109,6 +110,37 @@ it is never reported as a failed sign-up.
 - `/incidents` — CSV upload (drag & drop or file picker) → metrics (totals, invalid records by rule,
   category/status breakdown with percentages, satisfaction distribution) → CSV download button.
 - `/suppliers` — supplier directory: list, filters, create, edit rate, suspend/activate.
+- `/inventory/products` — stock of every asset (`GET /inventory/products`) with its `current_stock`, colour-coded:
+  red = no stock, amber = low (`LOW_STOCK_THRESHOLD`, 5 units, documented in `src/lib/inventoryRules.ts`), green = fine.
+  Lowest stock first; filters by office, category, level and name/SKU. Each row has an "Entrada" and a "Salida" link
+  that open the forms with that asset preselected (`?asset=<id>`). `/inventory` redirects here.
+- `/inventory/orders/inbound` — entrada de activos (`POST /inventory/orders/inbound`): the asset is picked by name; after
+  a send the form is cleared and a confirmation shown; an API error is shown in the page.
+- `/inventory/orders/outbound` — salida de activos, an allocation to an employee or a consumption
+  (`POST /inventory/orders/outbound`). The `current_stock` of the selected asset is shown (and follows the selection)
+  before a quantity is typed; a quantity above it is warned about while typing; the API's 400 is shown next to the
+  quantity field.
+- `/inventory/orders` — read-only history of entries and exits: asset name, quantity, type, date and the `user_uuid`
+  that created each one (with the user's name, from `GET /users/directory`, when it is known).
+- `/reporting` — **Reporte semanal de desempeño por oficina y programa**, the business dashboard for the leadership
+  (the CEO and the L&D manager), not for developers. It shows the four KPIs of the data-pipelines briefing — "Costo de
+  material por oficina/programa", "Kits entregados", "Frecuencia de escasez" and "Frecuencia de variación de costo" —
+  each with its name and its definition from the briefing, a total and a table per office and programme, for one
+  week at a time (the latest computed one at first, with buttons to move between weeks) and with the period it covers
+  and when the data was last updated. It also says, in plain words, when the process that computes the numbers has never
+  run or has not updated them for 8 days or more, and warns when the week shown may not have been collected (no activity
+  recorded, or far less than usual: the `data_health` notes of the last run, shown only for the week that run computed).
+  Euros and dollars are never added together. Plain Spanish, no codes or jargon.
+  It reads `GET /reporting/weekly-office-program-performance` (the rows the pipeline writes in
+  `reporting.weekly_office_program_performance`) and `GET /reporting/pipeline-runs/latest`, any logged-in user.
+  The calls are in `src/lib/reporting.ts`, where the four KPIs are defined; the page is `src/views/BusinessPerformancePage.tsx`.
+
+The calls to `/inventory/*` are all in `src/lib/inventory.ts` (no component calls `fetch`); the rules and texts
+(thresholds, validation, error messages) are in `src/lib/inventoryRules.ts`. Names follow the Hito 5 CONTEXT: "activo",
+"entrada de activos", "salida de activos", "asignación"/"consumo".
+
+All of them are behind the login guard. The office of an order is always the asset's own office (the API rejects any
+other), so the forms show it instead of asking for it.
 
 ## API calls in development
 
@@ -116,6 +148,13 @@ The app calls the API on its own origin, and `next.config.mjs` rewrites those ca
 (`API_PROXY_TARGET`, default `http://localhost:8000`). No CORS, and in Codespaces only port 5174 needs forwarding.
 `/api` and `/auth` always go to the API; `/users` and `/profiles` only for API calls, not browser page loads.
 To call an API on another domain instead, set `NEXT_PUBLIC_API_BASE_URL` (see `.env.example`).
+
+The inventory API (`/inventory/*`) is reached as `/api/inventory/*`, because `/inventory/orders` is also a page of
+the app. `next.config.mjs` forwards it to `NEXT_PUBLIC_INVENTORY_API_URL` (from `.env.local`; default
+`API_PROXY_TARGET`). The browser still only talks to its own origin.
+
+The reporting API (`/reporting/*`) is reached as `/api/reporting/*` for the same reason: `/reporting` is also a page of the app.
+`next.config.mjs` forwards it to `API_PROXY_TARGET`.
 
 ## Running locally
 
@@ -142,6 +181,41 @@ TypeScript 7 (the native compiler) no longer ships.
 `AGENTS.md` / `CLAUDE.md` are written by `next dev` itself (notes for AI coding assistants); they are committed
 so the working tree stays clean.
 
+## Telemetry (event capture)
+
+Every event of the approved catalogue that this app can observe is captured at the moment it happens, queued in memory and sent in
+batches to the endpoint in `NEXT_PUBLIC_TELEMETRY_ENDPOINT` (build-time; in `.env.local`, `/telemetry/events` today, which Next.js
+forwards to the API: no CORS, and it works in a Codespace opened in the browser; the real endpoint later: the app does not change). Contract: [docs/telemetry/](../../docs/telemetry/README.md).
+
+- **One public function: `track(eventType, properties)`** from `src/lib/telemetry` (`index.ts` exports nothing else). `properties` is
+  checked at compile time against the contract (`events.ts`), so an undeclared key does not compile. No component calls `fetch`
+  for telemetry; the service is the only thing that does. Callers never pass `eventId`, `sessionId`, `timestamp`,
+  `schemaVersion`, `requestId` or `environment`: the service adds them. (`userId` is null in the browser and the server stamps the
+  pseudonym from the verified session, because the browser must never hold the HMAC key. An optional third argument,
+  `{ requestId }`, only exists to correlate an event with the `X-Request-ID` of the HTTP request that caused it.)
+- **`TelemetryService`** (`src/lib/telemetry/`, started by the first `track()`): an in-memory queue; the batch leaves when it
+  reaches 20 events or 10 s after the first, whichever comes first; the page being hidden (`visibilitychange`) or closed
+  (`pagehide`) flushes with `navigator.sendBeacon` (the events that need the user's identity use `fetch` with `keepalive`, because a
+  beacon cannot carry `Authorization`); at logout, the events that need the user's identity leave at once with the token that still exists (a batch flushed after the session ended would reach the receiver anonymous and be refused); a failed batch is retried 3 times with exponential backoff (1, 2, 4 s) and then dropped;
+  the queue holds at most 100 events / 256 KB (oldest dropped). Each event keeps the timestamp of its capture. A new analytic
+  session (`sessionId`, in `sessionStorage`) starts at each login and logout, detected from the token itself. It does nothing without
+  an endpoint, on the server, or with Do Not Track / GPC.
+- **Authentication events** are in `lib/api.ts`, in the one `login()`/`register()` every login goes through (not on each page): the reason of
+  a failure comes from the HTTP status, never from what was typed (`lib/authTelemetry.ts`); the success is reported *before* the token
+  is stored, so it belongs to the session of the attempt. No answer at all is `application_error_occurred` (`network_failed`), not a
+  `login_failed`: the contract has no `network_error` reason and it would skew the API's failure rate.
+- **Web Vitals** (`web_vital_reported`, contract 2.1.0): `useReportWebVitals` in `TelemetryProvider` sends LCP, CLS, INP, FCP and
+  TTFB with the section of the page the visit *landed on*.
+- **Where events come from:** `lib/inventory.ts` (the five mandatory events and the inventory refusals, from the facts the API
+  computes in the order's transaction; `lib/inventoryTelemetry.ts` is the translation), `lib/telemetry/useFlow.ts` (the flow of the
+  entry/exit forms), `TelemetryProvider` (page views, unhandled errors), `lib/useAsyncResource.ts` (section loads),
+  `lib/api.ts` (session expired, network failures), `AuthContext` (logout).
+- **Not captured here, on purpose:** `http_request_completed` and `dependency_call_completed` (only the server knows), `supplier_deleted`
+  and `product_*` (the app has no screen for them), `talent_*` (the website) and the worker events: 32 of the 41 events are captured.
+  The events the API decides (logins, suppliers, incidents...) are relayed from the API's response; the receiver pins their `source`.
+  The shell has no `component` in the contract, so an unhandled error on the home page is not reported.
+- Never in an event: names, e-mails, tokens, free text, typed values. An asset without programme/category emits nothing.
+
 ## End-to-end tests
 
 With the API and the backoffice running (`npm run dev`, or `npm run build && npm run start`) and
@@ -156,5 +230,25 @@ With the API and the backoffice running (`npm run dev`, or `npm run build && npm
 - `npm run e2e:password` — forgotten and changed password. Needs no `E2E_EMAIL`: it signs up its own user. To
   cover the emailed link too, run the API with `EMAIL_BACKEND=console FRONTEND_URL=http://localhost:5174`, send
   its output to a file and pass it as `E2E_API_LOG=<file>`; without it those steps are skipped.
+- `npm run e2e:inventory` — inventory section (needs the inventory seed). Read-only: it never registers an order;
+  the API's 400 is simulated in the browser.
+- `npm run e2e:telemetry` — event capture against the live receiver (needs the inventory seed and
+  `NEXT_PUBLIC_TELEMETRY_ENDPOINT`). **Writes** orders: development database only.
 
-All six pass against `next dev` and against the production build. See the header of each file in `e2e/`.
+- `npm run e2e:reporting` — the business dashboard (`/reporting`): the four KPIs, the period, that what the page shows is what
+  the API answers, that euros and dollars are not added, the move between weeks, and that what it says about how fresh and
+  how complete the data is matches the last run. Needs at least one week computed by the
+  pipeline (`python data/pipelines/pipeline.py`); read-only. `E2E_SCREENSHOTS=<folder>` saves a picture of the page.
+
+The first five pass against `next dev` and against the production build. See the header of each file in `e2e/`.
+
+## Incident manager
+
+`/incidents` loads the incidents of the API (load the history once with `services/api/.venv/bin/python scripts/seed_incidents.py`).
+Types, labels, the lifecycle table and the form validations come from `@repo/shared-types`
+([`packages/shared`](../../packages/shared)), the same contract the API enforces, so the form rejects what the API
+would reject, in Spanish and per field. Anything that still fails on the server is shown as a clear message:
+no connection, a conflict (the incident changed state meanwhile, so it is reloaded), not found, or a server error
+(`src/lib/errors.ts`); an unexpected rendering error lands on `app/(app)/error.tsx`. Customer emails are masked in
+the list and only shown in the detail. Check it end to end with `npm run e2e:incidents` (see the header of
+`e2e/incidents.e2e.mjs`).

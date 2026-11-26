@@ -1,11 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Download, Loader2 } from "lucide-react";
 import CsvUploader from "../components/incidents/CsvUploader";
-import MetricsSummary from "../components/incidents/MetricsSummary";
+import { ErrorBanner } from "../components/ui/Field";
+import LoadingState from "../components/ui/LoadingState";
 import { analyzeIncidentsFile, downloadResultsCsv, ApiError } from "../lib/api";
 import type { AnalyzeResponse } from "../types/incidents";
+
+// The results panel is only drawn once a CSV has been analysed; before that (the page's whole first visit) it is dead code.
+const MetricsSummary = dynamic(() => import("../components/incidents/MetricsSummary"), {
+  loading: () => <LoadingState label="Preparando resultados…" />,
+});
 
 export default function IncidentsAnalysisPage() {
   const [fileName, setFileName] = useState<string | null>(null);
@@ -61,16 +68,11 @@ export default function IncidentsAnalysisPage() {
       </div>
 
       {isAnalyzing && (
-        <div className="mt-8 flex items-center gap-3 text-slate-300">
-          <Loader2 className="animate-spin" size={20} />
-          Analizando archivo...
-        </div>
+        <LoadingState label="Analizando archivo..." className="mt-8" />
       )}
 
       {error && (
-        <div role="alert" className="mt-8 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
-        </div>
+        <ErrorBanner message={error} className="mt-8" />
       )}
 
       {result && !isAnalyzing && (

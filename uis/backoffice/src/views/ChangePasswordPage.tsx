@@ -110,7 +110,7 @@ export default function ChangePasswordPage() {
         {saved && (
           <div role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
             <CheckCircle2 size={16} />
-            Contraseña cambiada. Úsala la próxima vez que inicies sesión.
+            Contraseña cambiada. Por seguridad, tendrás que iniciar sesión de nuevo con ella.
           </div>
         )}
 
