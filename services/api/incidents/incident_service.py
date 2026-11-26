@@ -3,6 +3,7 @@ lifecycle, list with filters and summarise."""
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import Counter
 from dataclasses import dataclass
@@ -40,10 +41,15 @@ __all__ = [
     "TransitionNotAllowedError",
 ]
 
+logger = logging.getLogger(__name__)
+
 SortField = Literal["created_at", "id", "updated_at"]
 SortOrder = Literal["asc", "desc"]
 TOP_N = 5
 _CONTENT_FIELDS = (*REQUIRED_FIELDS, "client_company", "agent_id", "customer_email")
+# What a stored document must have to be shown. Anything else (left by an older data model, or damaged)
+# is skipped and logged instead of making every list and summary fail.
+_READABLE_KEYS = ("id", "title", "description", "category", "status", "origin", "branch", "created_at", "updated_at", "history")
 
 
 class IncidentNotFoundError(Exception):
@@ -81,9 +87,9 @@ class IncidentFilters:
             return False
         if self.branch and doc["branch"].casefold() != self.branch.casefold():
             return False
-        if self.agent_id and doc["agent_id"] != self.agent_id:
+        if self.agent_id and doc.get("agent_id") != self.agent_id:
             return False
-        if self.client_company and self.client_company.casefold() not in (doc["client_company"] or "").casefold():
+        if self.client_company and self.client_company.casefold() not in (doc.get("client_company") or "").casefold():
             return False
         created_day = doc["created_at"][:10]
         if self.date_from and created_day < self.date_from.isoformat():
@@ -93,7 +99,7 @@ class IncidentFilters:
         if self.q:
             # The customer's email is deliberately not searchable.
             haystack = " ".join(
-                (doc["id"], doc["title"], doc["description"], doc["client_company"] or "", doc["branch"])
+                (doc["id"], doc["title"], doc["description"], doc.get("client_company") or "", doc["branch"])
             ).casefold()
             if self.q.casefold() not in haystack:
                 return False
@@ -189,8 +195,28 @@ def change_status(incident_id: str, change: StatusChange, *, actor: str) -> Inci
     return _to_out(new_doc)
 
 
+def _is_readable(doc: dict) -> bool:
+    return (
+        all(key in doc for key in _READABLE_KEYS)
+        and isinstance(doc["history"], list)
+        and doc["status"] in {s.value for s in IncidentStatus}
+        and doc["category"] in {c.value for c in IncidentCategory}
+        and doc["origin"] in {o.value for o in IncidentOrigin}
+    )
+
+
+def _readable_docs() -> list[dict]:
+    docs = []
+    for doc in store.all_docs():
+        if _is_readable(doc):
+            docs.append(doc)
+        else:
+            logger.warning("Skipping unreadable incident document %r", doc.get("id", "(no id)"))
+    return docs
+
+
 def _filtered(filters: IncidentFilters) -> list[dict]:
-    return [doc for doc in store.all_docs() if filters.matches(doc)]
+    return [doc for doc in _readable_docs() if filters.matches(doc)]
 
 
 def list_incidents(
@@ -251,7 +277,7 @@ def summarize(filters: IncidentFilters) -> IncidentSummary:
 
 
 def facets() -> IncidentFacets:
-    docs = store.all_docs()
+    docs = _readable_docs()
 
     def distinct(field: str) -> list[str]:
         return sorted({doc[field] for doc in docs if doc.get(field)}, key=str.casefold)

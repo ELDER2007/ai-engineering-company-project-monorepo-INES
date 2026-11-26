@@ -15,7 +15,14 @@ with their line, id and the rules they break — never the customer's email.
 Running it again never duplicates data. At the end it checks that the numbers
 ``GET /api/incidents/summary`` gives match those expected from the CSV.
 
-Exit code: 0 ok, 1 file/format error or metrics mismatch.
+Exit codes:
+    0   the history is loaded (or was already) and, when the database holds nothing else, it matches the CSV.
+        Rows the model rejects are listed but do not make it fail: some rows of the helpdesk export are invalid.
+        When the database also holds incidents that are not from the CSV the comparison is skipped, and
+        that is a 0 too: the load itself went well.
+    1   it failed: file not found or unreadable, not UTF-8 or not CSV, other columns, no data rows, the
+        database cannot be opened, nothing was loaded because every row was rejected, or what is in the
+        database does not match what the CSV accepts.
 """
 
 from __future__ import annotations
@@ -28,8 +35,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "services" / "api"))  # the incident store and model live in the API package
 
-from tinydb import TinyDB  # noqa: E402
-
+from core.errors import DatabaseUnavailableError  # noqa: E402
+from core.storage import open_database  # noqa: E402
 from incidents import incident_store as store  # noqa: E402
 from incidents import seeding  # noqa: E402
 from incidents_analyzer import missing_required_columns, read_rows  # noqa: E402
@@ -58,10 +65,17 @@ def main(argv: list[str]) -> int:
     if missing:
         print(f"Error: the CSV is missing required columns: {', '.join(missing)}", file=sys.stderr)
         return 1
-    if args.db:
-        store._db = TinyDB(args.db)
-
-    report = seeding.seed_rows(rows, reset=args.reset)
+    if not rows:
+        print("Error: the CSV has a header row but no data rows.", file=sys.stderr)
+        return 1
+    try:
+        if args.db:
+            store._db = open_database(args.db)
+        report = seeding.seed_rows(rows, reset=args.reset)
+        total = len(store.all_docs())
+    except (DatabaseUnavailableError, OSError) as exc:
+        print(f"Error: the incidents database cannot be used ({exc}).", file=sys.stderr)
+        return 1
 
     print(f"Read {report.total} rows from {args.csv.name}.")
     print(f"  inserted ............ {report.inserted}")
@@ -69,14 +83,21 @@ def main(argv: list[str]) -> int:
     print(f"  rejected (invalid) .. {len(report.rejected)}")
     for rejected in report.rejected:
         print(f"      line {rejected.line:>4}  {rejected.id}: {', '.join(rejected.rules)}")
-    total = len(store.all_docs())
     print(f"Total incidents in database: {total}")
 
+    if report.inserted == 0 and report.skipped_existing == 0:
+        print(f"Error: nothing was loaded: all {report.total} rows were rejected (see the list above).", file=sys.stderr)
+        return 1
+
     expected = seeding.expected_metrics(rows)
-    if total != expected["total"]:
+    if total > expected["total"]:
         print(f"Summary check skipped: the database holds {total} incidents but the CSV accounts for {expected['total']} "
               "(other incidents exist; use --reset for a clean comparison).")
         return 0
+    if total < expected["total"]:
+        print(f"Summary check FAILED: the database holds {total} incidents but the CSV rules accept {expected['total']}: "
+              f"{expected['total'] - total} row(s) were rejected by the incident model (see the list above).")
+        return 1
     differences = seeding.metric_differences(expected, seeding.actual_metrics())
     if differences:
         print("Summary check FAILED — /api/incidents/summary does not match the CSV:")

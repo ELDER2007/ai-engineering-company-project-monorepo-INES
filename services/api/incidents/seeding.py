@@ -133,12 +133,14 @@ def _rules_broken(row: dict[str, str]) -> tuple[list[str], dict | None]:
     if (row.get("status") or "").strip() not in CSV_STATUS_MAP:
         return ["invalid_or_missing_status"], None
     try:
+        created_at_from_date(row.get("date") or "")
+    except ValueError:  # not a YYYY-MM-DD date: only the date is parsed here, so nothing else is taken for one
+        return ["invalid_date"], None
+    try:
         return [], to_document(row, datetime.now(timezone.utc))
     except ValidationError as exc:
         # Field names only: a ValidationError's messages quote the rejected values (e.g. the email).
         return [f"schema:{e['loc'][0] if e['loc'] else 'record'}" for e in exc.errors(include_input=False)], None
-    except ValueError:  # not a YYYY-MM-DD date
-        return ["invalid_date"], None
 
 
 def seed_rows(rows: list[dict[str, str]], *, reset: bool = False) -> SeedReport:

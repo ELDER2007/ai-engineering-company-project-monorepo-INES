@@ -50,3 +50,7 @@ Every night: exports the telemetry of the previous UTC day to a CSV, launches th
   ```
 - **Exit code**: `0` done or skipped (already done / another run is going), `1` it failed, `2` bad usage, `130` interrupted.
 - **Privacy**: the CSV is telemetry; `data/raw/telemetry_*.csv` is git-ignored. Credentials in an error never reach the table or the log.
+
+## Exit codes
+
+`0` = it worked. `1` = it failed (missing or unreadable input, damaged data); `2` = wrong command-line usage (`analyze.py`). The message goes to stderr. A script never ends with `0` after failing.

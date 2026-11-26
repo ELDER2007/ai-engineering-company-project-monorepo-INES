@@ -52,14 +52,19 @@ async def upload(client, content: bytes, filename: str = "incidents.csv"):
     return await client.post("/api/incidents/analyze", files={"file": (filename, content, "text/csv")})
 
 
+def last_result():
+    """The analysis stored last, whoever ran it."""
+    return list(analysis_service._results.values())[-1]
+
+
 def export_metrics(response) -> dict[str, str]:
     return {row["metric"]: row["value"] for row in csv.DictReader(io.StringIO(response.text))}
 
 
 @pytest.fixture(autouse=True)
 def no_previous_analysis(monkeypatch):
-    """The last analysis is kept in a module-level variable: every test starts with none, and the real one is put back."""
-    monkeypatch.setattr(analysis_service, "_last_result", None)
+    """The last analysis of each user is kept in a module-level dict: every test starts with none, and the real one is put back."""
+    monkeypatch.setattr(analysis_service, "_results", {})
 
 
 # --- HAPPY PATH ---------------------------------------------------------------------------------------
@@ -109,7 +114,7 @@ async def test_the_export_gives_the_last_analysis_as_one_metric_per_row(authed_c
 async def test_the_analysis_is_kept_in_memory_for_the_export(authed_client):
     await upload(authed_client, csv_bytes([record()]), filename="enero.csv")
 
-    last = analysis_service.get_last_result()
+    last = last_result()
 
     assert (last.source_name, last.total_records, last.valid_records) == ("enero.csv", 1, 1)
 
@@ -258,7 +263,7 @@ async def test_a_second_upload_replaces_the_previous_analysis(authed_client):
     metrics = export_metrics(await authed_client.get("/api/incidents/results/export"))
 
     assert metrics["total_records"] == "1"
-    assert analysis_service.get_last_result().source_name == "dos.csv"
+    assert last_result().source_name == "dos.csv"
 
 
 # --- FAILURE MODES -----------------------------------------------------------------------------------
@@ -269,14 +274,14 @@ async def test_a_file_that_is_not_a_csv_is_refused_and_nothing_is_analysed(authe
     response = await upload(authed_client, csv_bytes([record()]), filename=filename)
 
     assert response.status_code == 400
-    assert analysis_service._last_result is None
+    assert not analysis_service._results
 
 
 async def test_a_file_that_is_not_utf8_text_is_refused(authed_client):
     response = await upload(authed_client, b"ticket_id,date\n\xff\xfe\x00\x01,2024-01-01\n")
 
     assert response.status_code == 400
-    assert analysis_service._last_result is None
+    assert not analysis_service._results
 
 
 async def test_missing_required_columns_are_named_in_the_refusal(authed_client):
@@ -286,7 +291,7 @@ async def test_missing_required_columns_are_named_in_the_refusal(authed_client):
 
     assert response.status_code == 422
     assert "category" in response.text and "agent_id" in response.text
-    assert analysis_service._last_result is None
+    assert not analysis_service._results
 
 
 @pytest.mark.parametrize("content", [b"", b"\n", csv_bytes([])], ids=["empty-file", "blank-line", "header-only"])
@@ -294,7 +299,7 @@ async def test_a_file_without_data_is_refused_and_nothing_is_analysed(authed_cli
     response = await upload(authed_client, content)
 
     assert response.status_code == 422
-    assert analysis_service._last_result is None
+    assert not analysis_service._results
 
 
 async def test_a_refused_upload_does_not_replace_the_analysis_already_there(authed_client):
@@ -305,7 +310,7 @@ async def test_a_refused_upload_does_not_replace_the_analysis_already_there(auth
 
     assert not refused.is_success
     assert metrics["total_records"] == "1"
-    assert analysis_service.get_last_result().source_name == "bueno.csv"
+    assert last_result().source_name == "bueno.csv"
 
 
 async def test_exporting_before_any_analysis_is_not_found(authed_client):
@@ -318,7 +323,7 @@ async def test_a_request_without_a_file_is_refused_not_an_error(authed_client):
     response = await authed_client.post("/api/incidents/analyze")
 
     assert response.status_code == 422
-    assert analysis_service._last_result is None
+    assert not analysis_service._results
 
 
 async def test_customers_emails_never_come_back_in_the_response_or_the_export(authed_client):
@@ -338,4 +343,4 @@ async def test_the_analysis_and_the_export_need_a_session_and_store_nothing_with
     exported = await async_client.get("/api/incidents/results/export")
 
     assert analysed.status_code == exported.status_code == 401
-    assert analysis_service._last_result is None
+    assert not analysis_service._results

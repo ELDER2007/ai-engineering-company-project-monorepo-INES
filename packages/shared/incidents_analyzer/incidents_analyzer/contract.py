@@ -28,6 +28,11 @@ except FileNotFoundError as exc:  # pragma: no cover - only on a non-editable in
         f"Shared incident contract not found at {CONTRACT_PATH}. "
         "Install incidents_analyzer in editable mode from packages/shared/incidents_analyzer."
     ) from exc
+except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - a file that cannot be read or is not valid JSON
+    raise RuntimeError(
+        f"Shared incident contract at {CONTRACT_PATH} cannot be read ({type(exc).__name__}): "
+        "check that the file exists, can be read and is valid JSON."
+    ) from exc
 
 VALID_CATEGORIES: tuple[str, ...] = tuple(_contract["categories"])
 

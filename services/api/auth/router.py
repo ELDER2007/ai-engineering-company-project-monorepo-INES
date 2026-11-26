@@ -13,6 +13,7 @@ Mounted once in ``main.py``, at ``/auth``.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -31,6 +32,7 @@ from .schemas import ChangePasswordIn, ForgotPasswordIn, MeOut, Message, ResetPa
 from .security import create_access_token
 
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent."
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["auth"])
 
@@ -57,6 +59,7 @@ async def login(request: Request, form: Annotated[OAuth2PasswordRequestForm, Dep
     if user is None:
         pair_failures.record(pair)
         client_failures.record(host)
+        logger.warning("Failed login attempt")  # no email: it may be someone else's, or a password typed as a user name
         # Same answer for an unknown email and a wrong password.
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,

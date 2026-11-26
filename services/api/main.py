@@ -5,6 +5,7 @@ domain (see docs/ARCHITECTURE_PROPOSAL.md for the reasoning).
 from __future__ import annotations
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -17,7 +18,13 @@ from async_tasks.router import warm_up as warm_up_task_queue
 from auth.router import router as auth_router
 from core import mailer
 from core.config import get_allowed_origins, get_jwt_secret, get_password_reset_expire_minutes, get_telemetry_endpoint
-from core.errors import validation_error_handler
+from core.errors import (
+    DatabaseUnavailableError,
+    catch_unhandled_errors,
+    database_unavailable_handler,
+    validation_error_handler,
+)
+from core.logging_config import configure_logging
 from core.schemas import HealthOut
 from incidents.incident_router import router as incident_manager_router
 from incidents.router import router as incidents_router
@@ -39,6 +46,8 @@ from users.router import router as users_router
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logging.getLogger("telemetry").info("TELEMETRY_ENDPOINT = %s (informational: events are stored by this API)", get_telemetry_endpoint() or "not set")
+    configure_logging()
+    os.umask(0o077)  # the data files hold password hashes and personal data: owner only
     get_jwt_secret()  # fail at startup, not on the first login, if SECRET_KEY is invalid
     get_password_reset_expire_minutes()  # same for the reset-link lifetime and the mailer
     mailer.check_settings()
@@ -85,6 +94,10 @@ async def timing_middleware(request: Request, call_next):
     return response
 
 app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(DatabaseUnavailableError, database_unavailable_handler)
+
+# Added before CORS so it sits inside it: a 500 still carries the CORS headers the browser needs.
+app.middleware("http")(catch_unhandled_errors)
 
 app.add_middleware(
     CORSMiddleware,

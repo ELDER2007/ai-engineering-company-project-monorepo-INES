@@ -354,3 +354,13 @@ uv run seed --reset      # wipe and reload the 15 initial suppliers
 - The backoffice login stores the JWT and protected API calls send it as a bearer token. Calls made before login, or after a token expires or its account is disabled, receive `401` and return the user to sign-in.
 - `POST /talent-applications` is public: each client address may send 10 attempts per hour (`429` after that, valid or not), but there is no captcha, so a determined attacker rotating addresses can still fill the store with junk. It holds candidates' personal data in a plain TinyDB file (single-process, unencrypted), accepts duplicate emails on purpose, and has no retention or deletion endpoint yet.
 - `POST /auth/change-password` has no rate limiting or lockout yet (`POST /auth/forgot-password` only limits emails per account).
+- Login has no rate limiting or lockout yet, and a token stays valid until it expires or its account is deleted: changing a password does **not** revoke the tokens already issued (they carry no `iat`), and there is no refresh or logout endpoint, so keep `ACCESS_TOKEN_EXPIRE_MINUTES` short. Put the API behind a reverse proxy with rate limits until that is added.
+- `uis/backoffice` does not send a token yet, so its calls to `/api/suppliers` and `/api/incidents` now get `401` until a login screen is added.
+
+
+## Error handling
+
+- Every error answer is JSON: `{"detail": "..."}`. An unexpected failure is a `500` with a generic message and an `error_id` that is also in the server log; no stack trace, path or data goes to the client.
+- `422` (validation) lists the fields and what is wrong with them, without echoing the submitted values.
+- `413` an uploaded CSV is too big; `503` a data file is damaged (the message says so, the log has the details).
+- `customer_email` is returned masked unless the user is an administrator. Analysis results are kept per user.

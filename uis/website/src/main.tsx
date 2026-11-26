@@ -1,13 +1,16 @@
 import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import App from "./App";
+import ErrorBoundary from "./ErrorBoundary";
 import { currentPath } from "./router";
 import "./index.css";
 
 const root = document.getElementById("root")!;
 const app = (
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>
 );
 
