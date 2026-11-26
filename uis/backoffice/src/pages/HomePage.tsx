@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileBarChart } from "lucide-react";
+import { FileBarChart, Truck } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -15,6 +15,17 @@ export default function HomePage() {
         <div>
           <p className="font-semibold text-white">Análisis de incidentes</p>
           <p className="text-sm text-slate-400">Valida y analiza exportes de tickets de soporte</p>
+        </div>
+      </Link>
+
+      <Link
+        to="/suppliers"
+        className="mt-4 flex max-w-sm items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-400/40"
+      >
+        <Truck className="text-cyan-400" size={28} />
+        <div>
+          <p className="font-semibold text-white">Proveedores</p>
+          <p className="text-sm text-slate-400">Directorio único de servicios externos y tarifas</p>
         </div>
       </Link>
     </div>
