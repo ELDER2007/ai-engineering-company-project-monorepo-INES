@@ -11,7 +11,8 @@
     "build:backoffice": "npm --workspace uis/backoffice run build",
     "typecheck:backoffice": "npm --workspace uis/backoffice run typecheck",
     "test:shared": "npm --workspace packages/shared run test",
-    "test:backoffice": "npm --workspace uis/backoffice run test"
+    "test:backoffice": "npm --workspace uis/backoffice run test",
+    "typecheck:domain": "tsc --noEmit -p tsconfig.json"
   },
   "workspaces": [
     "packages/shared",

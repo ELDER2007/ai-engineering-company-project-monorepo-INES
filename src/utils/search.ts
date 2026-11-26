@@ -1,80 +1,102 @@
 // ============================================================
-// Nexova — Operaciones de Búsqueda
-// Búsqueda lineal y binaria sobre colecciones de candidatos
+// Nexova — Operaciones de Busqueda
+// Busqueda lineal para arrays desordenados y binaria para ordenados
 // ============================================================
 
 import { type Candidate } from "../types/models";
 
-// -----------------------------------------------------------
-// Búsqueda lineal
-// -----------------------------------------------------------
+export function linearSearchCandidateById(
+  candidates: ReadonlyArray<Candidate> | null | undefined,
+  id: string | null | undefined
+): number {
+  if (!candidates || candidates.length === 0 || !id) {
+    return -1;
+  }
 
-/**
- * Realiza búsqueda lineal para encontrar un candidato por ID.
- * Retorna el candidato si se encuentra, null en caso contrario.
- */
-export function findCandidateById(
-  candidates: Candidate[],
-  id: string
-): Candidate | null {
-  for (const candidate of candidates) {
-    if (candidate.id === id) {
-      return candidate;
+  for (let index = 0; index < candidates.length; index += 1) {
+    if (candidates[index].id === id) {
+      return index;
     }
   }
-  return null;
+
+  return -1;
 }
 
-/**
- * Realiza búsqueda lineal para encontrar un candidato por email.
- * La comparación de email es case-insensitive.
- * Retorna el candidato si se encuentra, null en caso contrario.
- */
-export function findCandidateByEmail(
-  candidates: Candidate[],
-  email: string
-): Candidate | null {
-  const lowerEmail = email.toLowerCase();
+export function linearSearchCandidateByEmail(
+  candidates: ReadonlyArray<Candidate> | null | undefined,
+  email: string | null | undefined
+): number {
+  if (!candidates || candidates.length === 0 || !email) {
+    return -1;
+  }
 
-  for (const candidate of candidates) {
-    if (candidate.email.toLowerCase() === lowerEmail) {
-      return candidate;
+  const normalizedEmail = email.trim().toLowerCase();
+  if (normalizedEmail.length === 0) {
+    return -1;
+  }
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    if (candidates[index].email.toLowerCase() === normalizedEmail) {
+      return index;
     }
   }
-  return null;
+
+  return -1;
 }
 
-// -----------------------------------------------------------
-// Búsqueda binaria
-// -----------------------------------------------------------
-
-/**
- * Realiza búsqueda binaria para encontrar el índice de un candidato
- * con el salario objetivo.
- *
- * Asume que el array ya está ordenado por salario esperado (ascendente).
- * Retorna el índice si se encuentra, -1 en caso contrario.
- * Si múltiples candidatos tienen el mismo salario, retorna cualquier índice válido.
- */
-export function binarySearchCandidateBySalary(
-  sortedCandidates: Candidate[],
+export function binarySearchCandidateByExpectedSalary(
+  sortedCandidates: ReadonlyArray<Candidate> | null | undefined,
   targetSalary: number
 ): number {
+  if (!sortedCandidates || sortedCandidates.length === 0) {
+    return -1;
+  }
+
   let left = 0;
   let right = sortedCandidates.length - 1;
 
   while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-    const midSalary = sortedCandidates[mid].expectedSalary;
+    const middle = Math.floor((left + right) / 2);
+    const middleSalary = sortedCandidates[middle].expectedSalary;
 
-    if (midSalary === targetSalary) {
-      return mid;
+    if (middleSalary === targetSalary) {
+      return middle;
     }
 
-    if (midSalary < targetSalary) {
-      left = mid + 1;
+    if (middleSalary < targetSalary) {
+      left = middle + 1;
     } else {
-      right = mid - 1;
+      right = middle - 1;
+    }
+  }
+
+  return -1;
+}
+
+export function binarySearchCandidateById(
+  sortedCandidatesById: ReadonlyArray<Candidate> | null | undefined,
+  targetId: string | null | undefined
+): number {
+  if (!sortedCandidatesById || sortedCandidatesById.length === 0 || !targetId) {
+    return -1;
+  }
+
+  let left = 0;
+  let right = sortedCandidatesById.length - 1;
+
+  while (left <= right) {
+    const middle = Math.floor((left + right) / 2);
+    const middleId = sortedCandidatesById[middle].id;
+    const comparison = middleId.localeCompare(targetId);
+
+    if (comparison === 0) {
+      return middle;
+    }
+
+    if (comparison < 0) {
+      left = middle + 1;
+    } else {
+      right = middle - 1;
     }
   }
 
