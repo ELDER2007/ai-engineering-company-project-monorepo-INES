@@ -8,8 +8,9 @@ The database is seeded (``seed.py``) the first time it's opened, and
 ``get_db()`` is called once at import time (bottom of file) so the directory is
 populated as soon as the app starts — the demo must never show an empty DB.
 
-Suspending is the preferred way to retire a supplier (it keeps the history of
-commercial relationships); ``delete_supplier`` exists for entries made by mistake.
+Suspending is how a supplier is retired: suspended suppliers are never deleted
+(they keep the history of commercial relationships), so ``delete_supplier``
+only removes active ones, e.g. entries made by mistake.
 """
 
 from __future__ import annotations
@@ -37,6 +38,17 @@ class SupplierNotFoundError(Exception):
     def __init__(self, supplier_id: int):
         self.supplier_id = supplier_id
         super().__init__(f"Supplier {supplier_id} not found")
+
+
+class SupplierSuspendedError(Exception):
+    """Suspended suppliers stay in the directory to keep the commercial history."""
+
+    def __init__(self, supplier_id: int):
+        self.supplier_id = supplier_id
+        super().__init__(
+            f"Supplier {supplier_id} is suspended and cannot be deleted: "
+            "suspended suppliers are kept for the commercial history"
+        )
 
 
 class InvalidSupplierUpdateError(Exception):
@@ -147,8 +159,11 @@ def set_status(supplier_id: int, status: SupplierStatus) -> SupplierOut:
 
 def delete_supplier(supplier_id: int) -> None:
     db = get_db()
-    if db.get(doc_id=supplier_id) is None:
+    doc = db.get(doc_id=supplier_id)
+    if doc is None:
         raise SupplierNotFoundError(supplier_id)
+    if doc["status"] == SupplierStatus.SUSPENDED.value:
+        raise SupplierSuspendedError(supplier_id)
     db.remove(doc_ids=[supplier_id])
 
 

@@ -250,7 +250,7 @@ All endpoints below need a session (see above) except `POST /auth/login`, `POST 
 | `PATCH` | `/suppliers/{id}` | Partial update. Changing `monthly_rate` stamps `updated_at` (audit). The merged record is re-validated, so changing `country` alone (currency mismatch) is a `422`. |
 | `PATCH` | `/suppliers/{id}/rate` | Update the monthly rate (`{"monthly_rate": 350}`). Always stamps `updated_at` with the time of the change. `422` if the rate is `<= 0`; `404` if the supplier doesn't exist. |
 | `PATCH` | `/suppliers/{id}/status` | Activate/suspend (`{"status": "active" \| "suspended"}`). |
-| `DELETE` | `/suppliers/{id}` | Remove a supplier (`204`). `404` if it doesn't exist. The CONTEXT prefers suspending to keep the relationship history; use this for entries made by mistake. |
+| `DELETE` | `/suppliers/{id}` | Remove an **active** supplier (`204`). `404` if it doesn't exist. `409` if it is suspended: the CONTEXT keeps suspended suppliers in the directory for the commercial history, so suspend first and never delete. |
 | `GET` | `/inventory/products?office=&category=` | List the assets with their derived `current_stock`; both filters are optional. |
 | `POST` | `/inventory/products` | Register an asset (`name`, `sku`, `category`, `office`); it starts with `current_stock: 0` (`201`). `409` if the SKU exists, `422` on an unknown `category`/`office` or blank text. |
 | `GET` | `/inventory/products/{id}` | One asset with its current stock. `404` if missing. |
