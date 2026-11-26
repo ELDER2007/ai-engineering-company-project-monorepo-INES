@@ -8,8 +8,8 @@ from tinydb import TinyDB
 
 from main import app
 from seed import seed_database
-import database
-from models import Supplier
+from suppliers import service
+from suppliers.schemas import Supplier
 
 VALID = {
     "name": "Proveedor Test",
@@ -23,16 +23,16 @@ VALID = {
 
 @pytest.fixture()
 def db(tmp_path, monkeypatch) -> TinyDB:
-    db_file = TinyDB(tmp_path / "db.json")
-    seed_database(db_file)
-    monkeypatch.setattr(database, "_db", db_file)
-    yield db_file
-    db_file.close()
+    database = TinyDB(tmp_path / "db.json")
+    seed_database(database)
+    monkeypatch.setattr(service, "_db", database)
+    yield database
+    database.close()
 
 
 @pytest.fixture()
-def client(db) -> TestClient:
-    return TestClient(app)
+def client(db, auth_headers) -> TestClient:
+    return TestClient(app, headers=auth_headers)
 
 
 def test_model_fields_match_context():
