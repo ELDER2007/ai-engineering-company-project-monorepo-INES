@@ -9,6 +9,22 @@ _These instructions are also available in [English](./README.md)._
 
 ---
 
+## 📦 Entrega: auditoría de rendimiento (Lighthouse)
+
+Todo lo de la auditoría está en este repositorio, en `main`:
+
+| Qué | Dónde |
+|---|---|
+| **Auditoría**: puntuaciones iniciales, causa raíz de cada problema, casos de duplicación, qué identifican las skills de agente | [`AUDIT.md`](./AUDIT.md) |
+| **Informe**: cada mejora, puntuaciones antes/después, impacto de cada commit, INP, qué tuvo mayor impacto | [`REPORT.md`](./REPORT.md) |
+| **Capturas de Lighthouse** | [`audit/before/`](./audit/before/) · [`audit/after/`](./audit/after/) |
+| Evidencia en bruto (JSON de Lighthouse, resultados por commit, INP, comparaciones A/B) | [`docs/performance/`](./docs/performance/) |
+| Apuntes de estudio (cómo se hizo, decisiones, errores) | [`aprendiendo con la ia - PERF-AUDIT.md`](./aprendiendo%20con%20la%20ia%20-%20PERF-AUDIT.md) |
+
+En una línea: las cuatro categorías de Lighthouse quedan en 100 en el website (móvil y escritorio) y en el backoffice, se corrigieron los desplazamientos de diseño del backoffice (CLS 0,255 y 0,351; Performance 87 y 83 → 100), y cada commit corrige un problema y está medido. Cómo reproducirlo: [`REPORT.md` §8](./REPORT.md#8-cómo-reproducir).
+
+---
+
 ## Propósito
 
 Este repositorio es la **plantilla de inicio** para los proyectos transversales. Trabajarás con escenarios de empresas reales (Brasaland, TrackFlow, Nexova) construyendo entregables que se corresponden con los hitos del curso (Web, Programación, Backend, Telemetría, RAG, Agentes, Workflows, Tiempo real).
@@ -46,6 +62,70 @@ Estás construyendo **una sola empresa** a lo largo de muchos hitos y proyectos.
 | **Documentación**       | `docs/`                           | Arquitectura, decisiones y convenciones de todo el repo                     |
 
 **Regla rápida:** si tiene interfaz visual → `uis/`. Si expone una API o corre en segundo plano → `services/`. Si mueve o transforma datos → `data/`. Si el trabajo lo hace un modelo de IA → `agents/` (+ `skills/` o `mcps/` según haga falta).
+
+---
+
+## Tareas asíncronas: worker de Celery, Redis y Flower
+
+Una petición no debe esperar a un trabajo lento. `POST /tasks/pipeline-runs` deja un mensaje pequeño en **Redis** y responde `202 Accepted` con un `task_id` al instante; un **worker de Celery**, un proceso aparte (nunca dentro de FastAPI), lo recoge y ejecuta el pipeline; `GET /tasks/{task_id}` dice cómo va. **Flower** muestra la cola. El código está en `services/celery_app.py` (la app de Celery) y en `services/api/async_tasks/` (tareas, reintentos, cola de mensajes fallidos y endpoints); su README explica las decisiones.
+
+| Servicio | Qué es | Dónde |
+| --- | --- | --- |
+| `redis` | La cola y los resultados (imagen oficial, `noeviction`, 256 MB, persistente) | `127.0.0.1:6379` |
+| `worker` | Ejecuta las tareas. Un proceso aparte | sin puerto |
+| `flower` | El panel: tareas en cola, en proceso y terminadas | http://localhost:5555 (`admin` / `admin`, se cambia con `FLOWER_BASIC_AUTH`) |
+
+Flower guarda lo que ha visto **en memoria**: si su contenedor se reinicia, su lista queda vacía hasta que se ejecuten tareas nuevas. No se pierde nada: los resultados siguen en Redis un día (`GET /tasks/{task_id}` sigue respondiendo) y las fallidas están en la tabla `task_dead_letters`.
+
+### Levantar el worker
+
+```bash
+docker compose up -d redis worker flower      # o solo `docker compose up`: arrancan con el resto
+docker compose logs -f worker                 # una línea por ejecución: task_id, intento, estado, duración
+```
+
+Sin Docker (desde la raíz del repositorio, con Redis en `localhost:6379`; `REDIS_URL` si está en otro sitio):
+
+```bash
+celery -A services.celery_app worker --loglevel=INFO -E --concurrency=1
+```
+
+### Detener el worker
+
+```bash
+docker compose stop worker                    # le pide que termine la tarea que ejecuta (parada ordenada), hasta 2 minutos
+docker compose stop redis worker flower       # toda la cola
+```
+
+Sin Docker: `Ctrl+C` una vez (parada ordenada: termina la tarea en curso y no coge más). Un segundo `Ctrl+C`, o `kill -9`, es una parada brusca.
+
+### ¿Está vivo?
+
+```bash
+docker compose exec worker celery -A services.celery_app inspect ping     # -> pong
+docker compose ps                                                          # worker: healthy
+```
+
+### Usarlo
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -d "username=EMAIL&password=CONTRASEÑA" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"week_start":"2026-10-26"}' localhost:8000/tasks/pipeline-runs   # 202 {"task_id": "..."}
+curl -H "Authorization: Bearer $TOKEN" localhost:8000/tasks/TASK_ID    # {"task_id": "...", "status": "pending|started|success|failure", "result": ...}
+```
+
+### Qué pasa cuando algo se para
+
+| Qué se para | Qué ocurre |
+| --- | --- |
+| La **API** | Nada para el worker: sigue con lo que hay en cola. Los mensajes están en Redis |
+| El **worker**, con `docker compose stop` | Termina la tarea que ejecuta. Las que esperan siguen en Redis hasta que vuelva un worker |
+| El worker, matado de golpe (`kill -9`, sin memoria) | El mensaje no estaba confirmado (`acks_late`: se confirma DESPUÉS del trabajo), así que Redis lo entrega de nuevo a los 15 minutos. El pipeline es idempotente: repetir una semana reescribe las mismas filas |
+| **Redis**, reiniciado | La cola sobrevive (`appendonly`). El worker se reconecta solo |
+| **Redis**, caído o lleno | La API responde `503` (no un error feo) y sigue sirviendo todo lo demás |
+| Una tarea falla | Se reintenta a los 5 s y luego a los 10 s (creciente, nunca de inmediato). El tercer fallo acaba en la tabla `task_dead_letters` (`task_id`, intento, error, momento); `GET /tasks/dead-letters` la lista (admins) |
+
+Ajustes (todos opcionales, ver `.env.example`): `REDIS_URL`, `REDIS_PORT`, `REDIS_MAXMEMORY`, `FLOWER_BASIC_AUTH`, `FLOWER_PORT`, `CELERY_CONCURRENCY`, `ASYNC_RETRY_BASE_SECONDS`. Tests: `python -m pytest tests/async_tasks services/api/tests/test_async_tasks_api.py`.
 
 ---
 
