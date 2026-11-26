@@ -19,6 +19,8 @@ from fractions import Fraction
 
 from sqlmodel import Session, col, func, select
 
+from core.cache import invalidate
+
 from .models import OFFICE_CURRENCY, Asset, AssetEntry, AssetExit
 from .schemas import (
     AssetBrief,
@@ -30,6 +32,11 @@ from .schemas import (
     OrderEffects,
     OrderOut,
 )
+
+# Group of the cached reads of routers/inventory.py. A committed write (new asset, inbound or outbound order) drops
+# them, because it changes what the product and order lists show. The write path itself never reads from the cache:
+# the stock check of an outbound order is always made against the database, under the row lock.
+CACHE_GROUP = "inventory"
 
 # Cost-variance rule of docs/telemetry/telemetry-plan.md, section 5: the new unit cost is compared with the
 # weighted mean of the last BASELINE_ORDERS eligible entries (same asset, supplier and office/currency); strictly
@@ -143,6 +150,7 @@ def create_asset(session: Session, payload: AssetCreate) -> AssetOut:
             raise DuplicateSkuError(payload.sku) from exc
         raise
     session.refresh(asset)
+    invalidate(CACHE_GROUP)
     return _asset_out(asset, 0)
 
 
@@ -262,6 +270,7 @@ def register_inbound(session: Session, payload: AssetEntryCreate, user_uuid: str
     session.add(entry)
     session.commit()
     session.refresh(entry)
+    invalidate(CACHE_GROUP)
     effects = OrderEffects(
         stock_before=stock_before,
         stock_after=stock_before + payload.quantity,
@@ -298,6 +307,7 @@ def register_outbound(session: Session, payload: AssetExitCreate, user_uuid: str
     session.add(exit_)
     session.commit()
     session.refresh(exit_)
+    invalidate(CACHE_GROUP)
     stock_after = available - payload.quantity
     effects = OrderEffects(
         stock_before=available,
