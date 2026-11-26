@@ -12,27 +12,22 @@ export function getToken(): string | null {
   }
 }
 
-/** Saves the token. `false` means the browser would not keep it (storage blocked or full): the caller must say so. */
-export function setToken(token: string): boolean {
+export function setToken(token: string): void {
   try {
     localStorage.setItem(KEY, token);
   } catch {
-    return false;
+    /* nothing to persist to */
   }
   listeners.forEach((notify) => notify());
-  return true;
 }
 
-/** Forgets the token. `false` means the browser would not let it go: the session is then still open. */
-export function clearToken(): boolean {
-  let forgotten = true;
+export function clearToken(): void {
   try {
     localStorage.removeItem(KEY);
   } catch {
-    forgotten = false;
+    /* nothing to clear */
   }
   listeners.forEach((notify) => notify());
-  return forgotten && getToken() === null;
 }
 
 /** Called whenever the token is set or cleared (login, logout, or a 401 from the API). */

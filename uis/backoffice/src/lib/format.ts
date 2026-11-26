@@ -1,42 +1,33 @@
-// Showing a value that may be missing, in one place. Whatever the API sends (a null, a field that is not there,
-// a date nobody can read), the screen shows a dash or a plain text, never `undefined`, `NaN` or `Invalid Date`.
+// Display helpers for dates and money, moved out of the components so they can be tested on their own.
+// Pure functions: no state, no network, no DOM.
 
-export const MISSING = "—";
+/** A contract renewal inside this many days (today included) is flagged as coming up. */
+export const RENEWAL_WARNING_DAYS = 60;
 
-/** The label of a code (`TECHNICAL` -> «Técnica»), or the code itself, or a dash when there is none. */
-export function labelOf(labels: Record<string, string>, code: unknown): string {
-  if (typeof code !== "string" || code === "") return MISSING;
-  return labels[code] ?? code;
+export type RenewalState = "none" | "overdue" | "soon" | "later";
+
+/** Whole days from today (at local midnight) to `dateStr` (YYYY-MM-DD): 0 is today, negative is in the past. */
+export function daysUntil(dateStr: string): number {
+  const target = new Date(`${dateStr}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
-function toDate(value: unknown): Date | null {
-  if (typeof value !== "string" && typeof value !== "number") return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+/** How urgent a contract renewal is, from the days left: past = "overdue", within the warning window = "soon". */
+export function renewalState(days: number | null): RenewalState {
+  if (days === null) return "none";
+  if (days < 0) return "overdue";
+  if (days <= RENEWAL_WARNING_DAYS) return "soon";
+  return "later";
 }
 
-/** `2024-03-05T10:30:00Z` -> «5/3/2024, 10:30:00», or a dash if it is not a date. */
-export function formatDateTime(value: unknown): string {
-  return toDate(value)?.toLocaleString("es-ES") ?? MISSING;
+/** An amount in the supplier's currency, Spanish formatting ("1200,50 €"). */
+export function formatMoney(amount: number, currency: string): string {
+  return new Intl.NumberFormat("es-ES", { style: "currency", currency }).format(amount);
 }
 
-/** The day of an ISO date, as it comes (`2024-03-05`), or a dash. */
-export function formatDay(value: unknown): string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : MISSING;
-}
-
-export function formatMoney(value: unknown, currency: unknown): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return MISSING;
-  const code = currency === "USD" || currency === "EUR" ? currency : "EUR";
-  return new Intl.NumberFormat("es-ES", { style: "currency", currency: code }).format(value);
-}
-
-/** A count to show: a number, or 0 when the API did not send one. */
-export function count(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-/** A percentage for a bar: between 0 and 100, 0 when it is not a number. */
-export function percent(value: unknown): number {
-  return Math.min(100, Math.max(0, count(value)));
+/** An ISO timestamp as the backoffice shows it: Spanish date and time in the browser's timezone. */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("es-ES");
 }

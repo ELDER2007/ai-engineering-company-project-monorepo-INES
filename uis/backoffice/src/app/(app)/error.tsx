@@ -1,9 +1,24 @@
 "use client";
 
-import ErrorScreen from "@/components/ErrorScreen";
+import { useEffect } from "react";
+import { track } from "@/lib/telemetry";
+import { componentForPath } from "@/lib/telemetry/paths";
 
-// Last line of defence for the protected screens: an unexpected rendering error shows this instead of a blank page.
-// `retry` asks Next.js to fetch and draw the segment again (see node_modules/next/dist/docs, error.js).
-export default function AppError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
-  return <ErrorScreen error={error} onRetry={retry} />;
+// Last line of defence: an unexpected rendering error shows this instead of a blank page.
+export default function AppError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    // Only the kind of failure and the area: never the error's message or stack, which can quote data.
+    const component = componentForPath(window.location.pathname);
+    if (component) track("application_error_occurred", { error_code: "render_failed", component });
+  }, []);
+
+  return (
+    <div role="alert" className="mx-auto max-w-xl rounded-2xl border border-rose-500/30 bg-rose-500/10 p-6 text-rose-200">
+      <h1 className="text-xl font-semibold text-white">Algo ha salido mal</h1>
+      <p className="mt-2 text-sm">Ha ocurrido un error inesperado al mostrar esta pantalla. Tus datos no se han perdido.</p>
+      <button type="button" onClick={reset} className="mt-4 rounded-full bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300">
+        Reintentar
+      </button>
+    </div>
+  );
 }

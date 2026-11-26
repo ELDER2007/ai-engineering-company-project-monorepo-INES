@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { CATEGORY_LABELS, ORIGIN_LABELS, type IncidentListItem } from "@repo/shared-types";
 import type { SortField, SortOrder } from "../../lib/api";
-import { formatDay, labelOf, MISSING } from "../../lib/format";
 import StatusBadge from "./StatusBadge";
 
 interface Props {
@@ -24,7 +23,7 @@ export default function IncidentTable({ items, sort, order, onSort }: Props) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
       <table className="w-full text-left text-sm">
-        <thead className="text-xs text-slate-500">
+        <thead className="text-xs text-slate-400">
           <tr>
             {sortable("id", "ID")}
             <th scope="col" className="px-4 py-3 uppercase tracking-wider">Título</th>
@@ -39,16 +38,17 @@ export default function IncidentTable({ items, sort, order, onSort }: Props) {
           {items.map((i) => (
             <tr key={i.id} className="border-t border-slate-800 text-slate-200">
               <td className="whitespace-nowrap px-4 py-3">
-                <Link href={`/incidents/${i.id}`} className="font-medium text-cyan-300 hover:underline">
+                {/* prefetch off: the default would fetch all 15 rows on every load, and a user opens one at a time. */}
+                <Link href={`/incidents/${i.id}`} prefetch={false} className="font-medium text-cyan-300 hover:underline">
                   {i.id}
                 </Link>
               </td>
-              <td className="max-w-sm truncate px-4 py-3" title={i.title}>{i.title || MISSING}</td>
-              <td className="whitespace-nowrap px-4 py-3">{labelOf(CATEGORY_LABELS, i.category)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{labelOf(ORIGIN_LABELS, i.origin)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{i.branch || MISSING}</td>
+              <td className="max-w-sm truncate px-4 py-3" title={i.title}>{i.title}</td>
+              <td className="whitespace-nowrap px-4 py-3">{CATEGORY_LABELS[i.category]}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{ORIGIN_LABELS[i.origin]}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{i.branch}</td>
               <td className="px-4 py-3"><StatusBadge status={i.status} /></td>
-              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{formatDay(i.created_at)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-slate-400">{i.created_at.slice(0, 10)}</td>
             </tr>
           ))}
         </tbody>

@@ -8,12 +8,18 @@
     "build": "next build",
     "start": "next start -p 5174",
     "typecheck": "next typegen && tsc --noEmit",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "e2e": "node e2e/suppliers.e2e.mjs",
     "e2e:incidents": "node e2e/incidents.e2e.mjs",
     "e2e:register": "node e2e/register.e2e.mjs",
     "e2e:profile": "node e2e/profile.e2e.mjs",
     "e2e:guard": "node e2e/guard.e2e.mjs",
-    "e2e:token": "node e2e/token.e2e.mjs"
+    "e2e:token": "node e2e/token.e2e.mjs",
+    "e2e:inventory": "node e2e/inventory.e2e.mjs",
+    "e2e:reporting": "node e2e/reporting.e2e.mjs",
+    "e2e:telemetry": "node e2e/telemetry.e2e.mjs",
+    "e2e:password": "node e2e/password.e2e.mjs"
   },
   "dependencies": {
     "@repo/shared-types": "*",
@@ -26,9 +32,15 @@
     "tailwindcss": "^3.4.17"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "jest": "^30.5.2",
+    "jest-environment-jsdom": "^30.5.2",
     "playwright": "^1.63.0",
     "typescript": "^5.9.3"
   }

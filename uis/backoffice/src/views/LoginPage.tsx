@@ -3,14 +3,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
+import { ErrorBanner, inputClass } from "../components/ui/Field";
 import { ApiError } from "../lib/api";
-import { describeError } from "../lib/errors";
 import { currentReturnTo } from "../lib/returnTo";
-
-const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none";
 
 export default function LoginPage() {
   const { status, login } = useAuth();
@@ -19,6 +16,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [passwordReset, setPasswordReset] = useState(false);
+
+  // Sent here by /reset-password after a successful reset (?reset=ok).
+  useEffect(() => {
+    setPasswordReset(new URLSearchParams(window.location.search).get("reset") === "ok");
+  }, []);
 
   // Logged in (by this form, by another tab, or already when opening /login): go to ?next= or the home page.
   useEffect(() => {
@@ -40,10 +43,13 @@ export default function LoginPage() {
     } catch (err) {
       // The API answers the same 401 for a wrong password, an unknown email and an account that an
       // admin has switched off, so the message covers all three.
+      // 429: too many failed attempts from this client; the API refuses even a right password for a while.
       setError(
         err instanceof ApiError && err.status === 401
-          ? "Email o contraseña incorrectos, o la cuenta está desactivada. Revisa los datos; si la cuenta está desactivada, pide a un administrador que la active."
-          : describeError(err, "No se pudo iniciar sesión. Inténtalo de nuevo."),
+          ? "Email o contraseña incorrectos, o la cuenta está desactivada."
+          : err instanceof ApiError && err.status === 429
+            ? "Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo."
+            : "No se pudo iniciar sesión. Inténtalo de nuevo.",
       );
     } finally {
       setSubmitting(false);
@@ -60,8 +66,14 @@ export default function LoginPage() {
         <p className="text-xl font-black text-white">
           nexova<span className="text-cyan-400">.</span>
         </p>
-        <p className="text-xs uppercase tracking-widest text-slate-500">Backoffice</p>
+        <p className="text-xs uppercase tracking-widest text-slate-400">Backoffice</p>
         <h1 className="mt-6 text-lg font-semibold text-white">Iniciar sesión</h1>
+        {passwordReset && (
+          <div role="status" className="mt-4 flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            <p>Contraseña actualizada. Inicia sesión con la nueva.</p>
+          </div>
+        )}
 
         <label className="mt-4 block text-sm text-slate-300">
           Email
@@ -84,10 +96,14 @@ export default function LoginPage() {
           />
         </label>
 
+        <p className="mt-2 text-right text-sm">
+          <Link href="/forgot-password" className="text-cyan-300 hover:text-cyan-200">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+
         {error && (
-          <div role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-            {error}
-          </div>
+          <ErrorBanner message={error} className="mt-4" />
         )}
 
         <button
@@ -100,7 +116,7 @@ export default function LoginPage() {
         </button>
         <p className="mt-4 text-center text-sm text-slate-400">
           ¿No tienes cuenta?{" "}
-          <Link href="/register" className="text-cyan-300 hover:text-cyan-200">
+          <Link href="/register" className="text-cyan-300 underline hover:text-cyan-200">
             Regístrate
           </Link>
         </p>

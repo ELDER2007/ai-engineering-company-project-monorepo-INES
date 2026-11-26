@@ -1,67 +1,47 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Plus } from "lucide-react";
-import { ErrorNotice, LoadingNote, SuccessNotice } from "../components/feedback";
-import SupplierForm from "../components/suppliers/SupplierForm";
 import SupplierRow from "../components/suppliers/SupplierRow";
-import { listSuppliers, setSupplierStatus, updateSupplierRate } from "../lib/api";
-import { describeError } from "../lib/errors";
+import { ErrorBanner, selectClass } from "../components/ui/Field";
+import LoadingState from "../components/ui/LoadingState";
+import { useAsyncResource } from "../lib/useAsyncResource";
+import { ApiError, listSuppliers, setSupplierStatus, updateSupplierRate } from "../lib/api";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Country, type Supplier } from "../types/suppliers";
 
-const selectClass =
-  "rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none";
+const NO_SUPPLIERS: Supplier[] = [];
+
+// The creation form only appears after "Nuevo proveedor"; its code (and validation) is fetched on demand.
+const preloadForm = () => import("../components/suppliers/SupplierForm");
+const SupplierForm = dynamic(preloadForm, { loading: () => <LoadingState label="Cargando formulario…" /> });
+const describeLoadError = (err: unknown) => (err instanceof ApiError ? err.message : "No se pudo cargar el directorio.");
 
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { data: suppliers, setData: setSuppliers, loading, error, setError } = useAsyncResource(listSuppliers, NO_SUPPLIERS, describeLoadError, "suppliers");
   const [showForm, setShowForm] = useState(false);
   const [country, setCountry] = useState<Country | "">("");
   const [category, setCategory] = useState<Category | "">("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      setSuppliers(await listSuppliers());
-    } catch (err) {
-      setLoadError(describeError(err, "No se pudo cargar el directorio de proveedores."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const replace = (updated: Supplier) =>
     setSuppliers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
 
   const handleRateChange = async (id: number, rate: number) => {
     setError(null);
-    setNotice(null);
     try {
       replace(await updateSupplierRate(id, rate));
-      setNotice("Tarifa actualizada.");
     } catch (err) {
-      setError(describeError(err, "No se pudo actualizar la tarifa. Revisa el importe e inténtalo de nuevo."));
+      setError(err instanceof ApiError ? err.message : "No se pudo actualizar la tarifa.");
       throw err;
     }
   };
 
   const handleToggleStatus = async (supplier: Supplier) => {
     setError(null);
-    setNotice(null);
     try {
       replace(await setSupplierStatus(supplier.id, supplier.status === "active" ? "suspended" : "active"));
-      setNotice("Estado actualizado.");
     } catch (err) {
-      setError(describeError(err, "No se pudo cambiar el estado del proveedor. Inténtalo de nuevo."));
-      throw err;
+      setError(err instanceof ApiError ? err.message : "No se pudo cambiar el estado.");
     }
   };
 
@@ -81,6 +61,8 @@ export default function SuppliersPage() {
           <p className="mt-2 text-slate-400">Registro único de servicios externos contratados por Nexova.</p>
         </div>
         <button
+          onPointerEnter={preloadForm}
+          onFocus={preloadForm}
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-2 rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
         >
@@ -96,8 +78,6 @@ export default function SuppliersPage() {
             onCreated={(created) => {
               setSuppliers((prev) => [...prev, created]);
               setShowForm(false);
-              setError(null);
-              setNotice("Proveedor creado.");
             }}
           />
         </div>
@@ -117,32 +97,19 @@ export default function SuppliersPage() {
             </option>
           ))}
         </select>
-        <p className="self-center text-sm text-slate-500">{visible.length} proveedores</p>
+        <p className="self-center text-sm text-slate-400">{visible.length} proveedores</p>
       </div>
 
       {error && (
-        <div className="mt-6">
-          <ErrorNotice message={error} />
-        </div>
-      )}
-      {notice && !error && (
-        <div className="mt-6">
-          <SuccessNotice message={notice} />
-        </div>
+        <ErrorBanner message={error} className="mt-6" />
       )}
 
       {loading ? (
-        <div className="mt-8">
-          <LoadingNote label="Cargando proveedores…" />
-        </div>
-      ) : loadError ? (
-        <div className="mt-8">
-          <ErrorNotice message={loadError} onRetry={() => void load()} home />
-        </div>
+        <LoadingState label="Cargando..." reserveSpace className="mt-6" />
       ) : (
         <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
           <table className="w-full text-left">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-4 py-3">Proveedor</th>
                 <th className="px-4 py-3">País</th>
@@ -158,7 +125,7 @@ export default function SuppliersPage() {
               ))}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
                     No hay proveedores con esos filtros.
                   </td>
                 </tr>

@@ -15,14 +15,12 @@ from fastapi.responses import Response
 from auth.dependencies import CurrentUser, get_current_user
 
 from . import service
-from .schemas import AnalyzeResponse
+from .schemas import AnalyzeResponse, ErrorResponse
 
 # Support-ticket data is internal: any valid session may analyze and export.
 router = APIRouter(
     prefix="/api/incidents", tags=["incidents"], dependencies=[Depends(get_current_user)]
 )
-
-_UNPROCESSABLE = 422
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -38,20 +36,32 @@ async def analyze_incidents(file: UploadFile, user: CurrentUser) -> AnalyzeRespo
         result = service.run_analysis(filename=file.filename or "upload.csv", content=content, owner=str(user.id))
     except service.FileTooLargeError as exc:
         raise HTTPException(413, detail=str(exc)) from exc
-    except (
-        service.NotCsvFileError,
-        service.MissingColumnsError,
-        service.EmptyCsvError,
-        service.InvalidCsvError,
-    ) as exc:
-        raise HTTPException(_UNPROCESSABLE, detail=str(exc)) from exc
+    except service.NotCsvFileError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except service.MissingColumnsError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except service.EmptyCsvError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except service.InvalidCsvError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
     except UnicodeDecodeError as exc:
-        raise HTTPException(_UNPROCESSABLE, detail="File is not valid UTF-8 text.") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File is not valid UTF-8 text.") from exc
 
     return service.to_response(result)
 
 
-@router.get("/results/export")
+@router.get(
+    "/results/export",
+    response_model=None,  # a file, not JSON: the contract is the text/csv response below
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The last analysis as a CSV file (`metric,value` rows), as an attachment.",
+            "content": {"text/csv": {"schema": {"type": "string"}}},
+        },
+        404: {"model": ErrorResponse, "description": "No analysis has been run yet."},
+    },
+)
 async def export_results(user: CurrentUser) -> Response:
     try:
         result = service.get_last_result(str(user.id))

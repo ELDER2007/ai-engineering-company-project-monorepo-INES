@@ -1,5 +1,7 @@
 # Informe de auditoría — gestión de errores del monorepo Nexova
 
+> **Nota de integración con `main`:** no todo lo que describe este informe está en el código actual. **La mayoría de las correcciones del frontend no se aplicaron**, porque `main` reorganizó esas pantallas; del frontend solo entran las pantallas de error nuevas y el aviso sin JavaScript. **Tampoco se aplicó el enmascarado de emails** en el detalle de una incidencia, y un archivo que no es `.csv` o no es UTF-8 se sigue respondiendo con `400`.
+
 **Alcance:** frontend Next.js/TypeScript (`uis/backoffice`, `uis/website`), backend FastAPI (`services/api`), scripts Python (`scripts/`, `services/api/seed.py`, `services/api/auth/cli.py`), paquete compartido (`packages/shared`) y código histórico (`src/`) y la carpeta `skills/`.  
 **Rama auditada:** `main` (commit `9e49b73`). El informe se redactó sin tocar código; las correcciones se aplicaron después en la misma rama (ver «Estado de corrección»).  
 **Evidencia:** los hallazgos marcados «Verificado» se reprodujeron ejecutando la API, los scripts o la interfaz en un navegador; el resto se deduce de la lectura del código.

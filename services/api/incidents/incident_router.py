@@ -11,10 +11,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import TypeAdapter
 
 from auth.dependencies import CurrentUser, get_current_user
-from users.schemas import Role
+from core.cache import TTLCache, cached_json
 
 from . import incident_service as service
 from .incident_schemas import (
@@ -29,20 +30,29 @@ from .incident_schemas import (
     IncidentUpdate,
     StatusChange,
 )
+from .incident_store import CACHE_GROUP
 
 router = APIRouter(
     prefix="/api/incidents", tags=["incident manager"], dependencies=[Depends(get_current_user)]
 )
 
 
+# Reads cached for every authenticated user alike (an incident looks the same to all of them; the customer's email is
+# masked in lists). The store drops them on any write; the TTL only bounds out-of-process writes (CSV seed script).
+#   summary  60 s : a dashboard figure, the costliest read (full scan + aggregation), few distinct filter sets.
+#   facets  300 s : dropdown values; they change only when a new branch/client/agent first appears.
+#   list     30 s : the key includes filters, sort and page, so it is bounded (LRU) and kept short.
+SUMMARY_CACHE = TTLCache("incidents.summary", group=CACHE_GROUP, ttl=60, maxsize=128)
+FACETS_CACHE = TTLCache("incidents.facets", group=CACHE_GROUP, ttl=300, maxsize=1)
+LIST_CACHE = TTLCache("incidents.list", group=CACHE_GROUP, ttl=30, maxsize=256)
+_PAGE = TypeAdapter(IncidentPage)
+_SUMMARY = TypeAdapter(IncidentSummary)
+_FACETS = TypeAdapter(IncidentFacets)
+
+
 def _field_error(field: str, message: str) -> HTTPException:
     detail = [{"loc": ["body", field], "msg": message, "type": "value_error"}]
     return HTTPException(422, detail=detail)
-
-
-def _sees_everything(user: CurrentUser) -> bool:
-    """Only an admin sees the customer's full email and the staff emails in the history."""
-    return user.role == Role.admin
 
 
 def get_filters(
@@ -84,29 +94,31 @@ async def list_incidents(
     order: Annotated[service.SortOrder, Query()] = "desc",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> IncidentPage:
-    return service.list_incidents(filters, sort=sort, order=order, page=page, page_size=page_size)
+) -> Response:
+    key = (filters, sort, order, page, page_size)
+    build = lambda: service.list_incidents(filters, sort=sort, order=order, page=page, page_size=page_size)  # noqa: E731
+    return cached_json(LIST_CACHE, key, build, _PAGE)
 
 
 @router.get("/summary", response_model=IncidentSummary)
-async def incidents_summary(filters: Filters) -> IncidentSummary:
-    return service.summarize(filters)
+async def incidents_summary(filters: Filters) -> Response:
+    return cached_json(SUMMARY_CACHE, filters, lambda: service.summarize(filters), _SUMMARY)
 
 
 @router.get("/facets", response_model=IncidentFacets)
-async def incidents_facets() -> IncidentFacets:
-    return service.facets()
+async def incidents_facets() -> Response:
+    return cached_json(FACETS_CACHE, "facets", service.facets, _FACETS)
 
 
 @router.post("", response_model=IncidentOut, status_code=status.HTTP_201_CREATED)
 async def create_incident(payload: IncidentCreate, user: CurrentUser) -> IncidentOut:
-    return service.create_incident(payload, actor=user.email, reveal=_sees_everything(user))
+    return service.create_incident(payload, actor=user.email)
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)
-async def get_incident(incident_id: str, user: CurrentUser) -> IncidentOut:
+async def get_incident(incident_id: str) -> IncidentOut:
     try:
-        return service.get_incident(incident_id, reveal=_sees_everything(user))
+        return service.get_incident(incident_id)
     except service.IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -114,7 +126,7 @@ async def get_incident(incident_id: str, user: CurrentUser) -> IncidentOut:
 @router.patch("/{incident_id}", response_model=IncidentOut)
 async def update_incident(incident_id: str, payload: IncidentUpdate, user: CurrentUser) -> IncidentOut:
     try:
-        return service.update_incident(incident_id, payload, actor=user.email, reveal=_sees_everything(user))
+        return service.update_incident(incident_id, payload, actor=user.email)
     except service.IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except service.IncidentLockedError as exc:
@@ -126,7 +138,7 @@ async def update_incident(incident_id: str, payload: IncidentUpdate, user: Curre
 @router.patch("/{incident_id}/status", response_model=IncidentOut)
 async def change_incident_status(incident_id: str, payload: StatusChange, user: CurrentUser) -> IncidentOut:
     try:
-        return service.change_status(incident_id, payload, actor=user.email, reveal=_sees_everything(user))
+        return service.change_status(incident_id, payload, actor=user.email)
     except service.IncidentNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except service.TransitionNotAllowedError as exc:

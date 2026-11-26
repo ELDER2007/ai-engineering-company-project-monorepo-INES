@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import {
   EMPTY_FILTERS,
@@ -11,11 +12,10 @@ import {
   type IncidentSummary,
 } from "@repo/shared-types";
 import IncidentFiltersBar from "../components/incidents/IncidentFilters";
-import IncidentForm from "../components/incidents/IncidentForm";
-import IncidentSummaryPanel from "../components/incidents/IncidentSummaryPanel";
+import IncidentSummaryPanel, { IncidentSummarySkeleton } from "../components/incidents/IncidentSummaryPanel";
 import IncidentTable from "../components/incidents/IncidentTable";
-import { ErrorBanner } from "../components/incidents/Field";
-import { ErrorNotice, LoadingNote, SectionBoundary, SuccessNotice } from "../components/feedback";
+import { ErrorBanner } from "../components/ui/Field";
+import LoadingState from "../components/ui/LoadingState";
 import {
   getIncidentFacets,
   getIncidentSummary,
@@ -24,17 +24,14 @@ import {
   type SortOrder,
 } from "../lib/api";
 import { describeError } from "../lib/errors";
+import { useDebounced } from "../lib/useDebounced";
 
 const PAGE_SIZE = 15;
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, ms]);
-  return debounced;
-}
+// The creation form is only needed after "Nueva incidencia" is pressed: it stays out of the first bundle of the list.
+// `preloadForm` (hover/focus on the button) starts the download before the click, so it rarely has to wait.
+const preloadForm = () => import("../components/incidents/IncidentForm");
+const IncidentForm = dynamic(preloadForm, { loading: () => <LoadingState label="Cargando formulario…" /> });
 
 export default function IncidentsPage() {
   const [filters, setFilters] = useState<IncidentFilters>(EMPTY_FILTERS);
@@ -44,16 +41,10 @@ export default function IncidentsPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [list, setList] = useState<IncidentPage | null>(null);
+  const [summary, setSummary] = useState<IncidentSummary | null>(null);
+  const [facets, setFacets] = useState<IncidentFacets>({ branches: [], clients: [], agents: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // The summary is loaded on its own: if it fails, the list keeps working (and the other way round).
-  const [summary, setSummary] = useState<IncidentSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-
-  const [facets, setFacets] = useState<IncidentFacets>({ branches: [], clients: [], agents: [] });
-  const [facetsFailed, setFacetsFailed] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -63,60 +54,27 @@ export default function IncidentsPage() {
   const hasFilters = JSON.stringify(applied) !== JSON.stringify(EMPTY_FILTERS);
 
   // Only the latest request may write state: a slow older answer must not overwrite a newer one.
-  const latestList = useRef(0);
-  const latestSummary = useRef(0);
-
-  const retry = useCallback(() => setReloadKey((k) => k + 1), []);
+  const latest = useRef(0);
 
   useEffect(() => {
     if (rangeInvalid) return;
-    const request = ++latestList.current;
+    const request = ++latest.current;
     setLoading(true);
-    void (async () => {
-      try {
-        const next = await listIncidents(applied, { sort, order, page, pageSize: PAGE_SIZE });
-        if (request !== latestList.current) return;
-        setList(next);
+    Promise.all([listIncidents(applied, { sort, order, page, pageSize: PAGE_SIZE }), getIncidentSummary(applied)])
+      .then(([nextList, nextSummary]) => {
+        if (request !== latest.current) return;
+        setList(nextList);
+        setSummary(nextSummary);
         setError(null);
         // A page that no longer exists (e.g. after filtering) falls back to the last one.
-        if (next.pages > 0 && page > next.pages) setPage(next.pages);
-      } catch (err) {
-        if (request === latestList.current) setError(describeError(err, "No se pudieron cargar las incidencias."));
-      } finally {
-        if (request === latestList.current) setLoading(false);
-      }
-    })();
+        if (nextList.pages > 0 && page > nextList.pages) setPage(nextList.pages);
+      })
+      .catch((err) => request === latest.current && setError(describeError(err, "No se pudieron cargar las incidencias.")))
+      .finally(() => request === latest.current && setLoading(false));
   }, [applied, sort, order, page, reloadKey, rangeInvalid]);
 
   useEffect(() => {
-    if (rangeInvalid) return;
-    const request = ++latestSummary.current;
-    setSummaryLoading(true);
-    void (async () => {
-      try {
-        const next = await getIncidentSummary(applied);
-        if (request !== latestSummary.current) return;
-        setSummary(next);
-        setSummaryError(null);
-      } catch (err) {
-        if (request === latestSummary.current) setSummaryError(describeError(err, "No se pudo cargar el resumen."));
-      } finally {
-        if (request === latestSummary.current) setSummaryLoading(false);
-      }
-    })();
-  }, [applied, reloadKey, rangeInvalid]);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        setFacets(await getIncidentFacets());
-        setFacetsFailed(false);
-      } catch (err) {
-        // Only the drop-down suggestions are missing: the list and the filters still work, and the person is told.
-        console.warn("[incidents] the filter options could not be loaded", err);
-        setFacetsFailed(true);
-      }
-    })();
+    getIncidentFacets().then(setFacets).catch(() => undefined); // only fills dropdowns; the list reports real errors
   }, [reloadKey]);
 
   const changeFilters = useCallback((next: IncidentFilters) => {
@@ -142,8 +100,6 @@ export default function IncidentsPage() {
   };
 
   const pages = list?.pages ?? 0;
-  // What the table shows is from before the last attempt, which failed: it must not pass for the current result.
-  const stale = error !== null && list !== null;
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -154,6 +110,8 @@ export default function IncidentsPage() {
         </div>
         <button
           type="button"
+          onPointerEnter={preloadForm}
+          onFocus={preloadForm}
           onClick={() => {
             setShowForm((v) => !v);
             setNotice(null);
@@ -166,9 +124,9 @@ export default function IncidentsPage() {
       </header>
 
       {notice && (
-        <div className="mt-6">
-          <SuccessNotice message={notice} />
-        </div>
+        <p role="status" className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          {notice}
+        </p>
       )}
 
       {showForm && (
@@ -177,65 +135,39 @@ export default function IncidentsPage() {
         </div>
       )}
 
-      <div className="mt-8">
-        <SectionBoundary name="el resumen">
-          {summaryError ? (
-            <ErrorNotice message={summaryError} onRetry={retry}>
-              El resto de la pantalla sigue funcionando.
-            </ErrorNotice>
-          ) : summary ? (
-            <div className={summaryLoading ? "opacity-60 transition" : "transition"}>
-              <IncidentSummaryPanel summary={summary} />
-            </div>
-          ) : summaryLoading ? (
-            <LoadingNote label="Cargando el resumen…" />
-          ) : null}
-        </SectionBoundary>
-      </div>
+      <div className="mt-8">{summary ? <IncidentSummaryPanel summary={summary} /> : <IncidentSummarySkeleton />}</div>
 
       <div className="mt-8">
-        <SectionBoundary name="los filtros">
-          <IncidentFiltersBar filters={filters} facets={facets} onChange={changeFilters} />
-        </SectionBoundary>
-        {facetsFailed && (
-          <p role="status" className="mt-2 text-xs text-amber-300">
-            No se pudieron cargar las sugerencias de los filtros (sucursales, clientes y agentes); el resto sigue funcionando.
-          </p>
-        )}
+        <IncidentFiltersBar filters={filters} facets={facets} onChange={changeFilters} />
       </div>
 
       {error && (
         <div className="mt-6">
-          <ErrorBanner message={error} onRetry={retry} />
+          <ErrorBanner message={error} />
         </div>
       )}
 
       <div className="mt-6" aria-busy={loading}>
         {list === null && loading ? (
-          <LoadingNote label="Cargando incidencias…" />
-        ) : list && list.total === 0 && !error ? (
+          <LoadingState reserveSpace />
+        ) : list && list.total === 0 ? (
           <p className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-10 text-center text-sm text-slate-400">
-            {hasFilters ? "Ninguna incidencia coincide con estos filtros." : "Todavía no hay incidencias. Crea la primera con «Nueva incidencia»."}
+            {hasFilters
+              ? "Ninguna incidencia coincide con estos filtros."
+              : "Todavía no hay incidencias. Crea la primera o carga el histórico con «scripts/seed_incidents.py»."}
           </p>
         ) : list ? (
-          <div className={loading || stale ? "opacity-50 transition" : "transition"}>
-            {stale && (
-              <p role="status" className="mb-3 text-sm text-amber-300">
-                Mostrando el resultado anterior: la última carga ha fallado.
-              </p>
-            )}
-            <SectionBoundary name="la tabla de incidencias">
-              <IncidentTable items={list.items} sort={sort} order={order} onSort={handleSort} />
-            </SectionBoundary>
+          <div className={loading ? "opacity-60 transition" : "transition"}>
+            <IncidentTable items={list.items} sort={sort} order={order} onSort={handleSort} />
             <nav aria-label="Paginación" className="mt-4 flex items-center justify-between text-sm text-slate-400">
               <p>
                 {list.total} incidencias · página {list.page} de {pages}
               </p>
               <div className="flex gap-2">
-                <button type="button" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)} className="flex items-center gap-1 rounded-full border border-slate-700 px-3 py-1.5 enabled:hover:text-white disabled:opacity-40">
+                <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} className="flex items-center gap-1 rounded-full border border-slate-700 px-3 py-1.5 enabled:hover:text-white disabled:opacity-40">
                   <ChevronLeft size={14} /> Anterior
                 </button>
-                <button type="button" disabled={page >= pages || loading} onClick={() => setPage(page + 1)} className="flex items-center gap-1 rounded-full border border-slate-700 px-3 py-1.5 enabled:hover:text-white disabled:opacity-40">
+                <button type="button" disabled={page >= pages} onClick={() => setPage(page + 1)} className="flex items-center gap-1 rounded-full border border-slate-700 px-3 py-1.5 enabled:hover:text-white disabled:opacity-40">
                   Siguiente <ChevronRight size={14} />
                 </button>
               </div>

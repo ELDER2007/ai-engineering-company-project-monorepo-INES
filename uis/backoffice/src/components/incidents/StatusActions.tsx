@@ -10,20 +10,15 @@ import {
   type IncidentStatus,
 } from "@repo/shared-types";
 import { ApiError, changeIncidentStatus } from "../../lib/api";
-import { describeError, friendlyFieldErrors, isConflict } from "../../lib/errors";
-import { labelOf } from "../../lib/format";
-import { ErrorBanner, inputClass } from "./Field";
+import { describeError, isConflict } from "../../lib/errors";
+import { statusActionLabel } from "../../lib/labels";
+import { ErrorBanner, inputClass } from "../ui/Field";
 
 interface Props {
   incident: Incident;
   onChanged: (incident: Incident) => void;
   /** The incident changed under us (409): the page reloads it. */
   onConflict: () => void;
-}
-
-function actionLabel(current: IncidentStatus, target: IncidentStatus): string {
-  if (target === "open") return current === "in_progress" ? "Devolver a abierta" : "Reabrir";
-  return { in_progress: "Poner en curso", resolved: "Resolver", discarded: "Descartar" }[target];
 }
 
 export default function StatusActions({ incident, onChanged, onConflict }: Props) {
@@ -42,8 +37,7 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
     setError(null);
   };
 
-  const transitions = incident.allowed_transitions ?? [];
-  if (transitions.length === 0) return null;
+  if (incident.allowed_transitions.length === 0) return null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -58,38 +52,35 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
     setError(found.status ?? null);
     if (Object.keys(found).length > 0) return;
     setSaving(true);
-    // Only the call to the API is inside the try: what happens after a good answer must not be reported as a failed save.
-    let updated: Incident;
     try {
-      updated = await changeIncidentStatus(incident.id, {
+      const updated = await changeIncidentStatus(incident.id, {
         status: target,
         ...(change.satisfaction_score != null && { satisfaction_score: change.satisfaction_score }),
         ...(change.discard_reason && { discard_reason: change.discard_reason }),
       });
+      reset();
+      onChanged(updated);
     } catch (err) {
       if (isConflict(err)) {
         reset();
         onConflict();
         return;
       }
-      if (err instanceof ApiError) setErrors(friendlyFieldErrors(err) as FieldErrors<"status" | "satisfaction_score" | "discard_reason">);
-      setError(describeError(err, "No se pudo cambiar el estado. Revisa los datos e inténtalo de nuevo."));
-      return;
+      if (err instanceof ApiError) setErrors(err.fieldErrors);
+      setError(describeError(err, "No se pudo cambiar el estado."));
     } finally {
       setSaving(false);
     }
-    reset();
-    onChanged(updated);
   };
 
   return (
     <section aria-label="Cambiar estado" className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
       <h2 className="text-lg font-semibold text-white">Ciclo de vida</h2>
       <p className="mt-1 text-sm text-slate-400">
-        Estado actual: <strong className="text-slate-200">{labelOf(STATUS_LABELS, incident.status)}</strong>
+        Estado actual: <strong className="text-slate-200">{STATUS_LABELS[incident.status]}</strong>
       </p>
       <div className="mt-4 flex flex-wrap gap-3">
-        {transitions.map((status) => (
+        {incident.allowed_transitions.map((status) => (
           <button
             key={status}
             type="button"
@@ -102,7 +93,7 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
               target === status ? "border-cyan-400 bg-cyan-400/10 text-cyan-300" : "border-slate-700 text-slate-300 hover:text-white"
             }`}
           >
-            {actionLabel(incident.status, status)}
+            {statusActionLabel(incident.status, status)}
           </button>
         ))}
       </div>
@@ -126,7 +117,7 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
                   </label>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-slate-500">Pulsa de nuevo la puntuación elegida para quitarla.</p>
+              <p className="mt-2 text-xs text-slate-400">Pulsa de nuevo la puntuación elegida para quitarla.</p>
               {errors.satisfaction_score && <p id="score-error" className="mt-2 text-xs text-rose-300">{errors.satisfaction_score}</p>}
             </fieldset>
           )}
@@ -155,7 +146,7 @@ export default function StatusActions({ incident, onChanged, onConflict }: Props
           <div className="flex gap-3">
             <button type="submit" disabled={saving} className="flex items-center gap-2 rounded-full bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300 disabled:opacity-60">
               {saving && <Loader2 className="animate-spin" size={14} />}
-              Confirmar: {actionLabel(incident.status, target).toLowerCase()}
+              Confirmar: {statusActionLabel(incident.status, target).toLowerCase()}
             </button>
             <button type="button" onClick={reset} className="rounded-full px-5 py-2 text-sm text-slate-300 hover:text-white">
               Cancelar

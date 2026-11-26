@@ -1,25 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Download, Loader2 } from "lucide-react";
-import { ErrorNotice, LoadingNote, SectionBoundary } from "../components/feedback";
 import CsvUploader from "../components/incidents/CsvUploader";
-import MetricsSummary from "../components/incidents/MetricsSummary";
-import { analyzeIncidentsFile, downloadResultsCsv } from "../lib/api";
-import { describeUploadError } from "../lib/errors";
+import { ErrorBanner } from "../components/ui/Field";
+import LoadingState from "../components/ui/LoadingState";
+import { analyzeIncidentsFile, downloadResultsCsv, ApiError } from "../lib/api";
 import type { AnalyzeResponse } from "../types/incidents";
+
+// The results panel is only drawn once a CSV has been analysed; before that (the page's whole first visit) it is dead code.
+const MetricsSummary = dynamic(() => import("../components/incidents/MetricsSummary"), {
+  loading: () => <LoadingState label="Preparando resultados…" />,
+});
 
 export default function IncidentsAnalysisPage() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileSelected = async (file: File) => {
     setFileName(file.name);
-    setFile(file);
     setError(null);
     setResult(null);
     setIsAnalyzing(true);
@@ -27,7 +30,7 @@ export default function IncidentsAnalysisPage() {
       const response = await analyzeIncidentsFile(file);
       setResult(response);
     } catch (err) {
-      setError(describeUploadError(err, "No se pudo analizar el archivo. Comprueba que es el CSV del helpdesk e inténtalo de nuevo."));
+      setError(err instanceof ApiError ? err.message : "No se pudo analizar el archivo.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -39,7 +42,7 @@ export default function IncidentsAnalysisPage() {
     try {
       await downloadResultsCsv();
     } catch (err) {
-      setError(describeUploadError(err, "No se pudo descargar el archivo. Inténtalo de nuevo."));
+      setError(err instanceof ApiError ? err.message : "No se pudo descargar el archivo.");
     } finally {
       setIsExporting(false);
     }
@@ -65,17 +68,11 @@ export default function IncidentsAnalysisPage() {
       </div>
 
       {isAnalyzing && (
-        <div className="mt-8">
-          <LoadingNote label="Analizando archivo…" />
-        </div>
+        <LoadingState label="Analizando archivo..." className="mt-8" />
       )}
 
       {error && (
-        <div className="mt-8">
-          <ErrorNotice message={error} onRetry={file ? () => void handleFileSelected(file) : undefined} retryLabel="Volver a analizar">
-            Puedes elegir otro archivo arrastrándolo o haciendo clic en el cuadro de arriba.
-          </ErrorNotice>
-        </div>
+        <ErrorBanner message={error} className="mt-8" />
       )}
 
       {result && !isAnalyzing && (
@@ -92,9 +89,7 @@ export default function IncidentsAnalysisPage() {
             </button>
           </div>
           <div className="mt-6">
-            <SectionBoundary name="los resultados del análisis">
-              <MetricsSummary result={result} />
-            </SectionBoundary>
+            <MetricsSummary result={result} />
           </div>
         </div>
       )}

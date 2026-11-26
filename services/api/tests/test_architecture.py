@@ -69,5 +69,5 @@ def test_user_and_profile_documents_never_gain_sql_style_foreign_keys(users_db, 
     documents know nothing about inventory or any other SQL table."""
     user_keys = set(users_db.all()[0])
     profile_keys = set(profiles_db.all()[0])
-    assert user_keys == {"id", "email", "hashed_password", "is_active", "role", "created_at"}
+    assert user_keys == {"id", "email", "hashed_password", "is_active", "role", "created_at", "password_changed_at"}
     assert profile_keys == {"id", "user_id", "name", "contact_email", "phone", "address"}

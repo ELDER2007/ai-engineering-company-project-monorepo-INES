@@ -30,7 +30,6 @@ from .incident_schemas import (
     IncidentSummary,
     IncidentUpdate,
     StatusChange,
-    mask_email,
 )
 
 __all__ = [
@@ -125,25 +124,12 @@ def _view(doc: dict) -> dict:
     }
 
 
-def _mask_actor(actor: str) -> str:
-    """The history names who did what by email; only an admin sees the full address."""
-    return mask_email(actor) if "@" in actor else actor
-
-
-def _to_out(doc: dict, *, reveal: bool = False) -> IncidentOut:
-    """The full incident. ``reveal`` (admins only) shows the customer's address and the emails of the staff
-    in the history; for everybody else they are masked, as they already are in the list."""
-    email = doc.get("customer_email")
-    history = doc["history"]
-    if not reveal:
-        email = mask_email(email) if email else None
-        history = [{**entry, "actor": _mask_actor(str(entry.get("actor", "")))} for entry in history]
-    return IncidentOut(**_view(doc), customer_email=email, history=history)
+def _to_out(doc: dict) -> IncidentOut:
+    return IncidentOut(**_view(doc), customer_email=doc.get("customer_email"), history=doc["history"])
 
 
 def _to_list_item(doc: dict) -> IncidentListItem:
-    email = doc.get("customer_email")
-    return IncidentListItem(**_view(doc), customer_email_masked=mask_email(email) if email else None)
+    return IncidentListItem(**{key: doc[key] for key in IncidentListItem.model_fields})
 
 
 def _require(incident_id: str) -> dict:
@@ -153,11 +139,11 @@ def _require(incident_id: str) -> dict:
     return doc
 
 
-def get_incident(incident_id: str, *, reveal: bool = False) -> IncidentOut:
-    return _to_out(_require(incident_id), reveal=reveal)
+def get_incident(incident_id: str) -> IncidentOut:
+    return _to_out(_require(incident_id))
 
 
-def create_incident(payload: IncidentCreate, *, actor: str, reveal: bool = False) -> IncidentOut:
+def create_incident(payload: IncidentCreate, *, actor: str) -> IncidentOut:
     now = _now()
     with store.lock:
         record = IncidentRecord(
@@ -170,10 +156,10 @@ def create_incident(payload: IncidentCreate, *, actor: str, reveal: bool = False
         )
         doc = record.model_dump(mode="json")
         store.insert(doc)
-    return _to_out(doc, reveal=reveal)
+    return _to_out(doc)
 
 
-def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str, reveal: bool = False) -> IncidentOut:
+def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str) -> IncidentOut:
     with store.lock:
         doc = _require(incident_id)
         lifecycle.ensure_editable(doc)
@@ -181,7 +167,7 @@ def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str, re
         changes = payload.model_dump(mode="json", exclude_unset=True)
         changed = sorted(name for name, value in changes.items() if doc.get(name) != value)
         if not changed:
-            return _to_out(doc, reveal=reveal)
+            return _to_out(doc)
 
         now = _now()
         entry = {"at": now.isoformat(), "kind": "edited", "actor": actor, "fields": changed}
@@ -197,16 +183,16 @@ def update_incident(incident_id: str, payload: IncidentUpdate, *, actor: str, re
             ) from exc
         new_doc = record.model_dump(mode="json")
         store.replace(incident_id, new_doc)
-    return _to_out(new_doc, reveal=reveal)
+    return _to_out(new_doc)
 
 
-def change_status(incident_id: str, change: StatusChange, *, actor: str, reveal: bool = False) -> IncidentOut:
+def change_status(incident_id: str, change: StatusChange, *, actor: str) -> IncidentOut:
     with store.lock:
         doc = _require(incident_id)
         new_doc = lifecycle.apply_status_change(doc, change, actor=actor, now=_now())
         new_doc = IncidentRecord(**new_doc).model_dump(mode="json")
         store.replace(incident_id, new_doc)
-    return _to_out(new_doc, reveal=reveal)
+    return _to_out(new_doc)
 
 
 def _is_readable(doc: dict) -> bool:

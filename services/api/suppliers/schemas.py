@@ -7,11 +7,12 @@ doesn't match the country — is rejected with a 422 before it reaches TinyDB.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from enum import Enum
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Country(str, Enum):
@@ -43,6 +44,14 @@ class SupplierCategory(str, Enum):
 
 COUNTRY_CURRENCY = {Country.SPAIN: Currency.EUR, Country.USA: Currency.USD}
 
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _check_email(value: str | None) -> str | None:
+    if value is not None and not _EMAIL_RE.match(value):
+        raise ValueError("contact_email must be a valid email address")
+    return value
+
 
 class SupplierCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -56,6 +65,8 @@ class SupplierCreate(BaseModel):
     contract_renewal_date: date | None = None
     contact_email: str | None = None
     notes: str | None = None
+
+    _valid_email = field_validator("contact_email")(_check_email)
 
     @model_validator(mode="after")
     def currency_matches_country(self) -> Self:
@@ -80,6 +91,8 @@ class SupplierUpdate(BaseModel):
     contact_email: str | None = None
     notes: str | None = None
 
+    _valid_email = field_validator("contact_email")(_check_email)
+
 
 class SupplierRateUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -94,11 +107,26 @@ class SupplierStatusUpdate(BaseModel):
 
 
 class Supplier(SupplierCreate):
-    """Full supplier record: the validated input plus the system-generated
-    ``updated_at`` (stamped whenever ``monthly_rate`` changes)."""
+    """The record stored in TinyDB: the validated input plus the system-generated
+    ``updated_at`` (stamped whenever ``monthly_rate`` changes). Not a response shape."""
 
     updated_at: datetime
 
 
-class SupplierOut(Supplier):
+class SupplierOut(BaseModel):
+    """What every supplier endpoint returns (list, search, detail and the writes). Declared
+    field by field, not inherited from the input: a field added to ``SupplierCreate`` must be
+    added here on purpose to reach a client. The backoffice row shows all of these, so list and
+    detail share one shape."""
+
     id: int
+    name: str
+    country: Country
+    categories: list[SupplierCategory]
+    monthly_rate: float
+    currency: Currency
+    status: SupplierStatus
+    contract_renewal_date: date | None
+    contact_email: str | None
+    notes: str | None
+    updated_at: datetime

@@ -1,5 +1,7 @@
 # Auditoría de gestión de errores — monorepo Nexova
 
+> **Nota de integración con `main`:** no todo lo que describe este informe está en el código actual. **La mayoría de las correcciones del frontend no se aplicaron**, porque `main` reorganizó esas pantallas; del frontend solo entran las pantallas de error nuevas y el aviso sin JavaScript. **Tampoco se aplicó el enmascarado de emails** en el detalle de una incidencia, y un archivo que no es `.csv` o no es UTF-8 se sigue respondiendo con `400`.
+
 > **Cómo leer este documento.** Es la versión **detallada por partes**: explica el método y la evidencia de cada pasada, en el orden en que se hicieron. El **informe final** es [INFORME-AUDITORIA.md](./INFORME-AUDITORIA.md): **82 hallazgos** en el formato pedido (ruta, línea o rango, categoría, descripción, corrección y severidad **CRÍTICO / ALTO / MEDIO / BAJO**), con la matriz de los criterios del tech lead y la rúbrica de evaluación.
 >
 > Dos cosas que conviene saber para no confundirse al comparar los dos documentos:

@@ -13,8 +13,8 @@ import {
   type IncidentDraft,
 } from "@repo/shared-types";
 import { ApiError, createIncident, updateIncident, type IncidentFields } from "../../lib/api";
-import { describeError, friendlyFieldErrors } from "../../lib/errors";
-import { ErrorBanner, Field, inputClass } from "./Field";
+import { describeError } from "../../lib/errors";
+import { ErrorBanner, Field, inputClass } from "../ui/Field";
 
 interface Props {
   /** Present = edit that incident (only the fields that changed are sent); absent = report a new one. */
@@ -80,38 +80,32 @@ export default function IncidentForm({ incident, branches, agents, clients, onSa
       return;
     }
     const clean = Object.fromEntries(FIELDS.map((key) => [key, draft[key].trim()])) as unknown as IncidentDraft;
-    const changes: Partial<IncidentFields> = {};
-    if (incident) {
-      // Only what changed; an optional field that was emptied is cleared with null.
-      for (const key of FIELDS) {
-        const before = (incident[key] ?? "") as string;
-        if (clean[key] !== before) Object.assign(changes, { [key]: OPTIONAL.includes(key) && !clean[key] ? null : clean[key] });
-      }
-      if (Object.keys(changes).length === 0) {
-        setFormError("No has cambiado ningún dato.");
-        return;
-      }
-    }
     setSaving(true);
-    // Only the call to the API is inside the try: onSaved belongs to the page and its failures are not a failed save.
-    let saved: Incident;
     try {
       if (incident) {
-        saved = await updateIncident(incident.id, changes);
+        // Only what changed; an optional field that was emptied is cleared with null.
+        const changes: Partial<IncidentFields> = {};
+        for (const key of FIELDS) {
+          const before = (incident[key] ?? "") as string;
+          if (clean[key] !== before) Object.assign(changes, { [key]: OPTIONAL.includes(key) && !clean[key] ? null : clean[key] });
+        }
+        if (Object.keys(changes).length === 0) {
+          setFormError("No has cambiado ningún dato.");
+          return;
+        }
+        onSaved(await updateIncident(incident.id, changes));
       } else {
         const payload = Object.fromEntries(FIELDS.filter((key) => !OPTIONAL.includes(key) || clean[key]).map((key) => [key, clean[key]]));
-        saved = await createIncident(payload as IncidentFields);
+        onSaved(await createIncident(payload as IncidentFields));
       }
     } catch (err) {
       if (err instanceof ApiError && Object.keys(err.fieldErrors).length > 0) {
-        setErrors(Object.fromEntries(Object.entries(friendlyFieldErrors(err)).filter(([key]) => FIELDS.includes(key as keyof IncidentDraft))));
+        setErrors(Object.fromEntries(Object.entries(err.fieldErrors).filter(([key]) => FIELDS.includes(key as keyof IncidentDraft))));
       }
-      setFormError(describeError(err, incident ? "No se pudo guardar la incidencia. Inténtalo de nuevo." : "No se pudo crear la incidencia. Inténtalo de nuevo."));
-      return;
+      setFormError(describeError(err, incident ? "No se pudo guardar la incidencia." : "No se pudo crear la incidencia."));
     } finally {
       setSaving(false);
     }
-    onSaved(saved);
   };
 
   return (

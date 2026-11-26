@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { createSupplier } from "../../lib/api";
-import { describeError } from "../../lib/errors";
+import { ErrorBanner, inputClass } from "../ui/Field";
+import { ApiError, createSupplier } from "../../lib/api";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -15,9 +15,6 @@ interface Props {
   onCreated: (supplier: Supplier) => void;
   onCancel: () => void;
 }
-
-const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none";
 
 export default function SupplierForm({ onCreated, onCancel }: Props) {
   const [name, setName] = useState("");
@@ -48,10 +45,8 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
       return;
     }
     setSaving(true);
-    // Only the call to the API is inside the try: onCreated belongs to the page.
-    let created: Supplier;
     try {
-      created = await createSupplier({
+      const created = await createSupplier({
         name: name.trim(),
         country,
         categories,
@@ -62,13 +57,12 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
         contact_email: email.trim() || null,
         notes: notes.trim() || null,
       });
+      onCreated(created);
     } catch (err) {
-      setError(describeError(err, "No se pudo crear el proveedor. Revisa los datos e inténtalo de nuevo."));
-      return;
+      setError(err instanceof ApiError ? err.message : "No se pudo crear el proveedor.");
     } finally {
       setSaving(false);
     }
-    onCreated(created);
   };
 
   return (
@@ -132,9 +126,7 @@ export default function SupplierForm({ onCreated, onCancel }: Props) {
         </div>
       </fieldset>
       {error && (
-        <div role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
-        </div>
+        <ErrorBanner message={error} className="mt-4" />
       )}
       <div className="mt-6 flex gap-3">
         <button
