@@ -8,7 +8,7 @@ docker compose logs -f scheduler                        # what it does, one line
 docker compose --profile scheduler stop scheduler       # stop it
 ```
 
-It is **off by default**: a plain `docker compose up` starts `api` and `uis` exactly as before. It needs `DATABASE_URL` in the `.env` of the
+It is **off by default**: a plain `docker compose up` does not start it (it starts the application and its task queue: `api`, `uis`, `redis`, `worker` and `flower`). It needs `DATABASE_URL` in the `.env` of the
 repo root (in production, the one that lives on the VPS), the same database as the API. Without it the container refuses to start the job
 (`NIGHTLY_REQUIRE_DATABASE_URL=1`) instead of "working" against a throw-away file inside itself.
 
@@ -47,7 +47,7 @@ Why the container:
 * **One time zone, known.** UTC, always.
 * **It can be tried here.** It was built and run with Docker with a schedule of one minute to check that it fires (see *How it was checked*).
 * **It respects the other projects.** The scheduler itself is only new files (`infra/scheduler/`) and one more service in `docker-compose.yml`, under a Compose *profile*:
-  a plain `docker compose up` still starts `api` and `uis`. (Separately, the `api` image now also carries `data/pipelines` and `data/process`, which the reporting
+  a plain `docker compose up` does not start it. (Separately, the `api` image now also carries `data/pipelines` and `data/process`, which the reporting
   endpoints import: without them the API did not start in Docker. See `services/Dockerfile`.)
 
 The alternative, if the container is not wanted, is one line in the `crontab` of the server (with `CRON_TZ=UTC` if its cron supports it, or

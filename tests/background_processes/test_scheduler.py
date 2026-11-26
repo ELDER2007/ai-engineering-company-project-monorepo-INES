@@ -94,8 +94,9 @@ def test_the_scheduler_is_a_service_of_its_own_off_by_default_that_does_not_depe
 BEFORE_DEV53 = "a915b10"
 
 
-def test_the_uis_are_what_they_were_before_dev53_and_the_api_only_gained_the_one_build_context_it_needs():
-    """Respecting each project: ``uis`` is untouched, and ``api`` differs from main in exactly one line: the named context ``data`` that its reporting module imports."""
+def test_the_uis_are_what_they_were_before_dev53_and_the_api_only_gained_what_it_needs():
+    """Respecting each project: ``uis`` is untouched, and ``api`` differs from main in exactly two things: the named context ``data`` that its reporting
+    module imports (DEV-53) and ``REDIS_URL``, the queue of the asynchronous tasks (DEV-55). The services that were added are exactly the known ones."""
     import copy
 
     if shutil.which("git") is None:
@@ -106,9 +107,10 @@ def test_the_uis_are_what_they_were_before_dev53_and_the_api_only_gained_the_one
     before = yaml.safe_load(shown.stdout)
     expected_api = copy.deepcopy(before["services"]["api"])
     expected_api["build"]["additional_contexts"]["data"] = "./data"
+    expected_api["environment"]["REDIS_URL"] = "${REDIS_URL_DOCKER:-redis://redis:6379/0}"
     assert COMPOSE["services"]["api"] == expected_api  # nothing else of the api service changed
     assert COMPOSE["services"]["uis"] == before["services"]["uis"]
-    assert COMPOSE["networks"] == before["networks"] and set(COMPOSE["services"]) - set(before["services"]) == {"scheduler"}
+    assert COMPOSE["networks"] == before["networks"] and set(COMPOSE["services"]) - set(before["services"]) == {"scheduler", "redis", "worker", "flower"}
 
 
 def test_the_api_image_carries_the_code_of_the_pipeline_it_imports_and_never_the_data_folders():
@@ -121,14 +123,15 @@ def test_the_api_image_carries_the_code_of_the_pipeline_it_imports_and_never_the
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="needs the docker CLI")
-def test_compose_starts_only_api_and_uis_unless_the_profile_is_asked_for():
+def test_compose_starts_the_app_and_its_task_queue_unless_the_profile_is_asked_for():
     def services(*profile):
         out = subprocess.run(["docker", "compose", *profile, "config", "--services"], cwd=REPO, capture_output=True, text=True, timeout=60, check=False)
         assert out.returncode == 0, out.stderr[-400:]
         return set(out.stdout.split())
 
-    assert services() == {"api", "uis"}
-    assert services("--profile", "scheduler") == {"api", "uis", "scheduler"}
+    default = {"api", "uis", "redis", "worker", "flower"}  # the task queue (DEV-55) starts with the rest
+    assert services() == default
+    assert services("--profile", "scheduler") == default | {"scheduler"}
 
 
 # ---------------------------------------------------------------- the image: only what the job needs, and no secrets

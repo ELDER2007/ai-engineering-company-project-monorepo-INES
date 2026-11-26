@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from async_tasks.router import router as async_tasks_router
+from async_tasks.router import warm_up as warm_up_task_queue
 from auth.router import router as auth_router
 from core.config import get_allowed_origins, get_jwt_secret, get_telemetry_endpoint
 from core.errors import validation_error_handler
@@ -41,6 +43,7 @@ async def lifespan(_: FastAPI):
     init_inventory_db()  # SQL tables (Supabase, or the local SQLite fallback); TinyDB is untouched
     seed_local_if_empty()
     init_reporting()  # `reporting` schema (pipeline results); telemetry_events is only ever read
+    warm_up_task_queue()  # background, best effort: the API starts and works without Redis
     yield
 
 
@@ -69,6 +72,7 @@ app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
 app.include_router(telemetry_router, prefix="/telemetry")  # public: validates and stores the events
 app.include_router(reporting_router)  # prefix="/reporting" is set on the router itself
+app.include_router(async_tasks_router)  # DEV-55: POST /tasks/pipeline-runs and GET /tasks/{task_id}; Redis is not needed to start
 
 
 @app.get("/health")

@@ -16,6 +16,7 @@ dependencies = [
     "email-validator>=2.0",
     "incidents-analyzer",
     "libpass[bcrypt]>=1.9",
+    "bcrypt>=4.1",  # declared on its own: libpass 1.9.5 no longer installs it through its extra
     "python-dotenv>=1.0",
     "sqlmodel>=0.0.48",
     "psycopg2-binary>=2.9.13",
@@ -23,6 +24,8 @@ dependencies = [
     "rfc3339-validator>=0.1.4",
     "pandas>=2.2",
     "prefect>=3",
+    "celery[redis]>=5.5",
+    "flower>=2.0",
 ]
 
 [dependency-groups]

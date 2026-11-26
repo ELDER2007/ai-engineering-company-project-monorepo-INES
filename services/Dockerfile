@@ -20,5 +20,7 @@ COPY api/requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
 COPY api .
+# The Celery application (DEV-55). The worker and Flower run from /app (`celery -A services.celery_app ...`), the API imports it as services.celery_app.
+COPY celery_app.py /app/services/celery_app.py
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
