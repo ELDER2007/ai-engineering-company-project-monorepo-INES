@@ -24,6 +24,9 @@ venv/
 # Generated analysis output (not source)
 results.csv
 
+# TinyDB runtime storage (seeded on startup, not source)
+services/api/suppliers/db.json
+
 # Editor/OS
 .DS_Store
 *.swp

@@ -1,0 +1,138 @@
+"""Business logic for the suppliers domain (Directorio de Proveedores).
+
+Backed by TinyDB rather than a full RDBMS: a small internal directory with a
+still-settling data model doesn't need more, and Postgres comes later once the
+ORM is ready.
+
+The database is seeded from ``seed_data.py`` the first time it's opened, and
+``get_db()`` is called once at import time (bottom of file) so the directory is
+populated as soon as the app starts — the demo must never show an empty DB.
+
+Suppliers are never deleted: they are suspended, to keep the history of
+commercial relationships.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+
+from pydantic import ValidationError
+from tinydb import Query, TinyDB
+
+from .schemas import (
+    SupplierCategory,
+    SupplierCreate,
+    SupplierOut,
+    SupplierStatus,
+    SupplierUpdate,
+)
+from .seed_data import SUPPLIERS_SEED
+
+_DB_PATH = Path(__file__).parent / "db.json"
+_db: TinyDB | None = None
+
+
+class SupplierNotFoundError(Exception):
+    def __init__(self, supplier_id: int):
+        self.supplier_id = supplier_id
+        super().__init__(f"Supplier {supplier_id} not found")
+
+
+class InvalidSupplierUpdateError(Exception):
+    """The update would leave the supplier in an invalid state."""
+
+    def __init__(self, errors: list):
+        self.errors = errors
+        super().__init__("Update would produce an invalid supplier")
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def get_db() -> TinyDB:
+    global _db
+    if _db is None:
+        _db = TinyDB(_DB_PATH)
+        _seed_if_empty(_db)
+    return _db
+
+
+def _seed_if_empty(db: TinyDB) -> None:
+    if len(db) > 0:
+        return
+    timestamp = _now()
+    for entry in SUPPLIERS_SEED:
+        supplier = SupplierCreate(**entry)
+        db.insert({**supplier.model_dump(mode="json"), "updated_at": timestamp})
+
+
+def list_suppliers() -> list[SupplierOut]:
+    return [_to_out(doc) for doc in get_db().all()]
+
+
+def get_supplier(supplier_id: int) -> SupplierOut:
+    doc = get_db().get(doc_id=supplier_id)
+    if doc is None:
+        raise SupplierNotFoundError(supplier_id)
+    return _to_out(doc)
+
+
+def search_by_country(country: str) -> list[SupplierOut]:
+    docs = get_db().search(Query().country == country)
+    return [_to_out(doc) for doc in docs]
+
+
+def search_by_category(category: SupplierCategory) -> list[SupplierOut]:
+    docs = get_db().search(Query().categories.any([category.value]))
+    return [_to_out(doc) for doc in docs]
+
+
+def create_supplier(payload: SupplierCreate) -> SupplierOut:
+    doc_id = get_db().insert({**payload.model_dump(mode="json"), "updated_at": _now()})
+    return get_supplier(doc_id)
+
+
+def update_supplier(supplier_id: int, payload: SupplierUpdate) -> SupplierOut:
+    db = get_db()
+    doc = db.get(doc_id=supplier_id)
+    if doc is None:
+        raise SupplierNotFoundError(supplier_id)
+
+    changes = payload.model_dump(mode="json", exclude_unset=True)
+    if not changes:
+        return _to_out(doc)
+
+    # Re-validate the merged record so cross-field rules (currency vs.
+    # country) hold even when only one of the two fields is being changed.
+    merged = {k: v for k, v in doc.items() if k != "updated_at"} | changes
+    try:
+        validated = SupplierCreate(**merged)
+    except ValidationError as exc:
+        raise InvalidSupplierUpdateError(exc.errors(include_url=False, include_context=False)) from exc
+
+    new_doc = validated.model_dump(mode="json")
+    if "monthly_rate" in changes and changes["monthly_rate"] != doc["monthly_rate"]:
+        new_doc["updated_at"] = _now()
+    else:
+        new_doc["updated_at"] = doc["updated_at"]
+
+    db.update(new_doc, doc_ids=[supplier_id])
+    return get_supplier(supplier_id)
+
+
+def set_status(supplier_id: int, status: SupplierStatus) -> SupplierOut:
+    db = get_db()
+    if db.get(doc_id=supplier_id) is None:
+        raise SupplierNotFoundError(supplier_id)
+    db.update({"status": status.value}, doc_ids=[supplier_id])
+    return get_supplier(supplier_id)
+
+
+def _to_out(doc) -> SupplierOut:
+    return SupplierOut(id=doc.doc_id, **doc)
+
+
+# Seed immediately on import so the directory is never empty (see docstring).
+get_db()
