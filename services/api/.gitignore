@@ -1,5 +1,20 @@
-__pycache__/
-*.pyc
-.venv/
-venv/
-.env
+# TinyDB runtime storage (seeded on startup, not source)
+suppliers/db.json
+
+# Managed incidents store (loaded with seed_incidents.py, created at runtime)
+incidents/db.json
+
+# Internal users store (password hashes, created at runtime)
+users/db.json
+
+# User profiles store (display names and contact data, created at runtime)
+profiles/db.json
+
+# Inventory local fallback database (used when DATABASE_URL is not set)
+inventory/db.sqlite
+
+# Talent applications store (candidate personal data, created at runtime)
+talent/db.json
+
+# Reporting schema emulated next to the local SQLite file (pipeline)
+inventory/db.sqlite.reporting

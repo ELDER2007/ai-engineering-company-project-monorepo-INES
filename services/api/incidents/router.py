@@ -1,0 +1,66 @@
+"""Routes for the incidents domain: analyze an uploaded CSV, export the last
+analysis. Endpoint paths are fixed by the project brief, not the API
+versioning convention used elsewhere in this monorepo's architecture
+proposal — see docs/ARCHITECTURE_PROPOSAL.md for that broader discussion.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import Response
+
+from auth.dependencies import get_current_user
+
+from . import service
+from .schemas import AnalyzeResponse, ErrorResponse
+
+# Support-ticket data is internal: any valid session may analyze and export.
+router = APIRouter(
+    prefix="/api/incidents", tags=["incidents"], dependencies=[Depends(get_current_user)]
+)
+
+
+@router.post("/analyze", response_model=AnalyzeResponse)
+async def analyze_incidents(file: UploadFile) -> AnalyzeResponse:
+    content = await file.read()
+
+    try:
+        result = service.run_analysis(filename=file.filename or "upload.csv", content=content)
+    except service.NotCsvFileError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except service.MissingColumnsError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except service.EmptyCsvError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="File is not valid UTF-8 text."
+        ) from exc
+
+    return service.to_response(result)
+
+
+@router.get(
+    "/results/export",
+    response_model=None,  # a file, not JSON: the contract is the text/csv response below
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The last analysis as a CSV file (`metric,value` rows), as an attachment.",
+            "content": {"text/csv": {"schema": {"type": "string"}}},
+        },
+        404: {"model": ErrorResponse, "description": "No analysis has been run yet."},
+    },
+)
+async def export_results() -> Response:
+    try:
+        result = service.get_last_result()
+    except service.NoAnalysisYetError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    csv_bytes = service.to_export_csv_bytes(result)
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="results.csv"'},
+    )

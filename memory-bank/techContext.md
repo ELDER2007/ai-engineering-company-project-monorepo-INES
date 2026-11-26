@@ -1,3 +1,5 @@
+> **Nota:** documento del Hito 1. Describe el proyecto tal como era entonces; el código actual de `main` ha cambiado y es la referencia.
+
 # Tech Context — Nexova
 
 ## Estructura del monorepo (por capa, no por hito)

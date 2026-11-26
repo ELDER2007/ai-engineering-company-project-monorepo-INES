@@ -1,3 +1,5 @@
+> **Nota:** documento del Hito 1. Describe el proyecto tal como era entonces; el código actual de `main` ha cambiado y es la referencia.
+
 # Progress — Nexova
 
 _Última actualización: 2026-09-11 (scaffolding + landing page de `uis/website/`; dashboard shell de `uis/backoffice/`; esqueleto de `services/api/`; fix de `validate-context-alignment` para apps multi-componente; entrega en `feature/agent-memory-bank`)._

@@ -1,3 +1,5 @@
+> **Nota:** documento del Hito 1. Describe el proyecto tal como era entonces; el código actual de `main` ha cambiado y es la referencia.
+
 # Project Brief — Nexova
 
 > Fuente primaria: [`CONTEXT.md`](../CONTEXT.md) (briefing completo de la empresa) y [`company-choice.md`](../company-choice.md) (elección de departamentos del estudiante). Este archivo resume ambos para que cualquier agente tenga el "por qué" del proyecto sin tener que releerlos enteros.

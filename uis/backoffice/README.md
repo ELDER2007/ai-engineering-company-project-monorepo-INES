@@ -1,78 +1,227 @@
-# `backoffice` — Nexova internal admin app
+# Nexova Backoffice (`uis/backoffice`)
 
-Internal admin application for the Nexova team — authentication, candidate
-management, vacancy management, internal communications, and other
-back-office capabilities (see [`uis/README.md`](../README.md)). Today it's
-just the dashboard shell described below; everything else is a disabled
-placeholder in the sidebar.
-
-## Stack
-
-Same toolchain as [`uis/website`](../website) (Vite + React 18 + React
-Router 6 + Tailwind CSS 4), kept self-contained with its own
-`package.json`/`node_modules`. Dev server runs on port **3001** (website
-uses 3000) so both apps can run side by side.
-
-The Tailwind theme (`ink-*`/`accent-*` tokens in `src/index.css`) is
-deliberately different from the website's (`brand-*`/`accent-*`, indigo +
-amber) — a dark slate sidebar + emerald accent, so the internal tool reads
-as its own app rather than a reskin of the public site.
-
-## Layout
-
-**Not shared with `uis/website`.** The public site uses a marketing
-Header + Footer (`uis/website/src/pages/Layout.jsx`); the backoffice uses
-its own sidebar + topbar admin shell:
-
-```
-src/pages/Layout.jsx   → <Sidebar/> + <Topbar/> + <Outlet/>
-src/components/Sidebar.jsx
-src/components/Topbar.jsx
-```
+Internal operations app, built with **Next.js 16 (App Router)**, React 19 and Tailwind. Tools: **Incidencias**
+(the incident manager: summary panel, filters by status/category/origin/branch, list, report/edit form, detail with lifecycle and history),
+**Análisis de incidentes** (uploads a support-ticket CSV to `services/api` and shows the validation/metrics report),
+**Proveedores** (supplier directory) and **Mi perfil**.
 
 ## Structure
 
 ```
-backoffice/
-├── index.html           # noindex — internal tool, not public
-├── package.json
-├── vite.config.js        # port 3001
-├── eslint.cjs
-├── .env.example
-└── src/
-    ├── main.jsx
-    ├── routes.jsx         # only "/" today
-    ├── index.css          # Tailwind import + admin theme tokens
-    ├── data/
-    │   └── company.js      # literal facts transcribed from CONTEXT.md
-    ├── lib/
-    │   └── companyStats.js # derived logic over company.js (years in
-    │                        # operation, currency formatting) — computed,
-    │                        # not hardcoded
-    ├── components/
-    │   ├── Sidebar.jsx
-    │   ├── Topbar.jsx
-    │   └── CompanySnapshot.jsx  # renders company.js + companyStats.js
-    └── pages/
-        ├── Layout.jsx
-        └── Dashboard.jsx   # "/" — welcome + CompanySnapshot
+src/
+├── app/                      Next.js routes (App Router)
+│   ├── layout.tsx            root layout: <html>, metadata, <AuthProvider>
+│   ├── (public)/             no session needed
+│   │   ├── login/page.tsx
+│   │   └── register/page.tsx
+│   ├── (app)/                session required
+│   │   ├── layout.tsx        layout guard: <RequireAuth> + sidebar
+│   │   ├── page.tsx          /
+│   │   ├── incidents/        /incidents (manager), /incidents/[incidentId] (detail), /incidents/analysis (CSV report)
+│   │   ├── suppliers/        /suppliers
+│   │   └── account/profile/  /account/profile
+│   └── not-found.tsx         unknown URL → /
+├── views/                    the page components (client components)
+├── auth/                     AuthContext (useAuth hook) and RequireAuth (guard)
+├── lib/                      token.ts, api.ts, returnTo.ts, profileFields.ts
+└── components/               sidebar layout, incidents and suppliers widgets
 ```
 
-## Running it
+`(public)` and `(app)` are route groups: they share a layout but do not appear in the URL. The route files
+only import a component from `views/`; every view is a client component (`"use client"`) because the session
+lives in the browser.
+
+## Login
+
+The API only answers to a valid JWT, so every page except `/login` and `/register` needs a session. `/login` posts
+the email and password to `POST /auth/login` and keeps the returned token in `localStorage`; from then on every
+API call carries `Authorization: Bearer <token>` (`src/lib/api.ts`). Auth is stateless: no cookies and no
+server-side session. The token expires by itself (`ACCESS_TOKEN_EXPIRE_MINUTES` on the API); a `401` from the API,
+or "Cerrar sesión", forgets the token and sends the user back to `/login`. You need an active user on the API: set
+`AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD` for its first start (see `services/api/README.md`), or sign up at
+`/register`.
+
+## Route protection and token lifecycle
+
+| Views | Access |
+| --- | --- |
+| `/login`, `/register` | Public (a logged-in user is sent to the app) |
+| `/`, `/incidents`, `/suppliers`, `/account/profile`, and any unknown URL | Session required |
+
+The public website (`uis/website`) has no authentication at all and must stay that way.
+
+- **Guard** (`src/auth/RequireAuth.tsx`, used by `src/app/(app)/layout.tsx`): a client-side layout guard around
+  every protected view. It reads the token from `localStorage` on every navigation; without one it redirects to
+  `/login?next=<page>`, and login sends you back there. `next` only accepts paths inside the app (no open
+  redirect: `?next=https://…` or `//…` fall back to `/`). Nothing protected is rendered or requested before
+  that, not even in the server HTML (which only says "Comprobando la sesión…").
+- **Why not Next.js proxy (formerly "middleware")?** It runs on the server, and the token is in
+  `localStorage`, which only the browser can read. The guard is a UX gate; the real boundary is the API, which
+  answers `401` without a valid token.
+- **Storing:** login and a successful sign-up store the token in `localStorage` (`src/lib/token.ts`).
+- **Sending:** every protected call goes through `apiFetch` (`src/lib/api.ts`), which adds
+  `Authorization: Bearer <token>`. Only `POST /auth/login` and `POST /users` go without it.
+- **Logout:** removes the token and goes to `/login`; the next login starts at `/`.
+- **401:** a protected call answered `401` removes the token and goes to `/login?next=<that page>`. A late `401`
+  for a token that has since been replaced does not end the newer session.
+- **Several tabs:** logging out or in in one tab (or clearing storage) is applied to the others at once.
+
+## Sign-up
+
+`/register` posts email, password and the optional profile (name, phone, address) to `POST /users`, then logs
+straight in with `POST /auth/login` and, on success, stores the token and goes to `/`. The form validates with the
+API's own limits before sending, and shows the API's `409` (email taken) and `422` (validation) next to the field.
+The API creates sign-ups active, so the new user is in straight away. If that automatic login still fails (network,
+or an admin switched the account off in between), the page says the account was created and points to `/login`;
+it is never reported as a failed sign-up.
+
+## Pages
+
+- `/login` — sign-in form.
+- `/register` — sign-up form (account + optional profile), then automatic login.
+- `/account/profile` — your email (read-only) and your profile (name, phone, address), loaded from `GET /auth/me`
+  and saved with `PUT /profiles/me` (bearer token; only the changed fields, an emptied field is sent as `null`,
+  which clears it).
+- `/` — landing with links to backoffice tools.
+- `/incidents` — CSV upload (drag & drop or file picker) → metrics (totals, invalid records by rule,
+  category/status breakdown with percentages, satisfaction distribution) → CSV download button.
+- `/suppliers` — supplier directory: list, filters, create, edit rate, suspend/activate.
+- `/inventory/products` — stock of every asset (`GET /inventory/products`) with its `current_stock`, colour-coded:
+  red = no stock, amber = low (`LOW_STOCK_THRESHOLD`, 5 units, documented in `src/lib/inventoryRules.ts`), green = fine.
+  Lowest stock first; filters by office, category, level and name/SKU. Each row has an "Entrada" and a "Salida" link
+  that open the forms with that asset preselected (`?asset=<id>`). `/inventory` redirects here.
+- `/inventory/orders/inbound` — entrada de activos (`POST /inventory/orders/inbound`): the asset is picked by name; after
+  a send the form is cleared and a confirmation shown; an API error is shown in the page.
+- `/inventory/orders/outbound` — salida de activos, an allocation to an employee or a consumption
+  (`POST /inventory/orders/outbound`). The `current_stock` of the selected asset is shown (and follows the selection)
+  before a quantity is typed; a quantity above it is warned about while typing; the API's 400 is shown next to the
+  quantity field.
+- `/inventory/orders` — read-only history of entries and exits: asset name, quantity, type, date and the `user_uuid`
+  that created each one (with the user's name, from `GET /users/directory`, when it is known).
+- `/reporting` — **Reporte semanal de desempeño por oficina y programa**, the business dashboard for the leadership
+  (the CEO and the L&D manager), not for developers. It shows the four KPIs of the data-pipelines briefing — "Costo de
+  material por oficina/programa", "Kits entregados", "Frecuencia de escasez" and "Frecuencia de variación de costo" —
+  each with its name and its definition from the briefing, a total and a table per office and programme, for one
+  week at a time (the latest computed one at first, with buttons to move between weeks) and with the period it covers
+  and when the data was last updated. It also says, in plain words, when the process that computes the numbers has never
+  run or has not updated them for 8 days or more, and warns when the week shown may not have been collected (no activity
+  recorded, or far less than usual: the `data_health` notes of the last run, shown only for the week that run computed).
+  Euros and dollars are never added together. Plain Spanish, no codes or jargon.
+  It reads `GET /reporting/weekly-office-program-performance` (the rows the pipeline writes in
+  `reporting.weekly_office_program_performance`) and `GET /reporting/pipeline-runs/latest`, any logged-in user.
+  The calls are in `src/lib/reporting.ts`, where the four KPIs are defined; the page is `src/views/BusinessPerformancePage.tsx`.
+
+The calls to `/inventory/*` are all in `src/lib/inventory.ts` (no component calls `fetch`); the rules and texts
+(thresholds, validation, error messages) are in `src/lib/inventoryRules.ts`. Names follow the Hito 5 CONTEXT: "activo",
+"entrada de activos", "salida de activos", "asignación"/"consumo".
+
+All of them are behind the login guard. The office of an order is always the asset's own office (the API rejects any
+other), so the forms show it instead of asking for it.
+
+## API calls in development
+
+The app calls the API on its own origin, and `next.config.mjs` rewrites those calls to the API
+(`API_PROXY_TARGET`, default `http://localhost:8000`). No CORS, and in Codespaces only port 5174 needs forwarding.
+`/api` and `/auth` always go to the API; `/users` and `/profiles` only for API calls, not browser page loads.
+To call an API on another domain instead, set `NEXT_PUBLIC_API_BASE_URL` (see `.env.example`).
+
+The inventory API (`/inventory/*`) is reached as `/api/inventory/*`, because `/inventory/orders` is also a page of
+the app. `next.config.mjs` forwards it to `NEXT_PUBLIC_INVENTORY_API_URL` (from `.env.local`; default
+`API_PROXY_TARGET`). The browser still only talks to its own origin.
+
+The reporting API (`/reporting/*`) is reached as `/api/reporting/*` for the same reason: `/reporting` is also a page of the app.
+`next.config.mjs` forwards it to `API_PROXY_TARGET`.
+
+## Running locally
+
+From the repo root (npm workspaces):
 
 ```bash
 npm install
-npm run dev      # http://localhost:3001
-npm run build
-npm run lint
+cp uis/backoffice/.env.example uis/backoffice/.env.local   # optional: only if the API is not on localhost:8000
+npm run dev:backoffice          # http://localhost:5174
 ```
 
-## Known limitations (v1)
+Other scripts (from the repo root: `npm run build:backoffice`, `npm run typecheck:backoffice`; or from
+`uis/backoffice`): `npm run build` (production build), `npm run start` (serve that build on :5174),
+`npm run typecheck` (`next typegen` + `tsc`).
 
-- Sidebar is fixed-width and doesn't collapse on small screens — fine for
-  an internal desktop tool for now, worth revisiting if mobile use shows up.
-- No auth, no real data source — `Topbar`'s user chip and every disabled
-  sidebar item ("Candidatos", "Vacantes", "Formación") are placeholders for
-  future modules.
+Requires `services/api` running (see its README). In a GitHub Codespace, open the forwarded port 5174; `next.config.mjs` allows
+exactly that forwarded hostname in `allowedDevOrigins` (otherwise `next dev` answers its JavaScript with 403 and
+the pages never come to life).
 
-> _Estas instrucciones también están disponibles en [español](./README.es.md)._
+**TypeScript version:** the backoffice uses TypeScript 5.9 (its own devDependency), while the rest of the repo
+uses TypeScript 7. Next.js reads `tsconfig.json` and type-checks through the TypeScript JavaScript API, which
+TypeScript 7 (the native compiler) no longer ships.
+
+`AGENTS.md` / `CLAUDE.md` are written by `next dev` itself (notes for AI coding assistants); they are committed
+so the working tree stays clean.
+
+## Telemetry (event capture)
+
+Every event of the approved catalogue that this app can observe is captured at the moment it happens, queued in memory and sent in
+batches to the endpoint in `NEXT_PUBLIC_TELEMETRY_ENDPOINT` (build-time; in `.env.local`, `/telemetry/events` today, which Next.js
+forwards to the API: no CORS, and it works in a Codespace opened in the browser; the real endpoint later: the app does not change). Contract: [docs/telemetry/](../../docs/telemetry/README.md).
+
+- **One public function: `track(eventType, properties)`** from `src/lib/telemetry` (`index.ts` exports nothing else). `properties` is
+  checked at compile time against the contract (`events.ts`), so an undeclared key does not compile. No component calls `fetch`
+  for telemetry; the service is the only thing that does. Callers never pass `eventId`, `sessionId`, `timestamp`,
+  `schemaVersion`, `requestId` or `environment`: the service adds them. (`userId` is null in the browser and the server stamps the
+  pseudonym from the verified session, because the browser must never hold the HMAC key. An optional third argument,
+  `{ requestId }`, only exists to correlate an event with the `X-Request-ID` of the HTTP request that caused it.)
+- **`TelemetryService`** (`src/lib/telemetry/`, started by the first `track()`): an in-memory queue; the batch leaves when it
+  reaches 20 events or 10 s after the first, whichever comes first; the page being hidden (`visibilitychange`) or closed
+  (`pagehide`) flushes with `navigator.sendBeacon` (the events that need the user's identity use `fetch` with `keepalive`, because a
+  beacon cannot carry `Authorization`); at logout, the events that need the user's identity leave at once with the token that still exists (a batch flushed after the session ended would reach the receiver anonymous and be refused); a failed batch is retried 3 times with exponential backoff (1, 2, 4 s) and then dropped;
+  the queue holds at most 100 events / 256 KB (oldest dropped). Each event keeps the timestamp of its capture. A new analytic
+  session (`sessionId`, in `sessionStorage`) starts at each login and logout, detected from the token itself. It does nothing without
+  an endpoint, on the server, or with Do Not Track / GPC.
+- **Authentication events** are in `lib/api.ts`, in the one `login()`/`register()` every login goes through (not on each page): the reason of
+  a failure comes from the HTTP status, never from what was typed (`lib/authTelemetry.ts`); the success is reported *before* the token
+  is stored, so it belongs to the session of the attempt. No answer at all is `application_error_occurred` (`network_failed`), not a
+  `login_failed`: the contract has no `network_error` reason and it would skew the API's failure rate.
+- **Web Vitals** (`web_vital_reported`, contract 2.1.0): `useReportWebVitals` in `TelemetryProvider` sends LCP, CLS, INP, FCP and
+  TTFB with the section of the page the visit *landed on*.
+- **Where events come from:** `lib/inventory.ts` (the five mandatory events and the inventory refusals, from the facts the API
+  computes in the order's transaction; `lib/inventoryTelemetry.ts` is the translation), `lib/telemetry/useFlow.ts` (the flow of the
+  entry/exit forms), `TelemetryProvider` (page views, unhandled errors), `lib/useAsyncResource.ts` (section loads),
+  `lib/api.ts` (session expired, network failures), `AuthContext` (logout).
+- **Not captured here, on purpose:** `http_request_completed` and `dependency_call_completed` (only the server knows), `supplier_deleted`
+  and `product_*` (the app has no screen for them), `talent_*` (the website) and the worker events: 32 of the 41 events are captured.
+  The events the API decides (logins, suppliers, incidents...) are relayed from the API's response; the receiver pins their `source`.
+  The shell has no `component` in the contract, so an unhandled error on the home page is not reported.
+- Never in an event: names, e-mails, tokens, free text, typed values. An asset without programme/category emits nothing.
+
+## End-to-end tests
+
+With the API and the backoffice running (`npm run dev`, or `npm run build && npm run start`) and
+`npx playwright install chromium`, from `uis/backoffice`, with `E2E_EMAIL=… E2E_PASSWORD=…` of an active user:
+
+- `npm run e2e` — login and suppliers (needs a fresh seed: `uv run seed --reset` in `services/api`).
+- `npm run e2e:register` — sign-up.
+- `npm run e2e:profile` — profile page (restores the profile at the end).
+- `npm run e2e:guard` — route protection, open-redirect check, several tabs; also opens the public website on
+  `:5173` (skip with `E2E_WEBSITE_URL=none`).
+- `npm run e2e:token` — token lifecycle (needs the supplier seed).
+- `npm run e2e:inventory` — inventory section (needs the inventory seed). Read-only: it never registers an order;
+  the API's 400 is simulated in the browser.
+- `npm run e2e:telemetry` — event capture against the live receiver (needs the inventory seed and
+  `NEXT_PUBLIC_TELEMETRY_ENDPOINT`). **Writes** orders: development database only.
+
+- `npm run e2e:reporting` — the business dashboard (`/reporting`): the four KPIs, the period, that what the page shows is what
+  the API answers, that euros and dollars are not added, the move between weeks, and that what it says about how fresh and
+  how complete the data is matches the last run. Needs at least one week computed by the
+  pipeline (`python data/pipelines/pipeline.py`); read-only. `E2E_SCREENSHOTS=<folder>` saves a picture of the page.
+
+The first five pass against `next dev` and against the production build. See the header of each file in `e2e/`.
+
+## Incident manager
+
+`/incidents` loads the incidents of the API (load the history once with `services/api/.venv/bin/python scripts/seed_incidents.py`).
+Types, labels, the lifecycle table and the form validations come from `@repo/shared-types`
+([`packages/shared`](../../packages/shared)), the same contract the API enforces, so the form rejects what the API
+would reject, in Spanish and per field. Anything that still fails on the server is shown as a clear message:
+no connection, a conflict (the incident changed state meanwhile, so it is reloaded), not found, or a server error
+(`src/lib/errors.ts`); an unexpected rendering error lands on `app/(app)/error.tsx`. Customer emails are masked in
+the list and only shown in the detail. Check it end to end with `npm run e2e:incidents` (see the header of
+`e2e/incidents.e2e.mjs`).
