@@ -9,7 +9,7 @@ Briefing: [`BRIEFING_NEXOVA_SALES.md`](../BRIEFING_NEXOVA_SALES.md). Resultados 
 - [x] Preparación de datos (columnas, vacíos tratados sin usar el futuro, split 8/2 años, escalado dentro del modelo): `data/process/sales_forecast.py`.
 - [x] Random Forest elegido con validación temporal solo en 2016-2023 (empata en precisión con XGBoost; la elección se apoya en tamaño de datos, explicabilidad y ajuste): `data/process/sales_model.py`.
 - [x] MSE, PSI, Gini y K² Score sobre 2024-2025, y gráfica con rango del 90 %: `sales_metrics.py`, `sales_evaluation.py`, `sales_range.py`, `sales_plot.py`.
-- [x] Script `scripts/train_sales_forecast.py` y pruebas en `tests/pipelines/test_sales_forecast_*.py` (`uv run pytest tests/pipelines`: 130 pasan).
+- [x] Script `scripts/train_sales_forecast.py` y pruebas en `tests/pipelines/test_sales_forecast_*.py` (`uv run pytest tests/pipelines`: 132 pasan).
 - [x] Entrega: commits, push y Pull Request a `main`.
 - [ ] Revisión del tech lead y merge (no fusionar antes).
 - [ ] Confirmar con el profesor qué métrica es el "K2 Score" (implementada la K² de D'Agostino-Pearson).

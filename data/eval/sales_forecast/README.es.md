@@ -4,6 +4,40 @@ _English version: [README.md](./README.md)._
 
 Cómo de bueno es el pronóstico de los ingresos mensuales de Nexova en los **dos años de prueba (2024-2025)**, que no intervinieron ni en la elección ni en el entrenamiento del modelo.
 
+## Resumen para la dirección
+
+**La pregunta (del briefing):** ¿se pueden prever los ingresos de los próximos meses antes de comprometer presupuesto en un dashboard ejecutivo completo?
+
+**La respuesta, en dos años con los que el modelo no se entrenó (2024-2025):**
+
+| | Pronóstico | Repetir el año anterior (sin modelo) |
+| --- | ---: | ---: |
+| Fallo medio de un mes, un mes por delante | **2.85 %** | 4.98 % |
+| Meses reales dentro del rango del pronóstico (±8.6 %, objetivo 90 %) | **23 de 24** | no se da |
+
+* Pronosticando los dos años de golpe desde finales de 2023, el fallo medio es del 3.09 % (para este caso no se da rango).
+* **Agosto es el mes más débil:** el fallo medio es del 5.1 % y el pronóstico se quedó corto las dos veces (solo hay dos agostos para juzgarlo).
+* **Cómo usarlo:** comparar cada mes real con su rango. **Por debajo** del rango hay una caída que ni la temporada ni la tendencia explican, y merece revisarse.
+
+**Recomendación (criterio de quien lo construyó, no un resultado de los datos):** es suficiente para apoyar la planificación mensual como primer paso. Antes de confiar en un dashboard: conseguir los ingresos mensuales de cada línea de negocio (sin ellos no se puede vigilar el cambio de reparto), contrastarlo con las cifras reales según lleguen (este dataset es anormalmente regular, así que en la realidad cabe esperar más error) y volver a entrenarlo cada año.
+
+## Cómo funciona
+
+```mermaid
+flowchart LR
+    A[("nexova_sales.csv<br/>2016-2025")] --> B["Comprobar columnas<br/>tratar vacíos"]
+    B --> C["Variables causales<br/>meses pasados + calendario"]
+    C --> D{"Separar por fecha"}
+    D -->|"8 años: 2016-2023"| E["Elegir ajustes con<br/>validación temporal"] --> F["Random Forest<br/>(escalado dentro)"]
+    D -->|"2 años: 2024-2025"| G["Evaluar una vez:<br/>MSE · PSI · Gini · K²"]
+    F --> G
+    F --> H["Rango del 90 %<br/>con errores de validación"]
+    G --> I["metrics.json<br/>y la gráfica"]
+    H --> I
+```
+
+## Ejecutarlo
+
 ```bash
 uv run python scripts/train_sales_forecast.py     # entrena, evalúa y escribe aquí metrics.json y las dos gráficas
 ```

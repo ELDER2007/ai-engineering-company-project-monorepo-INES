@@ -13,6 +13,7 @@ matplotlib.use("Agg")  # draws to a file, with no window: it works in a server a
 
 import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker as mticker  # noqa: E402
 import pandas as pd  # noqa: E402
 
 FILES = {"en": "forecast_test.png", "es": "forecast_test.es.png"}
@@ -30,6 +31,7 @@ TEXTS = {
         "revenue": "Revenue (thousand USD)",
         "error": "Real against forecast (%)",
         "limit": "limits of the range",
+        "source": "Source: data/raw/nexova_sales.csv (consolidated revenue). Random Forest trained on 2016-2023, random seed 42.",
     },
     "es": {
         "title": "Nexova: pronóstico de ingresos mensuales frente a la realidad, años de prueba 2024-2025",
@@ -44,6 +46,7 @@ TEXTS = {
         "revenue": "Ingresos (miles de USD)",
         "error": "Real frente al pronóstico (%)",
         "limit": "límites del rango",
+        "source": "Fuente: data/raw/nexova_sales.csv (ingresos consolidados). Random Forest entrenado con 2016-2023, semilla aleatoria 42.",
     },
 }
 ACTUAL, FORECAST, BAND, OUTSIDE = "#111111", "#1f5f99", "#a8cbea", "#c2410c"  # readable without telling red from green: the outliers also change shape
@@ -80,6 +83,7 @@ def plot_forecast(report: dict, path: str | Path, language: str = "en") -> Path:
     for month in months[months.dt.month == 8]:
         top.text(month, 0.02, text["august"], transform=top.get_xaxis_transform(), ha="center", va="bottom", fontsize=9, color="#555555")
     top.set_ylabel(text["revenue"])
+    top.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:,.0f}"))
     top.legend(loc="upper left", frameon=False, ncol=2)
     figure.suptitle(text["title"], x=0.065, ha="left", fontsize=14, fontweight="bold")
     top.set_title(text["subtitle"].format(inside=interval["inside"], months=interval["test_months"], level=level, half=interval["half_width_percent"]),
@@ -98,7 +102,8 @@ def plot_forecast(report: dict, path: str | Path, language: str = "en") -> Path:
     bottom.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
     plt.setp(bottom.get_xticklabels(), rotation=0, fontsize=9)
 
-    figure.tight_layout()
+    figure.tight_layout(rect=(0, 0.025, 1, 1))  # a strip at the bottom for the source
+    figure.text(0.008, 0.008, text["source"], fontsize=8.5, color="#666666")
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(target, dpi=130, metadata={"Software": None})  # nothing that changes from one run to the next inside the file

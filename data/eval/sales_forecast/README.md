@@ -4,6 +4,40 @@ _Versión en español: [README.es.md](./README.es.md)._
 
 How good the forecast of Nexova's monthly revenue is on the **two test years (2024-2025)**, which took no part in choosing or training the model.
 
+## Executive summary
+
+**The question (briefing):** can the revenue of the coming months be forecast, before committing budget to a full executive dashboard?
+
+**The answer, on two years the model never trained on (2024-2025):**
+
+| | Forecast | Repeating the year before (no model) |
+| --- | ---: | ---: |
+| Average miss of a month, one month ahead | **2.85 %** | 4.98 % |
+| Real months inside the forecast's range (±8.6 %, aim 90 %) | **23 of 24** | not given |
+
+* Forecasting both years at once, from the end of 2023, the average miss is 3.09 % (no range is given for this case).
+* **August is the weakest month:** the average miss is 5.1 % and the forecast fell short both times (only two Augusts to judge by).
+* **How to use it:** compare each real month with its range. **Below** the range is a fall that the season and the trend do not explain, and deserves a look.
+
+**Recommendation (the judgement of whoever built it, not a result of the data):** good enough to support monthly planning as a first step. Before relying on a dashboard: get the monthly revenue of each business line (without it the change of mix cannot be watched), check it against real figures as they arrive (this dataset is unusually regular, so expect larger errors in real life), and train it again each year.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[("nexova_sales.csv<br/>2016-2025")] --> B["Check columns<br/>treat empty values"]
+    B --> C["Causal features<br/>past months + calendar"]
+    C --> D{"Split by time"}
+    D -->|"8 years: 2016-2023"| E["Choose settings by<br/>time validation"] --> F["Random Forest<br/>(scaler inside)"]
+    D -->|"2 years: 2024-2025"| G["Evaluate once:<br/>MSE · PSI · Gini · K²"]
+    F --> G
+    F --> H["90 % range<br/>from validation errors"]
+    G --> I["metrics.json<br/>and the picture"]
+    H --> I
+```
+
+## Run it
+
 ```bash
 uv run python scripts/train_sales_forecast.py     # trains, evaluates and writes metrics.json and the two pictures here
 ```

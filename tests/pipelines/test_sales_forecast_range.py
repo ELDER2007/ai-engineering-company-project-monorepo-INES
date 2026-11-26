@@ -141,3 +141,19 @@ def test_the_readme_shows_the_picture_and_says_the_computed_numbers(evaluated, r
     assert inside in text
     assert f"{interval['tree_spread_inside']} of the 24" in text or f"{interval['tree_spread_inside']} de los 24" in text
     assert f"{interval['tree_spread_mean_width_percent']:.1f} %" in text and f"{2 * interval['half_width_percent']:.1f} %" in text
+
+
+@pytest.mark.parametrize("readme", ["README.md", "README.es.md"])
+def test_the_executive_summary_says_the_computed_numbers(evaluated, readme):
+    """The first thing the management reads must be as true as the rest."""
+    report = evaluated[-1]
+    heading, next_heading = ("## Executive summary", "## How it works") if readme == "README.md" else ("## Resumen para la dirección", "## Cómo funciona")
+    summary = (FOLDER / readme).read_text(encoding="utf-8").split(heading)[1].split(next_heading)[0]
+    model, rival = report["model"], report[ev.NO_MODEL]
+    august = report["model_by_kind_of_month"]["August"]
+    for number in (f"{model['mape_percent']:.2f} %", f"{rival['mape_percent']:.2f} %", f"{report['model_24_months_ahead']['mape_percent']:.2f} %",
+                   f"±{report['range']['half_width_percent']:.1f} %", f"{august['mape_percent']:.1f} %"):
+        assert number in summary, number
+    inside = report["range"]["inside"]
+    assert (f"{inside} of 24" if readme == "README.md" else f"{inside} de 24") in summary
+    assert "Recommendation (the judgement" in summary or "Recomendación (criterio" in summary  # an opinion is never presented as a result
