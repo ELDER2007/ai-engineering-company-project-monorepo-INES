@@ -304,8 +304,10 @@ def test_every_order_carries_the_id_of_the_user_who_made_it(client):
 
 def test_a_user_uuid_in_the_body_cannot_impersonate_somebody_else(client):
     asset = new_asset(client)
-    order = inbound(client, asset["id"], 5, user_uuid=str(uuid_of(BOB))).json()
-    assert order["user_uuid"] == str(uuid_of(ALICE))
+    response = inbound(client, asset["id"], 5, user_uuid=str(uuid_of(BOB)))
+    assert response.status_code == 422  # not accepted at all, rather than silently ignored
+    assert client.get("/inventory/orders").json() == []
+    assert inbound(client, asset["id"], 5).json()["user_uuid"] == str(uuid_of(ALICE))
 
 
 # --- listing orders -----------------------------------------------------------------------------

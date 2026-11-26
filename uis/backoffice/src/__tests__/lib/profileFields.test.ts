@@ -135,7 +135,7 @@ const me = (profile: Partial<Me["profile"]>): Me => ({
   role: "user",
   is_active: true,
   created_at: "2026-01-01T00:00:00Z",
-  profile: { id: "p1", user_id: "u1", name: "Ana", contact_email: null, phone: null, address: null, ...profile },
+  profile: { name: "Ana", contact_email: null, phone: null, address: null, ...profile },
 });
 
 describe("toProfileForm", () => {

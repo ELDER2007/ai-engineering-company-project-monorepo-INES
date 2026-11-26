@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class WeeklyEntry(BaseModel):
@@ -47,5 +47,7 @@ class PipelineRunOut(BaseModel):
 
 class PipelineRunCreate(BaseModel):
     """Body of ``POST /reporting/pipeline-runs``. Optional: omit it to run the last complete week."""
+
+    model_config = ConfigDict(extra="forbid")
 
     week_start: date | None = None

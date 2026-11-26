@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import AssetCategory, ExitType, Office, ProductCategory
 
@@ -45,6 +45,8 @@ def _blank_to_none(value: str | None) -> str | None:
 
 
 class AssetCreate(_NoDirectStock):
+    model_config = ConfigDict(extra="forbid")  # an unknown field is a 422, not ignored
+
     name: str = Field(min_length=1, max_length=200)
     sku: str = Field(min_length=1, max_length=50)
     category: AssetCategory
@@ -78,6 +80,8 @@ class AssetOut(BaseModel):
 class AssetEntryCreate(_NoDirectStock):
     """Inbound order. The author and the timestamp are set by the server."""
 
+    model_config = ConfigDict(extra="forbid")
+
     asset_id: int
     quantity: int = Field(gt=0)
     supplier: str = Field(min_length=1, max_length=200)
@@ -98,6 +102,8 @@ class AssetEntryCreate(_NoDirectStock):
 class AssetExitCreate(_NoDirectStock):
     """Outbound order. ``assigned_to`` is required for an allocation and must be null for a
     consumption (business rule 3)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     asset_id: int
     quantity: int = Field(gt=0)

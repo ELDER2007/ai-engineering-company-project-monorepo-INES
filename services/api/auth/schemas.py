@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from profiles.schemas import Profile
+from profiles.schemas import ProfileMe
 from users.schemas import UserOut
 
 
@@ -16,6 +16,7 @@ class Token(BaseModel):
 
 class MeOut(UserOut):
     """``GET /auth/me``: the session's user (``email``, ``role``, ...) and its linked
-    Profile (``name`` and the contact data). Never the password or its hash."""
+    profile (``ProfileMe``: ``name`` and the contact data, no storage ids). Never the password
+    or its hash."""
 
-    profile: Profile
+    profile: ProfileMe
