@@ -596,6 +596,18 @@ Estos nombres son ideas excluidas, no emisores ni variantes del schema; una even
 
 Exclusiones de datos en los eventos aceptados: nombres y contactos, destinatarios de material, emails incluso hasheados, credenciales/tokens, IP/localizacion precisa, cuerpos CSV/formularios, valores rechazados, texto libre, contenido de prompts/documentos, URLs completas y query strings. Los IDs y la actividad restante siguen siendo seudonimos/confidenciales, no anonimos. No derivar matriculas, finalizacion o recepcion de candidatura de acciones que no acreditan esos hechos.
 
-## 17. Limites de esta entrega
+## 17. Cambio de contrato 2.1.0: Web Vitals
 
-Entregado: plan, contrato JSON Schema, ejemplos, README y registro de aprendizaje. Pendiente: aprobar decisiones propuestas con negocio, migrar/enriquecer catalogo y precios, instrumentar API/outbox/rechazos, implementar consumidor y almacenamiento, ejecutar pruebas de integracion y elaborar dashboard/reporte sobre datos reales. No se han levantado servidores, instalado infraestructura ni cambiado reglas de la aplicacion.
+Decision tomada durante la captura en el frontend: se amplia el contrato de la 2.0.0 a la **2.1.0**, de forma aditiva, para medir el rendimiento percibido con Core Web Vitals. El resto de las 40 variantes no cambia ni una clave. Un emisor en 2.0.0 sigue siendo valido (`schemaVersion` acepta `2.0.0` y `2.1.0`); solo `web_vital_reported` exige `2.1.0`. Es un cambio sobre un contrato aprobado: queda pendiente de revision.
+
+| event_type | Disparo / fuente | Propiedades | Necesitamos saber... / decision concreta | Responsable / prioridad / modo |
+| --- | --- | --- | --- | --- |
+| `web_vital_reported` | El navegador mide un Core Web Vital de la visita (`useReportWebVitals` de Next.js) / backoffice o website | `metric` (`LCP`, `CLS`, `INP`, `FCP`, `TTFB`), `value`, `rating` (`good`, `needs-improvement`, `poor`), `section` | Si el operador percibe la seccion lenta y en que metrica (carga, estabilidad visual o respuesta a la interaccion) / priorizar optimizacion de esa seccion antes que otra y comprobar que una mejora lo es en campo, no solo en laboratorio | Tecnologia / P1 / B |
+
+Reglas: `value` en milisegundos, salvo `CLS`, que no tiene unidad (fraccion); cerrado, sin ruta ni URL, solo la seccion. `section` es la de la **pagina en que aterrizo la visita**: LCP, CLS e INP solo son definitivos al ocultar la pagina y, para entonces, una navegacion SPA pudo cambiar de seccion; una metrica pertenece a la carga que la midio. `FID` se ignora (obsoleto frente a INP) y tambien las metricas propias de Next.js. Complementa a `section_load_completed` (disponibilidad funcional de los datos de la seccion), no lo sustituye: LCP mide el render, no si los datos han llegado. Sin datos personales, identificadores ni texto libre; no se muestrea. Claves nuevas del diccionario de la seccion 15: `metric`, `value`, `rating` (`section` ya existia).
+
+## 18. Limites de esta entrega
+
+Entregado: plan, contrato JSON Schema, ejemplos, README y registro de aprendizaje. Pendiente: aprobar decisiones propuestas con negocio, migrar/enriquecer catalogo y precios, instrumentar API/outbox/rechazos, ejecutar pruebas de integracion y elaborar dashboard/reporte sobre datos reales. No se han levantado servidores, instalado infraestructura ni cambiado reglas de la aplicacion.
+
+Actualizacion (almacenamiento): el receptor persiste los eventos validos en la tabla `telemetry_events` (seccion 12: append-only, deduplicada por `eventId`, `tags` JSONB con el `properties` intacto y las dimensiones del briefing dentro). Los campos opcionales guardados en `tags` son claves del diccionario de la seccion 15 y de la 17. Siguen pendientes la outbox transaccional, la aprobacion de la retencion de 90 dias, las agregaciones y el reporte.

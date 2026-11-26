@@ -29,7 +29,6 @@ from .incident_schemas import (
     IncidentSummary,
     IncidentUpdate,
     StatusChange,
-    mask_email,
 )
 
 __all__ = [
@@ -124,8 +123,7 @@ def _to_out(doc: dict) -> IncidentOut:
 
 
 def _to_list_item(doc: dict) -> IncidentListItem:
-    email = doc.get("customer_email")
-    return IncidentListItem(**_view(doc), customer_email_masked=mask_email(email) if email else None)
+    return IncidentListItem(**{key: doc[key] for key in IncidentListItem.model_fields})
 
 
 def _require(incident_id: str) -> dict:

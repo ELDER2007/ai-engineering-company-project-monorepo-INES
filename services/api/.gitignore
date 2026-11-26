@@ -15,3 +15,6 @@ inventory/db.sqlite
 
 # Talent applications store (candidate personal data, created at runtime)
 talent/db.json
+
+# Reporting schema emulated next to the local SQLite file (pipeline)
+inventory/db.sqlite.reporting

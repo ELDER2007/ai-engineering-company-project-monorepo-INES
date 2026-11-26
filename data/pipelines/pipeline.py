@@ -1,0 +1,583 @@
+"""Entry point of the weekly office/programme performance pipeline (Prefect 3).
+
+Run it as a script, from anywhere:
+
+    python data/pipelines/pipeline.py [--week-start YYYY-MM-DD] [--environment production] [--refresh] [--demo]
+    python -m data.pipelines.pipeline  ...            (same thing, from the repository root)
+
+Exit code: 0 = completed (or skipped because the week is already running), 1 = failed (the failure is in the
+execution log), so a scheduler can tell.
+
+With no argument it reports on the last complete ISO week, reading the telemetry the API stores (DATABASE_URL, or the
+API's local SQLite). On a fresh checkout, with no database configured and no local telemetry, it says so and runs on
+demo data instead of failing.
+
+REPORTING CYCLE: the leadership report is WEEKLY. The scheduled run is every Monday at 05:00 UTC (cron ``0 5 * * 1``)
+for the ISO week that just closed, and a correction run every Thursday at 05:00 UTC absorbs late events
+(PIPELINE_DESIGN.md, section 4.6).
+
+It turns the telemetry of one closed ISO week into the "Weekly Performance Report per Office and Programme"
+(``reporting.weekly_office_program_performance``), as designed in ``PIPELINE_DESIGN.md``:
+
+    The main flow (weekly_office_performance_flow) only COORDINATES; every phase is a SUBFLOW of its own:
+
+    EXTRACT    extract_kpi_events_subflow       -> extract_kpi_events
+    TRANSFORM  transform_weekly_kpis_subflow    -> validate_kpi_events, check_currency_consistency, deduplicate_events,
+                                                   calculate_total_material_cost, count_kits_delivered,
+                                                   count_shortage_events, count_cost_variance_events (one per KPI),
+                                                   build_weekly_kpi_rows, reconcile_weekly_kpis
+    LOAD       load_weekly_office_program_performance_subflow -> load_weekly_performance (ONE transaction)
+    OPTIONAL   window_liveness_count_subflow, raw_events_snapshot_subflow, capture_activity_check_subflow,
+               validation_report_subflow
+               (called with return_state=True: their failure is a warning)
+    LOG        start_pipeline_run ... finish_pipeline_run (in the main flow: it is the audit of the whole run)
+
+Resilience (the four requirements of the ticket):
+
+* PARTIAL FAILURES. Tasks are CRITICAL (their failure stops the run: there is no honest report without them) or
+  OPTIONAL (``count_window_events``, ``save_raw_snapshot``, ``save_eval_report``, called with ``return_state=True``: a failure is
+  logged in the run's ``warnings`` and the flow continues). Whatever happens, the run is closed in the execution log.
+* RETRIES. Every task that touches the database (``extract_kpi_events``, ``load_weekly_performance``, the run log and the
+  optional count) retries with a back-off (5 s, 30 s, 2 min) to absorb transient failures. Why 3: see ``RETRIES`` below.
+* CACHE. A task that completed less than an hour ago is not run again: ``extract_kpi_events`` (the expensive read) and
+  the four KPI tasks (each with its ``cache_key_fn`` and ``cache_expiration``) reuse their result for one hour, so rerunning after a failed load does not read the
+  source again. The load, the log and the checks are NEVER cached: they must act every time. ``refresh=True`` (the
+  manual trigger and ``--refresh``) bypasses the cache, to pick up late events.
+* SCRIPT. ``main()`` below.
+
+This file only orchestrates. The calculations are pure functions in ``data/process/weekly_performance.py``, the SQL is
+in ``weekly_office_performance/repository.py``, and ``weekly_office_performance/interface.py`` is the only thing
+``services/reporting`` may import. Intermediate files: ``data/raw/`` (the events read) and ``data/eval/`` (the
+validation report of each run); they are runtime output and git-ignored.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+if __name__ == "__main__" and not __package__:  # `python data/pipelines/pipeline.py`: make `data.` importable
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from typing import Any
+
+from prefect import flow, get_run_logger, task
+from prefect.cache_policies import NO_CACHE
+from prefect.runtime import flow_run
+from sqlalchemy.engine import Engine
+
+from data.pipelines.weekly_office_performance import alerts, repository, storage
+from data.process import weekly_performance as wp
+
+FLOW_NAME = "weekly-office-performance"
+DATA_DIR = Path(__file__).resolve().parents[1]  # <repo>/data
+CACHE_TTL = timedelta(hours=1)  # a task that completed within this window is not run again
+
+
+def _retry_delays() -> list[int]:
+    """Back-off between attempts (PIPELINE_RETRY_DELAYS, default 5,30,120 s). ``PIPELINE_RETRIES=0`` turns retries off (tests)."""
+    if os.environ.get("PIPELINE_RETRIES") == "0":
+        return []
+    return [int(x) for x in os.environ.get("PIPELINE_RETRY_DELAYS", "5,30,120").split(",")]
+
+
+# WHY 3 RETRIES, WAITING 5 s, 30 s AND 2 min (4 attempts in all, 155 s of waiting at most)
+#
+# The tasks below talk to the database (Supabase/PostgreSQL behind a connection pooler). What goes wrong there on a
+# quiet Monday morning is transient and short: an idle connection the pooler already closed (gone in seconds), a pooler
+# with no free connection (seconds to a minute), a failover or a short maintenance window (a couple of minutes).
+#   - 1st retry after 5 s   covers a reset connection: the next attempt opens a fresh one.
+#   - 2nd retry after 30 s  covers a saturated pooler that frees up.
+#   - 3rd retry after 2 min covers a short failover. The waits grow (back-off) so a struggling database is not hammered.
+# Why not more: a database that is still down after ~2.5 minutes is not transient (bad credentials, a dropped schema, a
+# real outage), and retrying would only hide it behind a run that looks "in progress". The run must fail, be logged as
+# Failed, and be seen by a person. It also has to stay far below the 1 h after which an open run counts as dead
+# (repository.STALE_AFTER) and inside the 06:00 UTC freshness goal of the Monday report (design, section 8b). Retrying
+# is safe because every task here is idempotent (the load replaces, it never adds).
+_DELAYS = _retry_delays()
+RETRIES = len(_DELAYS)  # 3
+RETRY_DELAY_SECONDS = _DELAYS or None  # [5, 30, 120]
+
+# The OPTIONAL count (it only tells a real zero from a dead capture) retries once, 5 s later, and then gives up: it must
+# never hold the report back for minutes, and its failure is only a warning.
+RETRIES_OPTIONAL = min(1, len(_DELAYS))  # 1
+RETRY_DELAY_SECONDS_OPTIONAL = _DELAYS[0] if _DELAYS else None  # 5
+
+
+def _dir(name: str) -> Path:
+    path = Path(os.environ.get("PIPELINE_DATA_DIR", DATA_DIR)) / name
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _extract_cache_key(_context: Any, parameters: dict[str, Any]) -> str:
+    """CACHE KEY OF THE EXTRACTION: database + telemetry environment + week window. The same four things always read the
+    same events (within the hour the cache lives), so they are the key. The engine itself cannot be hashed, so its URL
+    (password hidden) stands for it."""
+    source: Engine = parameters["source"]
+    return "|".join(
+        ["extract", source.url.render_as_string(hide_password=True), parameters["environment"],
+         parameters["start"].isoformat(), parameters["end"].isoformat()]
+    )
+
+
+def _kpi_cache_key(context: Any, parameters: dict[str, Any]) -> str | None:
+    """CACHE KEY OF THE KPI TASKS: which KPI (the task) + a fingerprint of the clean events it receives.
+
+    Each KPI task is a pure function: the same events always give the same numbers. So the key is exactly what the result
+    depends on and nothing else: the KPI, and the CONTENT of the events (not the run, not the database, not the week: the
+    week only labels the row afterwards). The events are sorted before hashing, so the order in which the database returned
+    them does not change the key; if one event is added, removed or changed, the key changes and the KPI is computed again.
+    With ``refresh=True`` there is no key at all: that call computes again."""
+    if parameters.get("refresh"):
+        return None
+    events = sorted((e.event_type, e.office, e.programme_id, e.currency, e.order_id, str(e.cost)) for e in parameters["events"])
+    fingerprint = hashlib.sha256(repr(events).encode("utf-8")).hexdigest()
+    return f"kpi|{context.task.name}|{fingerprint}"
+
+
+# --------------------------------------------------------------------------- critical tasks: the run log
+
+
+@task(tags=["log"], cache_policy=NO_CACHE, retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
+def start_pipeline_run(target: Engine, trigger: str, week_start: date, environment: str) -> tuple[str, bool]:
+    """Open the run as ``Running``. ``(run_id, False)`` means another run of this week is active: this one is ``Skipped``."""
+    return repository.start_run(
+        target, flow_name=FLOW_NAME, trigger=trigger, week_start=week_start, environment=environment,
+        prefect_flow_run_id=str(flow_run.id) if flow_run.id else None,
+    )
+
+
+@task(tags=["log"], cache_policy=NO_CACHE, retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
+def finish_pipeline_run(target: Engine, run_id: str, fields: dict[str, Any]) -> None:
+    repository.finish_run(target, run_id, **fields)
+
+
+# --------------------------------------------------------------------------- critical tasks: extract
+
+
+@task(tags=["extract"], cache_policy=NO_CACHE)
+def resolve_week_window(week_start: date | None) -> tuple[date, datetime, datetime]:
+    return wp.resolve_week_window(week_start)
+
+
+@task(tags=["extract"], cache_key_fn=_extract_cache_key, cache_expiration=CACHE_TTL, persist_result=True, retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
+def extract_kpi_events(source: Engine, start: datetime, end: datetime, environment: str) -> list[wp.TelemetryEvent]:
+    """The expensive read, cached for an hour. Read-only: never writes to ``telemetry_events``."""
+    return repository.extract(source, start, end, environment)
+
+
+# --------------------------------------------------------------------------- optional tasks (a failure is a warning)
+
+
+@task(tags=["extract", "optional"], cache_policy=NO_CACHE, retries=RETRIES_OPTIONAL, retry_delay_seconds=RETRY_DELAY_SECONDS_OPTIONAL)
+def count_window_events(source: Engine, start: datetime, end: datetime, environment: str) -> int:
+    """OPTIONAL. Liveness signal (events of any type in the window). If it fails the report is still correct; the count stays unknown."""
+    return repository.count_window_events(source, start, end, environment)
+
+
+@task(tags=["extract", "optional"], cache_policy=NO_CACHE)
+def save_raw_snapshot(events: list[wp.TelemetryEvent], week_start: date, environment: str) -> str:
+    """OPTIONAL. Keep the events this run read in ``data/raw/`` (JSON lines), to trace a number of the report to its events."""
+    path = _dir("raw") / f"weekly_events_{week_start}_{environment}.jsonl"
+    with path.open("w", encoding="utf-8") as handle:
+        for e in events:
+            handle.write(json.dumps(
+                {"event_id": e.event_id, "event_type": e.event_type, "timestamp": e.timestamp.isoformat(), "tags": dict(e.tags)},
+                sort_keys=True,
+            ) + "\n")
+    return str(path)
+
+
+@task(tags=["load", "optional"], cache_policy=NO_CACHE)
+def save_eval_report(report: dict[str, Any]) -> str:
+    """OPTIONAL. Write the validation report of the run to ``data/eval/``."""
+    path = _dir("eval") / f"run_{report['week_start']}_{report['run_id'][:8]}.json"
+    path.write_text(json.dumps(report, indent=2, sort_keys=True, default=_json_default), encoding="utf-8")
+    return str(path)
+
+
+@task(tags=["extract", "optional"], cache_policy=NO_CACHE, retries=RETRIES_OPTIONAL, retry_delay_seconds=RETRY_DELAY_SECONDS_OPTIONAL)
+def load_previous_activity(target: Engine, week_start: date, environment: str) -> list[int]:
+    """OPTIONAL. How many business events the previous weeks had (the run log is the memory): what a normal week looks like."""
+    return repository.previous_events_read(target, FLOW_NAME, environment, week_start)
+
+
+@task(tags=["transform", "optional"], cache_policy=NO_CACHE)
+def assess_capture_activity(window_events_total: int | None, events_read: int, previous_events_read: list[int]) -> list[str]:
+    """OPTIONAL. Is the capture alive? The warnings (``data_health:<code>: <why>``) when the week has no event at all or far fewer
+    business events than the previous weeks. Pure. It only warns: it never stops the run or changes a number."""
+    return [f"data_health:{alert.code}: {alert.message}" for alert in wp.assess_activity(window_events_total, events_read, previous_events_read)]
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    raise TypeError(f"not serialisable: {type(value)}")
+
+
+def settled(state: Any, *, label: str, warnings: list[str], default: Any = None) -> Any:
+    """Read the state of an OPTIONAL task that was called with ``return_state=True``.
+
+    Prefect hands back the task's state instead of raising its error, so a failure here is a warning, not the end of
+    the run: record it and return ``default``. The call site, in the flow, is where ``return_state=True`` is written."""
+    if state.is_completed():
+        return state.result()
+    error = state.result(raise_on_failure=False)
+    warnings.append(f"{label}: {type(error).__name__}: {error}")
+    get_run_logger().warning("optional task %s failed, continuing: %s", label, error)
+    return default
+
+
+# --------------------------------------------------------------------------- critical tasks: transform and load
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def validate_kpi_events(events: list[wp.TelemetryEvent]) -> wp.ValidationResult:
+    result = wp.validate_events(events)
+    logger = get_run_logger()
+    for reason, count in result.rejected_by_reason().items():
+        logger.warning("rejected %d event(s): %s", count, reason)
+    return result
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def check_currency_consistency(events: list[wp.CleanEvent]) -> None:
+    wp.check_currency_consistency(events)
+
+
+@dataclass(frozen=True)
+class DeduplicationResult:
+    """The events with each (event_type, order_id) once, and how many repeated ones were dropped."""
+
+    events: list[wp.CleanEvent]
+    duplicates_removed: int
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def deduplicate_events(events: list[wp.CleanEvent]) -> DeduplicationResult:
+    """Count each (event_type, order_id) once: the source guarantees a unique event id, this protects an order that arrived twice."""
+    unique, duplicates = wp.dedupe_events(events)
+    return DeduplicationResult(events=unique, duplicates_removed=duplicates)
+
+
+# THE FOUR KPI TASKS of the briefing ("KPIs a medir"), one per KPI, each one a pure function of the clean events.
+# The costly TRANSFORMATION is cached: cache_key_fn defines the key (the KPI + a fingerprint of the events, see
+# _kpi_cache_key) and cache_expiration says how long a result stays valid: CACHE_TTL = 1 hour. After that hour, or as soon
+# as the events change, the KPI is computed again. A failed run is never cached, only a completed one.
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def calculate_total_material_cost(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, Decimal]:
+    """KPI ``total_material_cost``: the sum of the cost of the inbound orders of each office and programme."""
+    return wp.total_material_cost_by_group(events)
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def count_kits_delivered(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, int]:
+    """KPI ``kits_delivered_count``: the number of outbound (delivery) orders of each office and programme."""
+    return wp.kits_delivered_by_group(events)
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def count_shortage_events(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, int]:
+    """KPI ``shortage_events_count``: how many times the stock fell below its minimum, per office and programme."""
+    return wp.shortage_events_by_group(events)
+
+
+@task(tags=["transform"], cache_key_fn=_kpi_cache_key, cache_expiration=CACHE_TTL, persist_result=True)
+def count_cost_variance_events(events: list[wp.CleanEvent], refresh: bool = False) -> dict[wp.GroupKey, int]:
+    """KPI ``cost_variance_events_count``: how many times a supplier's cost rose abnormally, per office and programme."""
+    return wp.cost_variance_events_by_group(events)
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def build_weekly_kpi_rows(
+    week_start: date,
+    total_material_cost: dict[wp.GroupKey, Decimal],
+    kits_delivered: dict[wp.GroupKey, int],
+    shortage_events: dict[wp.GroupKey, int],
+    cost_variance_events: dict[wp.GroupKey, int],
+) -> list[wp.WeeklyRow]:
+    """Put the four KPIs together: one row of ``weekly_office_program_performance`` per office and programme."""
+    return wp.build_weekly_rows(week_start, total_material_cost, kits_delivered, shortage_events, cost_variance_events)
+
+
+@task(tags=["transform"], cache_policy=NO_CACHE)
+def reconcile_weekly_kpis(
+    rows: list[wp.WeeklyRow], events: list[wp.CleanEvent], duplicates_removed: int, events_read: int, rejected_count: int, valid_count: int
+) -> dict[str, Any]:
+    """Prove the report adds up to the events it came from; raise (and so stop the run) when it does not."""
+    return wp.reconcile(
+        wp.Aggregation(rows=rows, events=events, duplicates_removed=duplicates_removed),
+        events_read=events_read, rejected_count=rejected_count, valid_count=valid_count,
+    )
+
+
+@task(tags=["load"], cache_policy=NO_CACHE, retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
+def load_weekly_performance(target: Engine, rows: list[wp.WeeklyRow], week_start: date) -> repository.LoadResult:
+    """ONE transaction: replace the week (upsert + delete stale + verify). Never cached; safe to retry: it is idempotent."""
+    return repository.load_week(target, rows, week_start)
+
+
+# --------------------------------------------------------------------------- subflows: one per phase
+#
+# Each phase of the design is a flow of its own (a SUBFLOW when the main flow calls it): it can be run, monitored and
+# reused by itself. Each one takes everything it needs as INPUTS and gives back everything it produces as an OUTPUT: no
+# phase reads what another one left in a global variable. The main flow below only coordinates them.
+
+
+@dataclass(frozen=True)
+class ExtractionResult:
+    """What the extraction phase hands over: the events behind the four KPIs of the week."""
+
+    events: list[wp.TelemetryEvent]
+    events_read: int
+
+
+@dataclass(frozen=True)
+class TransformationResult:
+    """What the transformation phase hands over: the rows of ``weekly_office_program_performance`` and the evidence behind them."""
+
+    rows: list[wp.WeeklyRow]
+    valid_count: int
+    rejected_count: int
+    rejected_by_reason: dict[str, int]
+    reconciliation: dict[str, Any]
+
+    def kpis(self) -> list[dict[str, Any]]:
+        """The rows as the report shows them, with the KPI names of the briefing."""
+        return [
+            {"office": r.office, "programme_id": r.programme_id, "currency": r.currency,
+             "total_material_cost": r.total_material_cost, "kits_delivered_count": r.kits_delivered_count,
+             "shortage_events_count": r.shortage_events_count, "cost_variance_events_count": r.cost_variance_events_count}
+            for r in self.rows
+        ]
+
+
+@flow(name="extract-kpi-events", validate_parameters=False)
+def extract_kpi_events_subflow(source: Engine, start: datetime, end: datetime, environment: str, refresh: bool = False) -> ExtractionResult:
+    """PHASE 1, EXTRACT: read, from ``telemetry_events`` (read-only), the events behind the four KPIs of the window
+    ``[start, end)`` in one telemetry environment. ``refresh=True`` ignores the one-hour cache."""
+    extract = extract_kpi_events.with_options(refresh_cache=True) if refresh else extract_kpi_events
+    events = extract(source, start, end, environment)
+    return ExtractionResult(events=events, events_read=len(events))
+
+
+@flow(name="transform-weekly-kpis", validate_parameters=False)
+def transform_weekly_kpis_subflow(events: list[wp.TelemetryEvent], week_start: date, refresh: bool = False) -> TransformationResult:
+    """PHASE 2, TRANSFORM: turn the events into the weekly KPIs per office and programme, one task per KPI:
+    ``total_material_cost``, ``kits_delivered_count``, ``shortage_events_count`` and ``cost_variance_events_count``.
+    Validate, check the currencies, count each order once, compute the four KPIs, put them in rows and prove the numbers
+    add up. Pure: it touches no database. ``refresh=True`` ignores the one-hour cache."""
+    checked = validate_kpi_events(events)
+    check_currency_consistency(checked.valid)
+    unique = deduplicate_events(checked.valid)
+    total_material_cost = calculate_total_material_cost(unique.events, refresh)
+    kits_delivered = count_kits_delivered(unique.events, refresh)
+    shortage_events = count_shortage_events(unique.events, refresh)
+    cost_variance_events = count_cost_variance_events(unique.events, refresh)
+    rows = build_weekly_kpi_rows(week_start, total_material_cost, kits_delivered, shortage_events, cost_variance_events)
+    reconciliation = reconcile_weekly_kpis(rows, unique.events, unique.duplicates_removed, len(events), len(checked.rejected), len(checked.valid))
+    return TransformationResult(
+        rows=rows, valid_count=len(checked.valid), rejected_count=len(checked.rejected),
+        rejected_by_reason=checked.rejected_by_reason(), reconciliation=reconciliation,
+    )
+
+
+@flow(name="load-weekly-office-program-performance", validate_parameters=False)
+def load_weekly_office_program_performance_subflow(target: Engine, rows: list[wp.WeeklyRow], week_start: date) -> repository.LoadResult:
+    """PHASE 3, LOAD: replace the week in ``reporting.weekly_office_program_performance``, in one transaction."""
+    return load_weekly_performance(target, rows, week_start)
+
+
+# OPTIONAL phases: the main flow calls them with return_state=True, so their failure is a warning and not the end of the run.
+
+
+@flow(name="window-liveness-count", validate_parameters=False)
+def window_liveness_count_subflow(source: Engine, start: datetime, end: datetime, environment: str) -> int:
+    """OPTIONAL: how many events of ANY type the window has, the sign of life of the capture."""
+    return count_window_events(source, start, end, environment)
+
+
+@flow(name="raw-events-snapshot", validate_parameters=False)
+def raw_events_snapshot_subflow(events: list[wp.TelemetryEvent], week_start: date, environment: str) -> str:
+    """OPTIONAL: keep the events the run read in ``data/raw/``. Returns the path of the file."""
+    return save_raw_snapshot(events, week_start, environment)
+
+
+@flow(name="validation-report", validate_parameters=False)
+def validation_report_subflow(report: dict[str, Any]) -> str:
+    """OPTIONAL: write the validation report of the run in ``data/eval/``. Returns the path of the file."""
+    return save_eval_report(report)
+
+
+@flow(name="capture-activity-check", validate_parameters=False)
+def capture_activity_check_subflow(target: Engine, week_start: date, environment: str, events_read: int, window_events_total: int | None) -> list[str]:
+    """OPTIONAL: is the capture alive? Compares the week with the previous ones and returns the ``data_health`` warnings, if any."""
+    previous = load_previous_activity(target, week_start, environment)
+    return assess_capture_activity(window_events_total, events_read, previous)
+
+
+# --------------------------------------------------------------------------- the main flow: it only coordinates
+
+
+@dataclass(frozen=True)
+class RunSummary:
+    run_id: str
+    state: str
+    week_start: date
+    error: str | None = None
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+# Where each active flow run writes its log, by Prefect run id, so the crash hook below can reach the right database.
+_ACTIVE_TARGETS: dict[str, Engine] = {}
+
+
+def mark_run_crashed(flow: Any, flow_run: Any, state: Any) -> None:
+    """``on_crashed`` hook (design, section 4.4): when the process or its infrastructure dies, close the run's log row as
+    ``Crashed`` at once instead of leaving it ``Running`` until the next run notices (repository.mark_stale_runs).
+    It never raises: a hook that fails must not hide the crash it reports."""
+    try:
+        run_id = str(flow_run.id)
+        engine = _ACTIVE_TARGETS.pop(run_id, None) or storage.build_engine(storage.database_url("REPORTING_DATABASE_URL"))
+        reason = f"Crashed: {getattr(state, 'message', None) or 'the process or its infrastructure died'}"
+        repository.mark_crashed_by_prefect_id(engine, run_id, reason[:500])
+    except Exception:  # noqa: BLE001 - see the docstring
+        logging.getLogger(__name__).exception("could not mark the crashed run in the log")
+
+
+@flow(name=FLOW_NAME, validate_parameters=False, on_crashed=[mark_run_crashed, alerts.notify_crashed], on_failure=[alerts.notify_failed])
+def weekly_office_performance_flow(
+    week_start: date | None = None,
+    trigger: str = "scheduled",
+    environment: str | None = None,
+    refresh: bool = False,
+    source_engine: Engine | None = None,
+    target_engine: Engine | None = None,
+) -> RunSummary:
+    """Compute and load the weekly report for ``week_start`` (default: the last complete ISO week).
+
+    It COORDINATES the phases and holds none of their logic: extract -> transform -> load, each a subflow with explicit
+    inputs and outputs, plus the optional ones. ``refresh=True`` ignores the one-hour cache (to see late events). A critical
+    failure is recorded in ``reporting.pipeline_runs`` and then re-raised, so the Prefect run also ends ``Failed``. A failure
+    of an optional subflow is recorded as a warning and the run completes. If another run of the same week is active, this
+    one is ``Skipped``.
+    """
+    environment = environment or storage.default_environment()
+    target = target_engine or storage.build_engine(storage.database_url("REPORTING_DATABASE_URL"))
+    source = source_engine or storage.build_engine(storage.database_url("TELEMETRY_DATABASE_URL"))
+    storage.create_reporting_schema(target)
+
+    week, start, end = resolve_week_window(week_start)
+    run_id, acquired = start_pipeline_run(target, trigger, week, environment)
+    if not acquired:
+        return RunSummary(run_id, repository.STATE_SKIPPED, week, "another run of this week is already running")
+
+    prefect_run_id = str(flow_run.id) if flow_run.id else None
+    if prefect_run_id:
+        _ACTIVE_TARGETS[prefect_run_id] = target  # for the on_crashed hook
+    warnings: list[str] = []
+    report: dict[str, Any] = {"run_id": run_id, "week_start": week, "environment": environment, "trigger": trigger}
+    fields: dict[str, Any] = {}
+    raised: Exception | None = None
+    try:
+        extraction = extract_kpi_events_subflow(source, start, end, environment, refresh)  # critical
+        fields["events_read"] = extraction.events_read
+        # OPTIONAL subflows are called with return_state=True: if one fails, the main extract -> transform -> load goes on
+        count_state = window_liveness_count_subflow(source, start, end, environment, return_state=True)
+        if count_state.is_completed():
+            fields["window_events_total"] = count_state.result()
+        else:  # the failure is handled HERE, it does not propagate: the count is unknown (None), never read as zero
+            error = count_state.result(raise_on_failure=False)
+            warnings.append(f"count_window_events: {type(error).__name__}: {error}")
+            get_run_logger().warning("count_window_events failed, the run continues without it: %s", error)
+            fields["window_events_total"] = None
+        snapshot_state = raw_events_snapshot_subflow(extraction.events, week, environment, return_state=True)
+        report["raw_snapshot"] = settled(snapshot_state, label="save_raw_snapshot", warnings=warnings)
+        activity_state = capture_activity_check_subflow(
+            target, week, environment, extraction.events_read, fields["window_events_total"], return_state=True
+        )
+        warnings.extend(settled(activity_state, label="capture_activity_check", warnings=warnings, default=[]))  # data_health warnings
+
+        transformation = transform_weekly_kpis_subflow(extraction.events, week, refresh)  # critical from here to the load
+        fields["rejected_count"] = transformation.rejected_count
+        report.update(rejected_by_reason=transformation.rejected_by_reason, reconciliation=transformation.reconciliation,
+                      kpis=transformation.kpis())
+
+        loaded = load_weekly_office_program_performance_subflow(target, transformation.rows, week)
+        fields.update(rows_written=loaded.written, rows_changed=loaded.changed, rows_deleted=loaded.deleted)
+        fields.update(state=repository.STATE_COMPLETED, error=None)
+    except Exception as exc:  # noqa: BLE001 - recorded below, then re-raised
+        fields.update(state=repository.STATE_FAILED, error=f"{type(exc).__name__}: {exc}")
+        raised = exc
+
+    report.update(state=fields["state"], error=fields["error"], warnings=list(warnings),
+                  counts={k: v for k, v in fields.items() if k not in ("state", "error")})
+    eval_state = validation_report_subflow(report, return_state=True)  # optional too
+    settled(eval_state, label="save_eval_report", warnings=warnings)
+    fields["warnings"] = "; ".join(warnings) or None
+    finish_pipeline_run(target, run_id, fields)
+    if prefect_run_id:
+        _ACTIVE_TARGETS.pop(prefect_run_id, None)  # closed normally: nothing left for the crash hook
+    alerts.notify_data_health(week, environment, warnings)  # best-effort: it never raises, it does nothing without a webhook
+    if raised is not None:
+        raise raised
+    return RunSummary(run_id, repository.STATE_COMPLETED, week, warnings=tuple(warnings))
+
+
+# --------------------------------------------------------------------------- command line
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Weekly office/programme performance pipeline")
+    parser.add_argument("--week-start", type=date.fromisoformat, default=None, help="any day of the week to compute (default: last complete week)")
+    parser.add_argument("--environment", default=None, help="telemetry environment to read (default: PIPELINE_ENVIRONMENT or production)")
+    parser.add_argument("--refresh", action="store_true", help="ignore the one-hour cache and read the source again (to pick up late events)")
+    parser.add_argument("--trigger", choices=("scheduled", "manual"), default="manual", help="how this run is labelled in the log (default: manual)")
+    parser.add_argument("--demo", action="store_true", help="run on a throw-away demo database with demo events, never on the app's data")
+    args = parser.parse_args(argv)
+
+    source = target = None
+    environment = args.environment
+    week_start = args.week_start
+    use_demo = args.demo
+    if not use_demo and not storage.database_configured() and not storage.local_telemetry_available():
+        # A fresh checkout: no DATABASE_URL and the API has not stored any telemetry yet. Say so and use the demo data,
+        # so `python data/pipelines/pipeline.py` runs end to end. With a configured database this never happens: a real
+        # failure there must stay a failure.
+        print("No telemetry database is configured (DATABASE_URL is not set) and the local one has no telemetry_events:\n"
+              "running on the DEMO data. Set DATABASE_URL to run on real telemetry.", file=sys.stderr)
+        use_demo = True
+    if use_demo:
+        from data.pipelines.weekly_office_performance.seed_telemetry import DEMO_WEEK, seed_telemetry
+
+        source = target = storage.build_engine(storage.demo_url())
+        environment = environment or storage.DEFAULT_ENVIRONMENT
+        week_start = week_start or DEMO_WEEK  # the demo events are of a fixed week, not of "last week"
+        print(f"demo: {seed_telemetry(source, environment)} telemetry events loaded")
+    try:
+        summary = weekly_office_performance_flow(
+            week_start=week_start, trigger=args.trigger, environment=environment, refresh=args.refresh,
+            source_engine=source, target_engine=target,
+        )
+    except Exception as exc:  # noqa: BLE001 - already recorded in the execution log by the flow
+        print(f"FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(summary)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

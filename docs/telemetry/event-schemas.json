@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Nexova application telemetry event v2.0.0",
-  "description": "One event per JSON object. All 40 variants use explicit property allowlists. Field descriptions, requiredness, per-event privacy profiles and delivery rationale are specified in telemetry-plan.md, sections 15 and 16. Arithmetic and transactional invariants must also be checked by the service.",
-  "$comment": "Draft 2020-12 is required: unevaluatedProperties closes payloads composed with allOf/$ref. Enable format checking. All declared payload fields are required; null userId/sessionId is an explicit value, not permission to omit a key. Descriptive annotations do not change contract version 2.0.0.",
+  "title": "Nexova application telemetry event v2.1.0",
+  "description": "One event per JSON object. All 41 variants use explicit property allowlists. Field descriptions, requiredness, per-event privacy profiles and delivery rationale are specified in telemetry-plan.md, sections 15 and 16. Arithmetic and transactional invariants must also be checked by the service.",
+  "$comment": "Version 2.1.0 is additive over 2.0.0: it adds the web_vital_reported variant (which requires schemaVersion 2.1.0) and still accepts every 2.0.0 event unchanged, so an emitter on 2.0.0 keeps working. Draft 2020-12 is required: unevaluatedProperties closes payloads composed with allOf/$ref. Enable format checking. All declared payload fields are required; null userId/sessionId is an explicit value, not permission to omit a key. Descriptive annotations do not change contract version 2.0.0.",
   "type": "object",
   "additionalProperties": false,
   "required": ["eventId", "event_type", "schemaVersion", "timestamp", "userId", "sessionId", "requestId", "environment", "source", "properties"],
   "properties": {
     "eventId": { "$ref": "#/$defs/uuidV4", "description": "Required. Stable UUID v4 of the logical event, reused on delivery retries." },
     "event_type": { "type": "string", "pattern": "^[a-z]+(?:_[a-z]+)+$", "description": "Required. Entity-action name; oneOf permits only the 40 catalogued event types." },
-    "schemaVersion": { "const": "2.0.0", "description": "Required. Event contract version, not application release." },
+    "schemaVersion": { "enum": ["2.0.0", "2.1.0"], "description": "Required. Event contract version, not application release. 2.1.0 only adds web_vital_reported; the 40 older variants are identical in both." },
     "timestamp": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "Required. UTC occurrence time in ISO 8601/RFC 3339, ending in Z; not delivery time." },
     "userId": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$", "description": "Required key. Backend-generated HMAC-SHA256 pseudonym, or null without an identified actor. Inventory and successful login/registration require a non-null value." },
     "sessionId": { "anyOf": [{ "$ref": "#/$defs/uuidV4" }, { "type": "null" }], "description": "Required key. Analytics-session UUID, never a JWT. Non-null for browser events; null allowed for direct API calls and internal jobs." },
@@ -169,8 +169,10 @@
     ,{ "properties": { "event_type": { "const": "telemetry_delivery_failed" }, "source": { "const": "worker" }, "properties": { "$ref": "#/$defs/deliveryPayload" } } }
     ,{ "properties": { "event_type": { "const": "section_load_completed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/sectionLoadPayload" } } }
     ,{ "properties": { "event_type": { "const": "form_validation_failed" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/formValidationPayload" } } }
+    ,{ "properties": { "event_type": { "const": "web_vital_reported" }, "schemaVersion": { "const": "2.1.0" }, "source": { "enum": ["backoffice", "website"] }, "properties": { "$ref": "#/$defs/webVitalPayload" } } }
   ],
   "$defs": {
+    "webVitalPayload": { "type": "object", "additionalProperties": false, "required": ["metric", "value", "rating", "section"], "properties": { "metric": { "enum": ["LCP", "CLS", "INP", "FCP", "TTFB"] }, "value": { "type": "number", "minimum": 0 }, "rating": { "enum": ["good", "needs-improvement", "poor"] }, "section": { "$ref": "#/$defs/section" } } },
     "sectionLoadPayload": { "type": "object", "additionalProperties": false, "required": ["section", "duration_ms", "outcome"], "properties": { "section": { "$ref": "#/$defs/section" }, "duration_ms": { "$ref": "#/$defs/duration" }, "outcome": { "enum": ["success", "error"] } } },
     "formValidationPayload": { "type": "object", "additionalProperties": false, "required": ["flow_id", "flow_name", "field", "error_count"], "properties": { "flow_id": { "$ref": "#/$defs/uuidV4" }, "flow_name": { "enum": ["inbound", "outbound", "supplier", "incident", "analysis", "registration", "talent"] }, "field": { "enum": ["product_id", "quantity", "supplier", "assigned_to", "multiple", "other"] }, "error_count": { "type": "integer", "minimum": 1 } } },
     "section": { "enum": ["home", "inventory", "inbound", "outbound", "orders", "suppliers", "incidents", "analysis", "profile", "login", "register", "talent"] },
@@ -324,6 +326,18 @@
       "environment": "test",
       "source": "worker",
       "properties": { "job_id": "40000000-0000-4000-8000-000000000001", "job_name": "telemetry_aggregate", "outcome": "success", "duration_ms": 250 }
+    },
+    {
+      "eventId": "10000000-0000-4000-8000-000000000009",
+      "event_type": "web_vital_reported",
+      "schemaVersion": "2.1.0",
+      "timestamp": "2026-10-27T11:04:00Z",
+      "userId": null,
+      "sessionId": "30000000-0000-4000-8000-000000000003",
+      "requestId": "20000000-0000-4000-8000-000000000007",
+      "environment": "test",
+      "source": "backoffice",
+      "properties": { "metric": "LCP", "value": 1840.5, "rating": "good", "section": "inventory" }
     }
   ]
 }

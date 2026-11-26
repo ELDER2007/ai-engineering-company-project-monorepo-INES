@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import os
 import secrets
@@ -38,14 +40,24 @@ def get_allowed_origins() -> list[str]:
     ]
 
 
+def _data_file(package: str, filename: str) -> Path:
+    """Runtime state file. DATA_DIR (set in containers) moves them all into one persistent volume."""
+    data_dir = os.environ.get("DATA_DIR")
+    if data_dir:
+        path = Path(data_dir) / package / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+    return Path(__file__).resolve().parent.parent / package / filename
+
+
 def get_suppliers_db_path() -> Path:
     """TinyDB file for the suppliers domain (gitignored runtime state)."""
-    return Path(__file__).resolve().parent.parent / "suppliers" / "db.json"
+    return _data_file("suppliers", "db.json")
 
 
 def get_incidents_db_path() -> Path:
     """TinyDB file for the managed incidents (gitignored runtime state)."""
-    return Path(__file__).resolve().parent.parent / "incidents" / "db.json"
+    return _data_file("incidents", "db.json")
 
 
 def get_talent_db_path() -> Path:
@@ -55,17 +67,17 @@ def get_talent_db_path() -> Path:
 
 def get_users_db_path() -> Path:
     """TinyDB file for the internal users (gitignored runtime state)."""
-    return Path(__file__).resolve().parent.parent / "users" / "db.json"
+    return _data_file("users", "db.json")
 
 
 def get_profiles_db_path() -> Path:
     """TinyDB file for the user profiles (gitignored runtime state)."""
-    return Path(__file__).resolve().parent.parent / "profiles" / "db.json"
+    return _data_file("profiles", "db.json")
 
 
 def get_local_inventory_db_path() -> Path:
     """SQLite file used by the inventory domain when DATABASE_URL is not set (gitignored)."""
-    return Path(__file__).resolve().parent.parent / "inventory" / "db.sqlite"
+    return _data_file("inventory", "db.sqlite")
 
 
 def uses_local_inventory_db() -> bool:
@@ -130,6 +142,38 @@ def get_jwt_secret() -> str:
         return raw
     logger.warning("SECRET_KEY is not set: using a random key, sessions will not survive a restart")
     return secrets.token_urlsafe(48)
+
+
+def get_telemetry_endpoint() -> str | None:
+    """Where an EXTERNAL telemetry collector lives, from the TELEMETRY_ENDPOINT env var (None when unset).
+
+    Informational only: the receiver stores the events itself (``telemetry/store.py``) and never forwards or redirects any
+    traffic to it. It is not the frontend's NEXT_PUBLIC_TELEMETRY_ENDPOINT, which is where the browser posts (this receiver).
+    """
+    return os.environ.get("TELEMETRY_ENDPOINT", "").strip() or None
+
+
+def get_telemetry_schema_path() -> Path:
+    """The telemetry event contract (JSON Schema Draft 2020-12), from TELEMETRY_SCHEMA_PATH or the repo's docs."""
+    raw = os.environ.get("TELEMETRY_SCHEMA_PATH")
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[3] / "docs" / "telemetry" / "event-schemas.json"
+
+
+@lru_cache(maxsize=1)
+def get_telemetry_hmac_key() -> bytes:
+    """Key of the `userId` pseudonym, from TELEMETRY_HMAC_KEY (separate per environment, stable while the data is kept).
+
+    Without it the key is derived from the JWT secret, so development works out of the box; the pseudonyms then
+    change whenever SECRET_KEY does. Production should set its own, at least MIN_SECRET_KEY_LENGTH characters.
+    """
+    raw = os.environ.get("TELEMETRY_HMAC_KEY")
+    if raw:
+        if len(raw) < MIN_SECRET_KEY_LENGTH:
+            raise RuntimeError(f"TELEMETRY_HMAC_KEY must be at least {MIN_SECRET_KEY_LENGTH} characters long")
+        return raw.encode("utf-8")
+    return hmac.new(get_jwt_secret().encode("utf-8"), b"nexova.telemetry.user.v1", hashlib.sha256).digest()
 
 
 def get_access_token_expire_minutes() -> int:

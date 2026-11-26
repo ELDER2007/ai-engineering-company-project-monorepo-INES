@@ -1,7 +1,7 @@
 """Routes for the suppliers domain (Directorio de Proveedores): list/create/
 update, the two search endpoints (by country, by category), and a status
-toggle. DELETE is available for entries made by mistake; the CONTEXT prefers
-suspending a supplier so the commercial history is kept.
+toggle. DELETE removes active suppliers only: the CONTEXT keeps suspended ones
+in the directory for the commercial history, so deleting one returns 409.
 
 Mounted twice in ``main.py``: at ``/suppliers`` (documented) and at
 ``/api/suppliers`` (what the backoffice calls through the Vite proxy).
@@ -86,9 +86,11 @@ async def set_supplier_status(supplier_id: int, payload: SupplierStatusUpdate) -
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{supplier_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 async def delete_supplier(supplier_id: int) -> None:
     try:
         service.delete_supplier(supplier_id)
     except service.SupplierNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except service.SupplierSuspendedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc

@@ -1,0 +1,153 @@
+# `docker compose up` desde la raíz: funciona sin configurar nada.
+# Para sobrescribir valores (login inicial, SECRET_KEY, puertos...) copia .env.example a .env (gitignored).
+# Los servicios se hablan por nombre de servicio (api, uis) dentro de la red nexova-net, nunca por localhost.
+# One image for the API, the Celery worker and Flower: the three run the same code (services/Dockerfile).
+x-api-build: &api-build
+  context: ./services
+  additional_contexts:
+    shared: ./packages/shared
+    data: ./data  # the reporting module imports data/pipelines (see services/Dockerfile)
+
+services:
+  api:
+    build: *api-build
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      # The queue of the asynchronous tasks (DEV-55). The API only needs it when someone enqueues a task: it does NOT depend_on redis,
+      # and it starts (and serves everything else) without it. Inside the network the host is the service name, never localhost.
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+    volumes:
+      - ./services/api:/app/services/api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    networks: [nexova-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://api:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  uis:
+    build:
+      context: ./uis
+      additional_contexts:
+        monorepo: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Nombre del servicio Docker, no localhost: los rewrites del backoffice reenvían aquí.
+      API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8000}
+      NEXT_PUBLIC_INVENTORY_API_URL: ${NEXT_PUBLIC_INVENTORY_API_URL:-http://api:8000}
+      # Hostnames/IPs desde los que se abre el backoffice (si no es localhost); sin esto Next en dev responde 403 al JS.
+      DEV_ALLOWED_ORIGINS: ${DEV_ALLOWED_ORIGINS:-}
+      # Hot reload sobre bind mounts (necesario en Docker Desktop macOS/Windows).
+      WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
+    command: ["start.sh"]
+    volumes:
+      - ./uis/website/src:/app/uis/website/src
+      - ./uis/backoffice/src:/app/uis/backoffice/src
+      - ./packages/shared:/app/packages/shared
+    ports:
+      - "${WEBSITE_PORT:-3000}:3000"
+      - "${BACKOFFICE_PORT:-3001}:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [nexova-net]
+    restart: unless-stopped
+
+  # ---- Asynchronous tasks (ticket DEV-55): Redis (the queue), a worker (a process of its own) and Flower (the panel) ----
+  # `docker compose up` starts them with the rest; `docker compose stop worker` stops the worker alone (the API keeps answering and the queue keeps the messages).
+  redis:
+    image: redis:7.4-alpine  # the official image
+    # noeviction: when the memory is full Redis REFUSES new writes (the API answers 503) instead of deleting queued tasks to make room.
+    # appendonly: the queue survives a restart of Redis. The memory is fixed on purpose (REDIS_MAXMEMORY), the results expire after one day.
+    command: ["redis-server", "--maxmemory", "${REDIS_MAXMEMORY:-256mb}", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"  # only this machine: Redis has no password here, it must never be reachable from outside
+    volumes:
+      - redis-data:/data
+    networks: [nexova-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    build: *api-build
+    working_dir: /app
+    command: ["celery", "-A", "services.celery_app", "worker", "--loglevel=INFO", "-E", "--concurrency=${CELERY_CONCURRENCY:-1}"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      CELERY_DEMO_TASKS: ${CELERY_DEMO_TASKS:-0}  # 1 = also load the demo tasks (see services/api/async_tasks/demo.py)
+      ASYNC_RETRY_BASE_SECONDS: ${ASYNC_RETRY_BASE_SECONDS:-5}
+      # One task at a time by default: each pipeline run starts its own Prefect server, and two at once in one container choke each other.
+    volumes:
+      - ./services/api:/app/services/api  # the same code, and the same local database file as the API when DATABASE_URL is not set
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [nexova-net]
+    restart: unless-stopped
+    stop_grace_period: 2m  # `docker compose stop` asks the worker to finish the task it is running (warm shutdown) before killing it
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A services.celery_app inspect ping -d celery@$$HOSTNAME -t 5"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  flower:
+    build: *api-build
+    working_dir: /app
+    command: ["celery", "-A", "services.celery_app", "flower", "--port=5555"]
+    environment:
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      # user:password of the panel. The default is only for a laptop: the port is published on 127.0.0.1 only. Change it in .env anywhere else.
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-admin:admin}
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [nexova-net]
+    restart: unless-stopped
+
+  # Nightly job (ticket DEV-53): a container of its OWN that runs scripts/nightly_export.py every night at 02:00 UTC (infra/scheduler/crontab).
+  # It is OFF by default: a plain `docker compose up` does not start it (it starts the application and its task queue). To start it:
+  #   docker compose --profile scheduler up -d scheduler
+  # It does not depend on the API and shares nothing with it: it only needs the database (DATABASE_URL, from .env). Why a container: infra/scheduler/README.md
+  scheduler:
+    profiles: ["scheduler"]
+    build:
+      context: .
+      dockerfile: infra/scheduler/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: UTC
+      NIGHTLY_REQUIRE_DATABASE_URL: "1"  # without a real database the job would "work" against a throw-away file inside the container
+    volumes:
+      - ./data/raw:/app/data/raw    # the CSV backups, on the host
+      - ./data/eval:/app/data/eval  # the pipeline's validation reports
+    networks: [nexova-net]
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+networks:
+  nexova-net:
+    name: nexova-net

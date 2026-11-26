@@ -67,12 +67,6 @@ Score = Annotated[int, Field(ge=SCORE_MIN, le=SCORE_MAX)]
 REQUIRED_FIELDS = ("title", "description", "category", "origin", "branch")
 
 
-def mask_email(email: str) -> str:
-    """``elena.smith@icloud.com`` -> ``e***@icloud.com``. Lists never expose the full address."""
-    local, _, domain = email.partition("@")
-    return f"{local[:1]}***@{domain}"
-
-
 def normalize_branch(branch: str, origin: str | None) -> str:
     """``Central`` and ``central`` are the same place; and an incident that comes
     from a branch has to say which one (``central`` is for "does not apply")."""
@@ -180,7 +174,25 @@ class IncidentRecord(_Content):
         return self
 
 
-class _IncidentView(BaseModel):
+class IncidentListItem(BaseModel):
+    """A row of the list, with only what the table shows and sorts by. Not the description
+    (up to ``DESCRIPTION_MAX`` characters per row), the lifecycle data, the customer's address
+    (not even masked), the audit trail or the per-row permissions: the detail has them."""
+
+    id: str
+    title: str
+    category: IncidentCategory
+    status: IncidentStatus
+    origin: IncidentOrigin
+    branch: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentOut(BaseModel):
+    """The full incident, with the audit trail. ``allowed_transitions`` and ``editable`` are
+    computed by the server from the status, so the client does not repeat the lifecycle rules."""
+
     id: str
     title: str
     description: str
@@ -196,17 +208,6 @@ class _IncidentView(BaseModel):
     updated_at: datetime
     allowed_transitions: list[IncidentStatus]
     editable: bool
-
-
-class IncidentListItem(_IncidentView):
-    """A row of the list: the customer's address is masked."""
-
-    customer_email_masked: str | None
-
-
-class IncidentOut(_IncidentView):
-    """The full incident, with the audit trail."""
-
     customer_email: str | None
     history: list[HistoryEntry]
 

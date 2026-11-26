@@ -16,10 +16,17 @@ const notAPage = [{ type: "header", key: "accept", value: ".*text/html.*" }];
 // comes through the forwarded URL (<codespace>-5174.app.github.dev), which it would answer with 403, leaving the
 // pages without JavaScript. Allow exactly this codespace's forwarded hostname; nothing changes elsewhere.
 const { CODESPACE_NAME, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } = process.env;
-const allowedDevOrigins =
-  CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN
+// DEV_ALLOWED_ORIGINS (comma-separated hostnames or IPs) does the same for a server reached by IP or domain,
+// e.g. a Docker stack running `next dev` on a VPS.
+const allowedDevOrigins = [
+  ...(CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN
     ? [`${CODESPACE_NAME}-5174.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`]
-    : [];
+    : []),
+  ...(process.env.DEV_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean),
+];
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -31,11 +38,16 @@ const nextConfig = {
       // Before the generic /api rule: the inventory routes are /inventory/* on the API, not /api/inventory/*.
       // The prefix keeps them apart from the /inventory/* pages of the app (/inventory/orders is both).
       { source: "/api/inventory/:path*", destination: `${INVENTORY_API}/inventory/:path*` },
+      // The business dashboard (the /reporting page of the app) reads /reporting/* on the API through the same kind of prefix.
+      { source: "/api/reporting/:path*", destination: `${API}/reporting/:path*` },
       { source: "/api/:path*", destination: `${API}/api/:path*` },
       { source: "/auth/:path*", destination: `${API}/auth/:path*` },
       { source: "/users", destination: `${API}/users`, missing: notAPage },
       { source: "/users/:path*", destination: `${API}/users/:path*`, missing: notAPage },
       { source: "/profiles/:path*", destination: `${API}/profiles/:path*`, missing: notAPage },
+      // Telemetry batches (NEXT_PUBLIC_TELEMETRY_ENDPOINT=/telemetry/events): same origin as the app, so there is no CORS to configure and it
+      // also works in a Codespace opened in the browser, where "localhost:8000" would be the visitor's own machine. No page lives here.
+      { source: "/telemetry/:path*", destination: `${API}/telemetry/:path*` },
     ];
   },
 };

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from auth.security import create_access_token
+from users import service as users_service
 from conftest import (
     ALICE,
     BOB,
@@ -205,9 +206,10 @@ async def test_a_deleted_account_loses_its_token_and_a_new_account_with_the_same
 
     created = await async_client.post("/users", json={"email": CAROL, "password": "another-password"})
 
-    assert created.status_code == 201 and created.json()["id"] != str(uuid_of(CAROL))
+    new_id = users_service.get_user_by_email(CAROL).id
+    assert created.status_code == 201 and new_id != uuid_of(CAROL)
     assert (await me(async_client, token)).status_code == 401  # the old, dead identity stays dead
-    assert (await me(async_client, await login_token(async_client, CAROL, "another-password"))).json()["id"] == created.json()["id"]
+    assert (await me(async_client, await login_token(async_client, CAROL, "another-password"))).json()["id"] == str(new_id)
 
 
 async def test_one_users_session_never_reaches_another_users_data(async_client):

@@ -191,7 +191,7 @@ async def test_the_email_of_a_deleted_account_can_be_registered_again_as_a_new_a
     response = await async_client.post("/users", json={"email": CAROL, "password": "another-password"})
 
     assert response.status_code == 201
-    assert response.json()["id"] != str(uuid_of(CAROL))  # the old identity does not come back
+    assert users_service.get_user_by_email(CAROL).id != uuid_of(CAROL)  # the old identity does not come back
 
 
 # --- FAILURE MODES -----------------------------------------------------------------------------------

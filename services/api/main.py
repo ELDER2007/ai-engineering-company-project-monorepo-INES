@@ -4,24 +4,32 @@ domain (see docs/ARCHITECTURE_PROPOSAL.md for the reasoning).
 
 from __future__ import annotations
 
+import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from async_tasks.router import router as async_tasks_router
+from async_tasks.router import warm_up as warm_up_task_queue
 from auth.router import router as auth_router
-from core.config import get_allowed_origins, get_jwt_secret
+from core.config import get_allowed_origins, get_jwt_secret, get_telemetry_endpoint
 from core.errors import validation_error_handler
+from core.schemas import HealthOut
 from incidents.incident_router import router as incident_manager_router
 from incidents.router import router as incidents_router
 from inventory.database import init_db as init_inventory_db
 from inventory.seeding import seed_local_if_empty
 from profiles import service as profiles_service
 from profiles.router import router as profiles_router
+from reporting.database import init_reporting
+from reporting.router import router as reporting_router
 from routers.inventory import router as inventory_router
 from suppliers.router import router as suppliers_router
 from talent.router import router as talent_router
+from telemetry.router import router as telemetry_router
 from users import service as users_service
 from users.router import public_router as users_public_router
 from users.router import router as users_router
@@ -29,6 +37,7 @@ from users.router import router as users_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logging.getLogger("telemetry").info("TELEMETRY_ENDPOINT = %s (informational: events are stored by this API)", get_telemetry_endpoint() or "not set")
     get_jwt_secret()  # fail at startup, not on the first login, if SECRET_KEY is invalid
     users_service.bootstrap_first_user()
     users_service.migrate_legacy_users()
@@ -36,10 +45,42 @@ async def lifespan(_: FastAPI):
     users_service.sync_profiles()
     init_inventory_db()  # SQL tables (Supabase, or the local SQLite fallback); TinyDB is untouched
     seed_local_if_empty()
+    init_reporting()  # `reporting` schema (pipeline results); telemetry_events is only ever read
+    warm_up_task_queue()  # background, best effort: the API starts and works without Redis
     yield
 
 
 app = FastAPI(title="Nexova API", lifespan=lifespan)
+
+# One line per request ("GET /api/incidents/summary → 200 | 41.2ms"): the evidence the caching decisions in
+# CACHING_REPORT.md are based on. uvicorn only configures its own loggers, so this one gets its own handler.
+timing_logger = logging.getLogger("api.timing")
+timing_logger.setLevel(logging.INFO)
+if not timing_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    timing_logger.addHandler(_handler)
+    timing_logger.propagate = False
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = (time.perf_counter() - start) * 1000  # ms
+    query = f"?{request.url.query}" if request.url.query else ""
+    cache = response.headers.get("X-Cache")  # set by core.cache.cached_json on the cached reads
+    timing_logger.info(
+        "%s %s%s → %s | %.1fms%s",
+        request.method,
+        request.url.path,
+        query,
+        response.status_code,
+        duration,
+        f" | cache {cache}" if cache else "",
+    )
+    return response
+
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 
 app.add_middleware(
@@ -63,8 +104,11 @@ app.include_router(suppliers_router, prefix="/suppliers")
 app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=False)
 app.include_router(talent_router, prefix="/talent-applications")  # POST is public (website form); GET is admin-only
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
+app.include_router(telemetry_router, prefix="/telemetry")  # public: validates and stores the events
+app.include_router(reporting_router)  # prefix="/reporting" is set on the router itself
+app.include_router(async_tasks_router)  # DEV-55: POST /tasks/pipeline-runs and GET /tasks/{task_id}; Redis is not needed to start
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+@app.get("/health", response_model=HealthOut)
+async def health() -> HealthOut:
+    return HealthOut(status="ok")
