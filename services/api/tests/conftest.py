@@ -1,4 +1,5 @@
-"""Shared auth fixtures: an isolated user store with three users."""
+"""Shared auth fixtures: an isolated user store with three users, an isolated
+password-reset store and an outbox instead of a real mailer."""
 
 from __future__ import annotations
 
@@ -35,7 +36,9 @@ from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from tinydb import TinyDB
 
+from auth import service as auth_service
 from auth.security import create_access_token, hash_password
+from core import mailer
 from core import cache as response_cache
 from core.config import JWT_ALGORITHM, get_jwt_secret
 from profiles import service as profiles_service
@@ -81,6 +84,23 @@ def profiles_db(tmp_path, monkeypatch) -> TinyDB:
     monkeypatch.setattr(profiles_service, "_db", database)
     yield database
     database.close()
+
+
+@pytest.fixture(autouse=True)
+def resets_db(tmp_path, monkeypatch) -> TinyDB:
+    """Empty password-reset store per test, never the real auth/db.json."""
+    database = TinyDB(tmp_path / "password-resets-db.json")
+    monkeypatch.setattr(auth_service, "_db", database)
+    yield database
+    database.close()
+
+
+@pytest.fixture(autouse=True)
+def outbox(monkeypatch) -> list[mailer.Mail]:
+    """No test ever sends a real email: what would have been sent lands here."""
+    sent: list[mailer.Mail] = []
+    monkeypatch.setattr(mailer, "send", sent.append)
+    return sent
 
 
 def uuid_of(email: str) -> UUID:

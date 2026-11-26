@@ -9,6 +9,7 @@ import {
   Boxes,
   ClipboardList,
   FileBarChart,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   PackageMinus,
@@ -30,6 +31,7 @@ const navItems = [
   { href: "/inventory/orders", label: "Historial de órdenes", icon: ScrollText, end: true },
   { href: "/reporting", label: "Desempeño semanal", icon: BarChart3, end: true },
   { href: "/account/profile", label: "Mi perfil", icon: UserCircle, end: false },
+  { href: "/account/change-password", label: "Cambiar contraseña", icon: KeyRound, end: false },
 ];
 
 // Only for admins: GET /telemetry/report reads everybody's telemetry and answers 403 to anybody else.

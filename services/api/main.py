@@ -15,7 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from async_tasks.router import router as async_tasks_router
 from async_tasks.router import warm_up as warm_up_task_queue
 from auth.router import router as auth_router
-from core.config import get_allowed_origins, get_jwt_secret, get_telemetry_endpoint
+from core import mailer
+from core.config import get_allowed_origins, get_jwt_secret, get_password_reset_expire_minutes, get_telemetry_endpoint
 from core.errors import validation_error_handler
 from core.schemas import HealthOut
 from incidents.incident_router import router as incident_manager_router
@@ -39,6 +40,8 @@ from users.router import router as users_router
 async def lifespan(_: FastAPI):
     logging.getLogger("telemetry").info("TELEMETRY_ENDPOINT = %s (informational: events are stored by this API)", get_telemetry_endpoint() or "not set")
     get_jwt_secret()  # fail at startup, not on the first login, if SECRET_KEY is invalid
+    get_password_reset_expire_minutes()  # same for the reset-link lifetime and the mailer
+    mailer.check_settings()
     users_service.bootstrap_first_user()
     users_service.migrate_legacy_users()
     profiles_service.migrate_legacy_profiles()
@@ -91,8 +94,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Public: login (which is how a session starts), sign-up (POST /users) and the
-# liveness check below.
+# Public: login (which is how a session starts), sign-up (POST /users), the
+# forgotten-password pair (POST /auth/forgot-password, /auth/reset-password) and
+# the liveness check below.
 # Everything else is protected inside its own router.
 app.include_router(auth_router, prefix="/auth")
 app.include_router(users_router, prefix="/users")

@@ -35,6 +35,21 @@ AUTH_ENDPOINT_TESTS: dict[tuple[str, str], dict[str, list[str]]] = {
         "edge": ["test_a_missing_profile_is_recreated_once_and_never_duplicated"],
         "failure": ["test_without_a_session_there_is_no_answer_and_no_data"],
     },
+    ("POST", "/auth/forgot-password"): {
+        "happy": ["test_forgot_password_emails_a_link_to_the_frontend"],
+        "edge": ["test_a_second_request_within_the_cooldown_sends_nothing"],
+        "failure": ["test_forgot_password_validates_the_body"],
+    },
+    ("POST", "/auth/reset-password"): {
+        "happy": ["test_reset_sets_the_new_password_and_spends_the_token"],
+        "edge": ["test_a_rejected_new_password_does_not_spend_the_token_or_echo_it"],
+        "failure": ["test_unknown_expired_and_malformed_tokens_are_a_uniform_400"],
+    },
+    ("POST", "/auth/change-password"): {
+        "happy": ["test_change_password_with_the_current_one"],
+        "edge": ["test_change_password_rejects_the_same_and_invalid_passwords"],
+        "failure": ["test_change_password_needs_the_right_current_password"],
+    },
     ("POST", "/users"): {
         "happy": ["test_a_new_account_is_created_active_with_the_user_role_and_can_sign_in_at_once"],
         "edge": ["test_the_password_must_be_8_to_72_bytes_without_nul_bytes"],
@@ -90,7 +105,7 @@ def existing_tests() -> set[str]:
 
 
 def test_the_api_exposes_the_authentication_endpoints_this_table_is_about():
-    assert len(exposed_auth_operations()) == 8  # login, me, and the six operations of /users
+    assert len(exposed_auth_operations()) == 11  # login, me, the three password flows and the six operations of /users
     assert {path for _, path in exposed_auth_operations()} >= {"/auth/login", "/auth/me", "/users", "/users/{user_id}"}
 
 

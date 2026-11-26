@@ -1,7 +1,7 @@
 """Business logic for the users domain: the internal user store (CRUD).
 
 Public functions: ``create_user``, ``get_user`` (by id), ``get_user_by_email``,
-``update_user``, ``delete_user`` (plus ``list_users``). They return ``UserOut``
+``update_user``, ``set_password``, ``delete_user`` (plus ``list_users``). They return ``UserOut``
 and raise the domain errors below; routers translate those into HTTP codes.
 ``get_doc`` / ``get_doc_by_email`` return the raw stored document (with the
 hash) and exist for the auth layer only.
@@ -194,6 +194,19 @@ def update_user(user_uuid: UUID, payload: UserUpdate, *, check_password: bool = 
         stored["is_active"] = new_active
     if stored:
         get_db().update(stored, doc_ids=[doc.doc_id])
+    return get_user(user_uuid)
+
+
+def set_password(user_uuid: UUID, new_password: str) -> UserOut:
+    """Replace the password without asking for the current one: the callers prove ownership first (the emailed
+    reset token, or the current password). Stamping ``password_changed_at`` cuts off the earlier sessions."""
+    doc = get_doc(user_uuid)
+    if doc is None:
+        raise UserNotFoundError(user_uuid)
+    get_db().update(
+        {"hashed_password": hash_password(new_password), "password_changed_at": datetime.now(timezone.utc).isoformat()},
+        doc_ids=[doc.doc_id],
+    )
     return get_user(user_uuid)
 
 

@@ -20,6 +20,7 @@ OPERATIONS = [
 
 # Answers that are not JSON models on purpose, each with its own explicit contract.
 NO_BODY = {"DELETE"}  # 204
+EMPTY_POSTS = {("POST", "/auth/reset-password"), ("POST", "/auth/change-password")}  # 204
 FILE_DOWNLOADS = {("GET", "/api/incidents/results/export")}  # text/csv, declared in the route
 
 # Names that must never be a property of any response schema.
@@ -43,7 +44,7 @@ def _ref_name(content: dict) -> str | None:
 def test_every_endpoint_declares_a_response_contract(method, path, operation):
     code, response = _success(operation)
     content = response.get("content", {})
-    if method in NO_BODY:
+    if method in NO_BODY or (method, path) in EMPTY_POSTS:
         assert code == "204" and not content
     elif (method, path) in FILE_DOWNLOADS:
         assert "text/csv" in content
