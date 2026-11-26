@@ -1,4 +1,134 @@
-# Proyecto de Compañía - Ingeniería de IA — Plantilla para estudiantes
+# Nexova | Plataforma de Operaciones Full Stack
+
+**Proyecto de portfolio de Inés, desarrollado en el programa de Ingeniería de IA de 4Geeks Academy.**
+
+[Español](README.es.md) | [English](README.md)
+
+Nexova es un caso de estudio de una consultora de recursos humanos con un sitio público y una plataforma interna de operaciones. El repositorio reúne flujos autenticados, movimientos de inventario trazables, gestión de proveedores, incidencias de soporte y un diseño de telemetría orientado a decisiones de negocio.
+
+**Tecnologías principales:** Python · FastAPI · SQLModel · PostgreSQL / Supabase · React · Next.js · TypeScript · Tailwind CSS.
+
+Es un proyecto formativo y de portfolio desarrollado desde una plantilla del curso y con asistencia de IA. Se documentan por separado el estado de implementación, las propuestas de diseño y las mediciones reproducibles.
+
+## Aspectos Destacados
+
+| Área | Qué demuestra el repositorio | Evidencia |
+| --- | --- | --- |
+| Inventario | Stock derivado de entradas y salidas; autor autenticado; rechazo por stock insuficiente; bloqueo de filas en PostgreSQL para salidas concurrentes. | [Lógica de negocio](services/api/inventory/service.py) |
+| Autenticación | JWT bearer, contraseñas con bcrypt, separación cuenta/perfil, permisos y navegación protegida en el backoffice. | [Documentación del API](services/api/README.md), [backoffice](uis/backoffice/README.md) |
+| Operaciones | Flujos de proveedores, ciclo de vida e historial de incidencias y análisis CSV con validaciones compartidas. | [Paquete compartido](packages/shared/README.md), [dominios del API](services/api/README.md) |
+| Rendimiento | Mediciones antes/después, análisis de causas y experimentos revertidos cuando los datos no justificaban mantenerlos. | [Auditoría](AUDIT.md), [resultados](REPORT.md), [evidencias](docs/performance/) |
+| Diseño de telemetría | 40 contratos de evento: cinco obligatorios y 35 oportunidades; 12 puntos de inventario, privacidad, correlación y decisiones batch/stream. Todavía sin instrumentar. | [Plan de telemetría](docs/telemetry/telemetry-plan.md), [JSON Schema](docs/telemetry/event-schemas.json) |
+
+## Casos de Ingeniería
+
+### Inventario Trazable, No Stock Editable
+
+El stock se calcula a partir de órdenes, no se almacena como un saldo editable. El API registra al autor autenticado, comprueba la oficina y rechaza salidas superiores al stock disponible. PostgreSQL bloquea la fila del activo durante la comprobación y el registro de una salida. Así, las reglas se aplican en backend y no dependen del saldo que muestra el navegador.
+
+### Mejoras de Rendimiento Con Evidencia
+
+La auditoría registrada de Lighthouse muestra Performance de **87 a 100** en incidencias y de **83 a 100** en proveedores. El CLS pasó de **0,255 a 0,014** y de **0,351 a 0**, respectivamente. Son resultados históricos de laboratorio sobre las builds de producción auditadas, no monitorización de producción, mediciones ejecutadas ahora ni garantías para cualquier dispositivo. Consulta el [método y sus limitaciones](REPORT.md).
+
+### De Preguntas de Negocio a Contratos de Eventos
+
+La [entrega de telemetría](docs/telemetry/README.md) transforma un RFI de operaciones en hipótesis, decisiones concretas, responsables, prioridades, esquemas y escenarios de aceptación. Sus 40 allowlists se contrastan con un diccionario tipado de 50 claves, con tratamiento de privacidad por evento y justificación de negocio para 16 eventos stream y 24 batch. Documenta control de frecuencia, riesgos y datos excluidos deliberadamente. Separa órdenes confirmadas de clics, validaciones locales de rechazos del API y la confirmación local del formulario de talento de una candidatura recibida por un servidor. Captura, outbox, ingesta y dashboards siguen pendientes de implementación.
+
+La [matriz de evaluación](docs/telemetry/telemetry-plan.md#matriz-de-la-rubrica-de-evaluacion) relaciona los diez criterios del enunciado con evidencias concretas y distingue validación local, aprobación docente e implementación futura.
+
+## Arquitectura y Decisiones
+
+```text
+Sitio público: React + Vite          Backoffice interno: Next.js
+			     API FastAPI
+		Inventario: SQLModel + PostgreSQL / Supabase
+	Cuentas, perfiles, proveedores e incidencias: TinyDB
+```
+
+- **Monolito modular:** un API con routers por dominio y reglas en servicios, sin introducir microservicios antes de necesitarlos.
+- **Dos persistencias:** inventario relacional y dominios existentes en TinyDB. TinyDB limita el funcionamiento con varios workers y no se presenta como una base escalable de producción.
+- **Contratos compartidos:** las reglas de incidencias se reutilizan en API, CLI y backoffice para reducir diferencias de validación.
+- **Frontera de seguridad explícita:** las guardas del navegador mejoran la navegación; autenticación y autorización en el API controlan el acceso real.
+
+La [propuesta de arquitectura](docs/ARCHITECTURE_PROPOSAL.md) y la [documentación del backend](services/api/README.md) explican los detalles y restricciones.
+
+## Ejecución Local
+
+Requisitos: Node.js 22.12+ con npm, Python 3.10+ y uv. Ejecutar desde un clon local; no subir credenciales al repositorio.
+
+Backend, empezando en la raíz:
+
+```bash
+cd services/api
+uv sync
+cp -n .env.example .env
+```
+
+Antes de arrancar, configura localmente `SECRET_KEY` y las credenciales iniciales `AUTH_INITIAL_EMAIL` / `AUTH_INITIAL_PASSWORD`, siguiendo la [guía del API](services/api/README.md#configuration). Para Supabase, configura `DATABASE_URL`; sin ella, el inventario usa SQLite solo para desarrollo. Los dominios TinyDB requieren un único worker del API.
+
+```bash
+uv run uvicorn main:app --reload --port 8000
+```
+
+En una segunda terminal, desde la raíz:
+
+```bash
+npm install
+npm run dev:backoffice
+```
+
+En una tercera terminal, desde la raíz:
+
+```bash
+npm run dev
+```
+
+Direcciones locales por defecto: sitio público `http://localhost:5173`, backoffice `http://localhost:5174` y documentación del API `http://localhost:8000/docs`. La configuración del proxy y los requisitos end-to-end se explican en la [guía del backoffice](uis/backoffice/README.md).
+
+## Validación y Reproducibilidad
+
+Comprobaciones disponibles desde la raíz:
+
+```bash
+npm run typecheck
+npm run typecheck:backoffice
+npm run test:shared
+npm run test:backoffice
+```
+
+Para backend, ejecutar `uv run pytest` desde la carpeta del API. Esta lista identifica comandos disponibles, no afirma que todas las suites estén pasando actualmente. Preparación, fixtures, alcance de cobertura y requisitos end-to-end están en [TESTING.md](TESTING.md) y el [plan de pruebas](docs/testing-plan.md). La validación de esquemas de telemetría se explica en su [README](docs/telemetry/README.md).
+
+## Alcance y Siguientes Pasos
+
+Implementado: sitio público, backoffice autenticado, dominios del API, inventario relacional, reglas compartidas de incidencias y suites de pruebas. Documentado: evidencias de rendimiento y diseño de telemetría. Pendiente: instrumentación y almacenamiento de telemetría, endurecimiento para producción e integraciones futuras de IA. El formulario de talento actual solo confirma en el navegador, sin guardar candidaturas en el API. Las carpetas de plantilla no implican que existan RAG, agentes o workflows automatizados desplegados.
+
+## Explorar el Trabajo
+
+- [Briefing de negocio](nexova-BRIEFING.es.md) y [arquitectura](docs/ARCHITECTURE_PROPOSAL.md).
+- [Cuaderno de aprendizaje](aprendiendo%20con%20la%20ia.md): decisiones, errores, soluciones y papel de la asistencia de IA.
+- [Caso de autenticación](aprendiendo%20con%20la%20ia%20-%20AUTH-02.md) y [caso de rendimiento](aprendiendo%20con%20la%20ia%20-%20PERF-AUDIT.md).
+- [Código del sitio público](uis/website/) y [código del backoffice](uis/backoffice/).
+
+## Créditos
+
+Desarrollado dentro del programa de Ingeniería de IA de 4Geeks Academy, desde su plantilla de proyecto de compañía. Se conserva debajo la atribución original y la guía histórica. El cuaderno documenta las decisiones de implementación, la verificación y el trabajo asistido por IA.
+
+<details>
+<summary>Plantilla del Curso y Notas de Entregas Anteriores</summary>
+
+El contenido siguiente se conserva como referencia de procedencia. Las afirmaciones sobre una plantilla vacía y las notas de entregas previas no describen el estado actual del proyecto.
+
+# Nexova — Proyecto de Ingenieria de IA
+
+## Proyecto actual: diseno de telemetria de inventario
+
+El monorepo contiene el sitio publico (`uis/website`), el backoffice (`uis/backoffice`), la API central FastAPI (`services/api`), paquetes compartidos, scripts y documentacion. El inventario ya calcula stock mediante entradas y salidas; esta entrega disena la telemetria de material formativo, certificaciones y equipos de incorporacion sin modificar las aplicaciones.
+
+Consulta el [README de la entrega](docs/telemetry/README.md), el [plan de telemetria](docs/telemetry/telemetry-plan.md) y los [esquemas con ejemplos](docs/telemetry/event-schemas.json). La fuente de requisitos es el [briefing de Nexova](nexova-BRIEFING.es.md). El trabajo, las decisiones y las comprobaciones se explican en el [cuaderno de aprendizaje](aprendiendo%20con%20la%20ia.md#telemetria-plan-de-diseno).
+
+La ampliacion responde al RFI de gestion con 40 tipos de evento, clasificados individualmente en cinco Obligatorio y 35 Oportunidad identificada. La Fase 1 mapea el flujo completo de inventario con 12 puntos, incluidos stock directo rechazado, validaciones fallidas y cruces de minimo. Tambien cubre autenticacion, navegacion, abandono, proveedores, incidencias, website, salud tecnica, carga de secciones, validacion local y procesos internos. Cada tipo tiene hipotesis, decision, responsable, prioridad y modo batch/stream. El schema 2.0.0 incorpora el envelope solicitado con sesion/correlacion y ocho ejemplos.
+
+Esta fase entrega solo documentacion de diseno: no se ha desplegado ningun servidor, colector, base de datos ni dashboard nuevo. No se ha creado ni fusionado ninguna PR. Se conserva debajo la guia original de plantilla y las entregas anteriores como referencia historica; el apartado que describe una plantilla vacia no representa el estado de las aplicaciones actuales.
 
 [![4Geeks Academy](https://img.shields.io/badge/4Geeks-Academy-blue)](https://4geeksacademy.com)
 [![AI Engineering](https://img.shields.io/badge/track-AI%20Engineering-green)](https://4geeksacademy.com/es/programas-de-carrera/ingenieria-ia)
@@ -6,6 +136,22 @@
 _Plantilla base para proyectos transversales del Programa de Carrera en Ingeniería de IA — 4Geeks Academy._
 
 _These instructions are also available in [English](./README.md)._
+
+---
+
+## 📦 Entrega: auditoría de rendimiento (Lighthouse)
+
+Todo lo de la auditoría está en este repositorio, en `main`:
+
+| Qué | Dónde |
+|---|---|
+| **Auditoría**: puntuaciones iniciales, causa raíz de cada problema, casos de duplicación, qué identifican las skills de agente | [`AUDIT.md`](./AUDIT.md) |
+| **Informe**: cada mejora, puntuaciones antes/después, impacto de cada commit, INP, qué tuvo mayor impacto | [`REPORT.md`](./REPORT.md) |
+| **Capturas de Lighthouse** | [`audit/before/`](./audit/before/) · [`audit/after/`](./audit/after/) |
+| Evidencia en bruto (JSON de Lighthouse, resultados por commit, INP, comparaciones A/B) | [`docs/performance/`](./docs/performance/) |
+| Apuntes de estudio (cómo se hizo, decisiones, errores) | [`aprendiendo con la ia - PERF-AUDIT.md`](./aprendiendo%20con%20la%20ia%20-%20PERF-AUDIT.md) |
+
+En una línea: las cuatro categorías de Lighthouse quedan en 100 en el website (móvil y escritorio) y en el backoffice, se corrigieron los desplazamientos de diseño del backoffice (CLS 0,255 y 0,351; Performance 87 y 83 → 100), y cada commit corrige un problema y está medido. Cómo reproducirlo: [`REPORT.md` §8](./REPORT.md#8-cómo-reproducir).
 
 ---
 
@@ -49,13 +195,80 @@ Estás construyendo **una sola empresa** a lo largo de muchos hitos y proyectos.
 
 ---
 
+## Tareas asíncronas: worker de Celery, Redis y Flower
+
+Una petición no debe esperar a un trabajo lento. `POST /tasks/pipeline-runs` deja un mensaje pequeño en **Redis** y responde `202 Accepted` con un `task_id` al instante; un **worker de Celery**, un proceso aparte (nunca dentro de FastAPI), lo recoge y ejecuta el pipeline; `GET /tasks/{task_id}` dice cómo va. **Flower** muestra la cola. El código está en `services/celery_app.py` (la app de Celery) y en `services/api/async_tasks/` (tareas, reintentos, cola de mensajes fallidos y endpoints); su README explica las decisiones.
+
+| Servicio | Qué es | Dónde |
+| --- | --- | --- |
+| `redis` | La cola y los resultados (imagen oficial, `noeviction`, 256 MB, persistente) | `127.0.0.1:6379` |
+| `worker` | Ejecuta las tareas. Un proceso aparte | sin puerto |
+| `flower` | El panel: tareas en cola, en proceso y terminadas | http://localhost:5555 (`admin` / `admin`, se cambia con `FLOWER_BASIC_AUTH`) |
+
+Flower guarda lo que ha visto **en memoria**: si su contenedor se reinicia, su lista queda vacía hasta que se ejecuten tareas nuevas. No se pierde nada: los resultados siguen en Redis un día (`GET /tasks/{task_id}` sigue respondiendo) y las fallidas están en la tabla `task_dead_letters`.
+
+### Levantar el worker
+
+```bash
+docker compose up -d redis worker flower      # o solo `docker compose up`: arrancan con el resto
+docker compose logs -f worker                 # una línea por ejecución: task_id, intento, estado, duración
+```
+
+Sin Docker (desde la raíz del repositorio, con Redis en `localhost:6379`; `REDIS_URL` si está en otro sitio):
+
+```bash
+celery -A services.celery_app worker --loglevel=INFO -E --concurrency=1
+```
+
+### Detener el worker
+
+```bash
+docker compose stop worker                    # le pide que termine la tarea que ejecuta (parada ordenada), hasta 2 minutos
+docker compose stop redis worker flower       # toda la cola
+```
+
+Sin Docker: `Ctrl+C` una vez (parada ordenada: termina la tarea en curso y no coge más). Un segundo `Ctrl+C`, o `kill -9`, es una parada brusca.
+
+### ¿Está vivo?
+
+```bash
+docker compose exec worker celery -A services.celery_app inspect ping     # -> pong
+docker compose ps                                                          # worker: healthy
+```
+
+### Usarlo
+
+```bash
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -d "username=EMAIL&password=CONTRASEÑA" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"week_start":"2026-10-26"}' localhost:8000/tasks/pipeline-runs   # 202 {"task_id": "..."}
+curl -H "Authorization: Bearer $TOKEN" localhost:8000/tasks/TASK_ID    # {"task_id": "...", "status": "pending|started|success|failure", "result": ...}
+```
+
+### Qué pasa cuando algo se para
+
+| Qué se para | Qué ocurre |
+| --- | --- |
+| La **API** | Nada para el worker: sigue con lo que hay en cola. Los mensajes están en Redis |
+| El **worker**, con `docker compose stop` | Termina la tarea que ejecuta. Las que esperan siguen en Redis hasta que vuelva un worker |
+| El worker, matado de golpe (`kill -9`, sin memoria) | El mensaje no estaba confirmado (`acks_late`: se confirma DESPUÉS del trabajo), así que Redis lo entrega de nuevo a los 15 minutos. El pipeline es idempotente: repetir una semana reescribe las mismas filas |
+| **Redis**, reiniciado | La cola sobrevive (`appendonly`). El worker se reconecta solo |
+| **Redis**, caído o lleno | La API responde `503` (no un error feo) y sigue sirviendo todo lo demás |
+| Una tarea falla | Se reintenta a los 5 s y luego a los 10 s (creciente, nunca de inmediato). El tercer fallo acaba en la tabla `task_dead_letters` (`task_id`, intento, error, momento); `GET /tasks/dead-letters` la lista (admins) |
+
+Ajustes (todos opcionales, ver `.env.example`): `REDIS_URL`, `REDIS_PORT`, `REDIS_MAXMEMORY`, `FLOWER_BASIC_AUTH`, `FLOWER_PORT`, `CELERY_CONCURRENCY`, `ASYNC_RETRY_BASE_SECONDS`. Tests: `python -m pytest tests/async_tasks services/api/tests/test_async_tasks_api.py`.
+
+---
+
 ## Estado actual de la plantilla
 
-> 💡 Actualmente el repositorio ofrece solo una **estructura base de carpetas y documentación**. Todavía no incluye aplicaciones ejecutables ni scripts globales en la raíz.
->
-> - `CONTEXT.md` es un placeholder y debe sustituirse por el contexto de la empresa asignada.
-> - No existe todavía un `AGENTS.md` en la raíz.
-> - Existe metadata del paquete compartido en `packages/shared/package.json` (`@repo/shared-types`), pero aún no hay runner de workspace en raíz.
+El monorepo ya contiene aplicaciones ejecutables para Nexova:
+
+- `services/api`: API FastAPI con autenticación, perfiles, proveedores y análisis de incidencias.
+- `uis/backoffice`: aplicación Next.js con registro, inicio de sesión, recuperación/cambio de contraseña y vistas protegidas.
+- `uis/website`: sitio público construido con Vite.
+- La raíz ofrece comandos npm para desarrollo, compilación y comprobación de tipos de ambos frontends. La suite de la API se ejecuta desde `services/api` con pytest.
+
+`CONTEXT.md` contiene el briefing del sitio web público. `CONTEXT.es.md` es un briefing independiente para el análisis de incidencias, no una traducción; consulta [`scripts/CONTEXT-nexova.md`](./scripts/CONTEXT-nexova.md) para los requisitos del analizador. Consulta el README de cada aplicación para sus instrucciones de ejecución y configuración.
 
 ---
 
@@ -306,3 +519,5 @@ Esta plantilla fue creada como parte del Programa de Carrera de Ingeniería de I
 Puedes encontrar otras plantillas y recursos similares en la [página de GitHub de 4Geeks Academy](https://github.com/4geeksacademy).
 
 _Esta plantilla la mantiene 4Geeks Academy para el track de Ingeniería de IA. Uso exclusivo del programa._
+
+</details>
