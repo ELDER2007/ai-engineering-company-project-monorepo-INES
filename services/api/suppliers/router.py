@@ -2,6 +2,9 @@
 update, the two search endpoints (by country, by category), and a status
 toggle. DELETE is available for entries made by mistake; the CONTEXT prefers
 suspending a supplier so the commercial history is kept.
+
+Mounted twice in ``main.py``: at ``/suppliers`` (documented) and at
+``/api/suppliers`` (what the backoffice calls through the Vite proxy).
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from .schemas import (
     SupplierUpdate,
 )
 
-router = APIRouter(prefix="/api/suppliers", tags=["suppliers"])
+router = APIRouter(tags=["suppliers"])
 
 
 @router.get("", response_model=list[SupplierOut])

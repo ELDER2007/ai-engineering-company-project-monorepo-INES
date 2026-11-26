@@ -37,6 +37,8 @@ export default function SupplierRow({ supplier, onRateChange, onToggleStatus }: 
     try {
       await onRateChange(supplier.id, value);
       setEditing(false);
+    } catch {
+      // The page already shows the API error; keep the editor open so the value can be fixed.
     } finally {
       setBusy(false);
     }
