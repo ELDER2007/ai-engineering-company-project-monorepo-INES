@@ -12,8 +12,10 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
+from async_tasks.router import router as async_tasks_router
+from async_tasks.router import warm_up as warm_up_task_queue
 from auth.router import router as auth_router
-from core.config import get_allowed_origins, get_jwt_secret
+from core.config import get_allowed_origins, get_jwt_secret, get_telemetry_endpoint
 from core.errors import validation_error_handler
 from incidents.incident_router import router as incident_manager_router
 from incidents.router import router as incidents_router
@@ -21,8 +23,11 @@ from inventory.database import init_db as init_inventory_db
 from inventory.seeding import seed_local_if_empty
 from profiles import service as profiles_service
 from profiles.router import router as profiles_router
+from reporting.database import init_reporting
+from reporting.router import router as reporting_router
 from routers.inventory import router as inventory_router
 from suppliers.router import router as suppliers_router
+from telemetry.router import router as telemetry_router
 from users import service as users_service
 from users.router import public_router as users_public_router
 from users.router import router as users_router
@@ -30,6 +35,7 @@ from users.router import router as users_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logging.getLogger("telemetry").info("TELEMETRY_ENDPOINT = %s (informational: events are stored by this API)", get_telemetry_endpoint() or "not set")
     get_jwt_secret()  # fail at startup, not on the first login, if SECRET_KEY is invalid
     users_service.bootstrap_first_user()
     users_service.migrate_legacy_users()
@@ -37,6 +43,8 @@ async def lifespan(_: FastAPI):
     users_service.sync_profiles()
     init_inventory_db()  # SQL tables (Supabase, or the local SQLite fallback); TinyDB is untouched
     seed_local_if_empty()
+    init_reporting()  # `reporting` schema (pipeline results); telemetry_events is only ever read
+    warm_up_task_queue()  # background, best effort: the API starts and works without Redis
     yield
 
 
@@ -93,6 +101,9 @@ app.include_router(incident_manager_router)
 app.include_router(suppliers_router, prefix="/suppliers")
 app.include_router(suppliers_router, prefix="/api/suppliers", include_in_schema=False)
 app.include_router(inventory_router)  # prefix="/inventory" is set on the router itself
+app.include_router(telemetry_router, prefix="/telemetry")  # public: validates and stores the events
+app.include_router(reporting_router)  # prefix="/reporting" is set on the router itself
+app.include_router(async_tasks_router)  # DEV-55: POST /tasks/pipeline-runs and GET /tasks/{task_id}; Redis is not needed to start
 
 
 @app.get("/health")

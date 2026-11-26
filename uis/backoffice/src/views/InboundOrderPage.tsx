@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { createInboundOrder } from "../lib/inventory";
+import { uuidV4 as newRequestId } from "../lib/telemetry/ids";
+import { useFlowTelemetry } from "../lib/telemetry/useFlow";
 import { ErrorBanner, Field, inputClass } from "../components/ui/Field";
 import AssetSelect from "../components/inventory/AssetSelect";
 import SuccessNotice from "../components/inventory/SuccessNotice";
@@ -13,26 +15,32 @@ import { useAssetStock } from "../components/inventory/useAssetStock";
 import { useClearUnknownAsset } from "../components/inventory/useClearUnknownAsset";
 import {
   describeInventoryError,
+  inboundPayload,
+  officeCurrency,
   unitsLabel,
   validateInbound,
   type FormErrors,
   type InboundForm,
 } from "../lib/inventoryRules";
 
-const EMPTY: InboundForm = { assetId: "", quantity: "", supplier: "" };
+const EMPTY: InboundForm = { assetId: "", quantity: "", unitCost: "", supplier: "" };
+
+// The form's field names, in the contract's vocabulary, for `form_validation_failed` (never the typed values).
+const TELEMETRY_FIELD = { assetId: "product_id", quantity: "quantity", unitCost: "other", supplier: "supplier" } as const;
 
 /**
  * `/inventory/orders/inbound`: registers an entrada de activos (AssetEntry) — POST /inventory/orders/inbound.
  * `initialAssetId` comes from the "Entrada" link of a row of the stock page.
  */
 export default function InboundOrderPage({ initialAssetId = "" }: { initialAssetId?: string }) {
-  const { assets, loading, error: loadError, reload } = useAssets();
+  const { assets, loading, error: loadError, reload } = useAssets("inbound");
   const [form, setForm] = useState<InboundForm>({ ...EMPTY, assetId: initialAssetId });
   const [errors, setErrors] = useState<FormErrors<keyof InboundForm>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const { asset, stock, refreshing, refresh } = useAssetStock(assets, form.assetId);
+  const flow = useFlowTelemetry("inbound");
 
   useClearUnknownAsset(assets, loading, form.assetId, () => setForm((prev) => ({ ...prev, assetId: "" })));
 
@@ -50,16 +58,21 @@ export default function InboundOrderPage({ initialAssetId = "" }: { initialAsset
     const found = validateInbound(form);
     if (!found.assetId && !asset) found.assetId = "Selecciona el activo recibido.";
     setErrors(found);
-    if (Object.keys(found).length > 0 || !asset) return;
+    if (Object.keys(found).length > 0 || !asset) {
+      const failed = Object.keys(found) as (keyof InboundForm)[];
+      if (failed.length > 0) flow.validationFailed(failed.map((name) => TELEMETRY_FIELD[name]));
+      return;
+    }
 
+    flow.step("validated");
+    // One id for the whole submission: the HTTP request (X-Request-ID), its flow step and every event it causes.
+    const requestId = newRequestId();
+    flow.step("submitted", requestId);
     setSaving(true);
     try {
-      const order = await createInboundOrder({
-        asset_id: asset.id,
-        quantity: Number(form.quantity.trim()),
-        supplier: form.supplier.trim(),
-        office: asset.office, // an order is always for the office the asset belongs to
-      });
+      // An order is always for the office the asset belongs to.
+      const order = await createInboundOrder(inboundPayload(form, asset.office), { asset, requestId });
+      flow.complete(requestId);
       const updated = await refresh();
       void reload();
       setSuccess(
@@ -87,7 +100,12 @@ export default function InboundOrderPage({ initialAssetId = "" }: { initialAsset
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <form
+        onSubmit={handleSubmit}
+        onFocus={flow.begin}
+        noValidate
+        className="mt-6 space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-6"
+      >
         <AssetSelect
           id="inbound-asset"
           assets={assets}
@@ -110,6 +128,24 @@ export default function InboundOrderPage({ initialAssetId = "" }: { initialAsset
             onChange={(e) => set("quantity", e.target.value)}
             aria-invalid={Boolean(errors.quantity)}
             aria-describedby={errors.quantity ? "inbound-quantity-error" : undefined}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field
+          id="inbound-unit-cost"
+          label={`Coste unitario${asset ? ` (${officeCurrency(asset.office)})` : ""}`}
+          error={errors.unitCost}
+          hint="Precio de una unidad, en la moneda de la oficina. Ej.: 12,50"
+        >
+          <input
+            id="inbound-unit-cost"
+            inputMode="decimal"
+            value={form.unitCost}
+            maxLength={12}
+            onChange={(e) => set("unitCost", e.target.value)}
+            aria-invalid={Boolean(errors.unitCost)}
+            aria-describedby={errors.unitCost ? "inbound-unit-cost-error" : undefined}
             className={inputClass}
           />
         </Field>
@@ -144,7 +180,7 @@ export default function InboundOrderPage({ initialAssetId = "" }: { initialAsset
             {saving && <Loader2 className="animate-spin" size={14} />}
             Registrar entrada
           </button>
-          <Link href="/inventory/products" className="text-sm text-slate-300 hover:text-white">
+          <Link href="/inventory/products" onClick={flow.cancel} className="text-sm text-slate-300 hover:text-white">
             Volver al inventario
           </Link>
         </div>

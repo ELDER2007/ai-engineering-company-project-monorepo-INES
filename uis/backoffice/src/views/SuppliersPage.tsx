@@ -18,7 +18,7 @@ const SupplierForm = dynamic(preloadForm, { loading: () => <LoadingState label="
 const describeLoadError = (err: unknown) => (err instanceof ApiError ? err.message : "No se pudo cargar el directorio.");
 
 export default function SuppliersPage() {
-  const { data: suppliers, setData: setSuppliers, loading, error, setError } = useAsyncResource(listSuppliers, NO_SUPPLIERS, describeLoadError);
+  const { data: suppliers, setData: setSuppliers, loading, error, setError } = useAsyncResource(listSuppliers, NO_SUPPLIERS, describeLoadError, "suppliers");
   const [showForm, setShowForm] = useState(false);
   const [country, setCountry] = useState<Country | "">("");
   const [category, setCategory] = useState<Category | "">("");
