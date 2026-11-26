@@ -190,7 +190,7 @@ def test_the_scaler_inside_the_trained_model_learnt_from_the_training_rows_only(
 
 def test_in_the_validation_too_each_scaler_only_sees_the_months_before_the_year_it_is_asked_about(sales, model_module):
     train, _ = sf.build_model_frames(sales)
-    for year, past, current in model_module.time_folds(train):
+    for _year, past, current in model_module.time_folds(train):
         assert past["month"].max() < current["month"].min()
         pipeline = model_module.make_pipeline(model_module.random_forest(SETTINGS[0])).fit(past[list(sf.FEATURES)], model_module.to_ratio(past))
         scaler = pipeline.named_steps["scale"].named_transformers_["standard"]

@@ -75,7 +75,7 @@ def range_report(train: pd.DataFrame, test: pd.DataFrame, forecaster: sm.Forecas
     trees_low, trees_high = tree_spread(forecaster, test, level)
     monthly = [
         {"month": f"{month:%Y-%m}", "actual_usd": float(a), "forecast_usd": float(f), "low_usd": float(lo), "high_usd": float(hi), "inside": bool(ok)}
-        for month, a, f, lo, hi, ok in zip(test["month"], actual, forecast, low, high, inside)
+        for month, a, f, lo, hi, ok in zip(test["month"], actual, forecast, low, high, inside, strict=True)
     ]
     return {
         "level": level,

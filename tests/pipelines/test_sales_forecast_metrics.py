@@ -207,7 +207,7 @@ def _close(saved, computed, path="report"):
             _close(saved[key], computed[key], f"{path}.{key}")
     elif isinstance(computed, list):
         assert len(saved) == len(computed), path
-        for index, (mine, theirs) in enumerate(zip(saved, computed)):
+        for index, (mine, theirs) in enumerate(zip(saved, computed, strict=True)):
             _close(mine, theirs, f"{path}[{index}]")
     elif isinstance(computed, float):
         assert saved == pytest.approx(computed, rel=1e-6, abs=1e-9), path
