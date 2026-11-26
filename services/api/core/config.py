@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 def get_allowed_origins() -> list[str]:
@@ -19,3 +20,8 @@ def get_allowed_origins() -> list[str]:
         "http://localhost:5173",
         "http://localhost:5174",
     ]
+
+
+def get_suppliers_db_path() -> Path:
+    """TinyDB file for the suppliers domain (gitignored runtime state)."""
+    return Path(__file__).resolve().parent.parent / "suppliers" / "db.json"

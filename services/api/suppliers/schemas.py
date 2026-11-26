@@ -11,7 +11,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Country(str, Enum):
@@ -45,6 +45,8 @@ COUNTRY_CURRENCY = {Country.SPAIN: Currency.EUR, Country.USA: Currency.USD}
 
 
 class SupplierCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1)
     country: Country
     categories: list[SupplierCategory] = Field(min_length=1)
@@ -66,6 +68,8 @@ class SupplierCreate(BaseModel):
 
 
 class SupplierUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(default=None, min_length=1)
     country: Country | None = None
     categories: list[SupplierCategory] | None = Field(default=None, min_length=1)
@@ -78,9 +82,17 @@ class SupplierUpdate(BaseModel):
 
 
 class SupplierStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     status: SupplierStatus
 
 
-class SupplierOut(SupplierCreate):
-    id: int
+class Supplier(SupplierCreate):
+    """Full supplier record: the validated input plus the system-generated
+    ``updated_at`` (stamped whenever ``monthly_rate`` changes)."""
+
     updated_at: datetime
+
+
+class SupplierOut(Supplier):
+    id: int

@@ -4,7 +4,7 @@ Backed by TinyDB rather than a full RDBMS: a small internal directory with a
 still-settling data model doesn't need more, and Postgres comes later once the
 ORM is ready.
 
-The database is seeded from ``seed_data.py`` the first time it's opened, and
+The database is seeded (``seed.py``) the first time it's opened, and
 ``get_db()`` is called once at import time (bottom of file) so the directory is
 populated as soon as the app starts — the demo must never show an empty DB.
 
@@ -15,10 +15,12 @@ commercial relationships.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 from pydantic import ValidationError
 from tinydb import Query, TinyDB
+
+from core.config import get_suppliers_db_path
+from seed import seed_database
 
 from .schemas import (
     SupplierCategory,
@@ -27,9 +29,7 @@ from .schemas import (
     SupplierStatus,
     SupplierUpdate,
 )
-from .seed_data import SUPPLIERS_SEED
 
-_DB_PATH = Path(__file__).parent / "db.json"
 _db: TinyDB | None = None
 
 
@@ -54,18 +54,10 @@ def _now() -> str:
 def get_db() -> TinyDB:
     global _db
     if _db is None:
-        _db = TinyDB(_DB_PATH)
-        _seed_if_empty(_db)
+        _db = TinyDB(get_suppliers_db_path())
+        if len(_db) == 0:
+            seed_database(_db)
     return _db
-
-
-def _seed_if_empty(db: TinyDB) -> None:
-    if len(db) > 0:
-        return
-    timestamp = _now()
-    for entry in SUPPLIERS_SEED:
-        supplier = SupplierCreate(**entry)
-        db.insert({**supplier.model_dump(mode="json"), "updated_at": timestamp})
 
 
 def list_suppliers() -> list[SupplierOut]:
