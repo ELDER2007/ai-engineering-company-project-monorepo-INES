@@ -77,3 +77,5 @@ Known limits
 - The dataset is generated: the conclusions are about this series
 - The five test files of the weekly pipeline need the services/api
   environment
+
+Pull request: #42
