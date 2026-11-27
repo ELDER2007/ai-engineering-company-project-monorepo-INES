@@ -1,0 +1,22 @@
+# Runs the unit test of the chronological order of the time-series cross-validation on every pull request.
+name: Sales forecast - chronological order of the folds
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read  # it only reads the code: no secrets, nothing is written or deployed
+
+jobs:
+  chronological-order:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install the versions of uv.lock
+        run: uv sync --frozen
+      - name: Test the chronological order of the folds
+        run: uv run --frozen pytest tests/pipelines/test_sales_cv_chronological_order.py -v
