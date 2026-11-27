@@ -463,6 +463,50 @@ def test_the_quotes_of_the_report_are_word_for_word_from_the_briefing(report):
         assert word in text, word
 
 
+READMES = {"en": EVAL / "regression_eval" / "README.md", "es": EVAL / "regression_eval" / "README.es.md"}
+
+
+@pytest.fixture(scope="module", params=sorted(READMES))
+def readme(request):
+    return request.param, READMES[request.param].read_text(encoding="utf-8")
+
+
+def test_the_readme_opens_with_the_same_verdict_as_the_report_and_its_measured_numbers(readme, diagnosis, cause):
+    language, text = readme
+    verdict = {"en": "**Diagnosis: moderate overfitting.**", "es": "**Diagnóstico: overfitting moderado.**"}[language]
+    summary_part = text.split({"en": "## Files of the project", "es": "## Archivos del proyecto"}[language])[0]
+    assert verdict in summary_part
+    assert {"en": "**Classification: OVERFITTING (moderate).**", "es": "**Clasificación: OVERFITTING (moderado).**"}[language] in REPORTS[language].read_text(encoding="utf-8")
+    everything = diagnosis["cross_validation_all_past"]
+    summary = everything["summary"]
+    gain = cause["candidates"]["shallower_trees"]["against_current"]["mean_change_usd"]
+    for value in (usd(summary["validation"]["rmse_usd"]["mean"]), usd(summary["training"]["rmse_usd"]["mean"]), usd(summary["no_model"]["rmse_usd"]["mean"]),
+                  usd(summary["validation"]["rmse_usd"]["min"]), usd(summary["validation"]["rmse_usd"]["max"]), f"{gain:+,.0f}"):
+        assert value in summary_part, value
+    lost = sum(fold["validation"]["rmse_usd"] > fold["no_model"]["rmse_usd"] for fold in everything["folds"])
+    assert {"en": f"in {lost} of 8", "es": f"en {lost} de 8"}[language] in summary_part
+    assert {"en": "**Proposed, not applied.**", "es": "**Propuesta, no aplicada.**"}[language] in summary_part
+
+
+def test_every_link_of_the_readme_exists_and_it_shows_the_learning_curve(readme):
+    language, text = readme
+    folder = READMES[language].parent
+    links = re.findall(r"\]\((\.[^)#]+)\)", text)
+    assert links and all((folder / link).resolve().exists() for link in links), [link for link in links if not (folder / link).resolve().exists()]
+    picture = {"en": "../learning_curve.png", "es": "../learning_curve.es.png"}[language]
+    assert re.search(r"!\[[^\]]+\]\(" + re.escape(picture) + r"\)", text)
+
+
+def test_the_readme_lists_the_files_of_the_project_and_how_to_run_each_test(readme):
+    _, text = readme
+    for name in ("sales_diagnosis.py", "sales_root_cause.py", "sales_diagnosis_plot.py", "evaluate_sales_model.py", "sales-cv-chronological-order.yml"):
+        assert f"[`{name}`]" in text, name
+    commands = "\n".join(re.findall(r"```bash\n(.*?)```", text, flags=re.S))
+    for path in ("scripts/evaluate_sales_model.py", "tests/pipelines/test_sales_cv_chronological_order.py", "tests/pipelines/test_sales_diagnosis.py",
+                 "tests/pipelines/test_sales_evaluation_report.py"):
+        assert path in commands and (REPOSITORY / path).is_file(), path
+
+
 def load_script():
     import importlib.util
 

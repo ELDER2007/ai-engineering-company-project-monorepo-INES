@@ -50,10 +50,12 @@ Report and documents
 - data/eval/evaluation_report.md and .es.md: verdict, pattern of the
   learning curve, stability, metrics, root cause, action, advice for
   staging and limits
+- The README of data/eval/regression_eval opens with the verdict, the
+  learning curve, the files of the project and how to run it
 - Document the script in scripts/ and the work in memory-bank/
 
 Verification
-- uv run pytest tests/pipelines: 249 passed
+- uv run pytest tests/pipelines: 255 passed
 - The test of the chronological order of the folds has 12 cases. Five faults
   injected into the cross-validation of a copy are all caught
 - Seven faults injected into the analysis and the report are all caught, and

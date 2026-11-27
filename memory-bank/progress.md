@@ -11,7 +11,7 @@ Reporte: [`data/eval/evaluation_report.es.md`](../data/eval/evaluation_report.es
 - [x] Causa del error y correcciones declaradas de antemano: `data/process/sales_root_cause.py`.
 - [x] Reporte: **overfitting moderado**; acción propuesta: profundidad de los árboles 2 (mejora modesta). **No aplicada** al modelo entregado.
 - [x] Prueba del orden cronológico en cada fold: `tests/pipelines/test_sales_cv_chronological_order.py`.
-- [x] Pruebas (`uv run pytest tests/pipelines`: 249 pasan).
+- [x] Pruebas (`uv run pytest tests/pipelines`: 255 pasan).
 - [x] CI en cada Pull Request para la prueba del orden cronológico: `.github/workflows/sales-cv-chronological-order.yml`.
 - [x] Commits, push y Pull Request a `main`.
 - [ ] Revisión y merge (fusionar antes el PR del pronóstico de ventas).

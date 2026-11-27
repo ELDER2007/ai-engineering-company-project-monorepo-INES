@@ -5,12 +5,52 @@ _Versión en español: [README.es.md](./README.es.md)._
 Evaluation of the Random Forest that forecasts `revenue_usd` of the `consolidated` business line ([`data/raw/nexova_sales.csv`](../../raw/nexova_sales.csv)), before it is approved for staging.
 **Only the training years (2016-2023) are used**; 2024-2025 take no part.
 
-**The diagnosis and the corrective action are in the [technical report](../evaluation_report.md).** The analysis of where the error comes from is saved in [`root_cause.json`](./root_cause.json).
+## In short
+
+**Diagnosis: moderate overfitting.**
+
+| Question | Answer |
+| --- | --- |
+| How well is it fitted? | **Moderate overfitting:** the validation RMSE (39,141 USD) is double the training one (19,055 USD). On average it beats the no-model rule (52,353 USD). |
+| Is it stable? | **Only partly:** from one half-year to another the error goes from 26,210 to 49,851 USD, and in 2 of 8 the no-model rule misses less. |
+| What to correct? | **Maximum depth of the trees from 3 to 2.** A modest gain (-1,868 USD on validation) that cannot be safely told from chance. **Proposed, not applied.** |
+
+📄 **Main document:** the [technical report](../evaluation_report.md), with the evidence, the corrections tried, the recommendation and the limits.
+
+![Learning curve: training and validation RMSE by training size](../learning_curve.png)
+
+(The figures use a comma for thousands and a decimal point.)
+
+## Files of the project
+
+| File | What it is |
+| --- | --- |
+| [`evaluation_report.md`](../evaluation_report.md) | Technical report |
+| [`learning_curve.png`](../learning_curve.png) | Learning curve |
+| [`diagnosis_curves.png`](./diagnosis_curves.png) | More history, deeper trees and the error block by block |
+| [`diagnosis.json`](./diagnosis.json) | Figures of the cross-validation and of the curves |
+| [`root_cause.json`](./root_cause.json) | Where the error comes from and the corrections tried |
+| [`sales_diagnosis.py`](../../process/sales_diagnosis.py) | Cross-validation, curves and leakage checks |
+| [`sales_root_cause.py`](../../process/sales_root_cause.py) | Where the error comes from, and corrections |
+| [`sales_diagnosis_plot.py`](../../process/sales_diagnosis_plot.py) | Pictures |
+| [`evaluate_sales_model.py`](../../../scripts/evaluate_sales_model.py) | Runs the whole evaluation |
+| [`test_sales_cv_chronological_order.py`](../../../tests/pipelines/test_sales_cv_chronological_order.py) | Chronological order of every fold |
+| [`test_sales_diagnosis.py`](../../../tests/pipelines/test_sales_diagnosis.py) | Tests of the validation, curves, metrics and pictures |
+| [`test_sales_evaluation_report.py`](../../../tests/pipelines/test_sales_evaluation_report.py) | Compares the report and this summary with the saved results |
+| [`sales-cv-chronological-order.yml`](../../../.github/workflows/sales-cv-chronological-order.yml) | CI: runs the chronological order test on every pull request to `main` |
+
+## How to run it
+
+From the root of the repository, with [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-uv run python scripts/evaluate_sales_model.py     # a few minutes: writes diagnosis.json and the pictures
-uv run pytest tests/pipelines/test_sales_diagnosis.py
+uv sync --frozen                                                       # installs the versions of uv.lock
+uv run pytest tests/pipelines/test_sales_cv_chronological_order.py -v  # chronological order (the CI test), under a minute
+uv run python scripts/evaluate_sales_model.py                          # about 10 minutes: writes the figures and pictures again
+uv run pytest tests/pipelines/test_sales_diagnosis.py tests/pipelines/test_sales_evaluation_report.py  # several minutes
 ```
+
+For a trial that leaves the files of the repository alone: `uv run python scripts/evaluate_sales_model.py --output /tmp/evaluation`.
 
 ## Metrics: MAE and RMSE, on training and on validation
 
