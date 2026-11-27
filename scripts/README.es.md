@@ -21,6 +21,20 @@ Entrena y evalúa el pronóstico de ingresos mensuales de [`BRIEFING_NEXOVA_SALE
   uv run pytest tests/pipelines                                    # sus pruebas
   ```
 
+### `evaluate_sales_model.py` — Evaluación formal del pronóstico de ventas
+
+Evalúa el modelo de `train_sales_forecast.py` antes de su paso a *staging*. El reporte que lee sus resultados es [`data/eval/evaluation_report.es.md`](../data/eval/evaluation_report.es.md).
+
+- **Qué hace**: usa **solo los años de entrenamiento (2016-2023)**. Validación cruzada temporal anidada (8 bloques) con comprobación de orden y de fugas; MAE y RMSE; curvas de aprendizaje y de complejidad; análisis del origen del error y comparación de correcciones declaradas de antemano. No cambia el modelo entregado.
+- **Escribe**: `diagnosis.json`, `root_cause.json` y las gráficas en [`data/eval/regression_eval/`](../data/eval/regression_eval/README.es.md); la curva de aprendizaje en `data/eval/learning_curve.png` (y `.es.png`). Con `--output` otra carpeta, todo queda allí y no se tocan los archivos del repositorio.
+- **Requisitos**: los mismos que el anterior (`pyproject.toml` / `uv.lock` de la raíz).
+- **Uso**, desde la raíz del repositorio (unos 10 minutos):
+  ```bash
+  uv run python scripts/evaluate_sales_model.py
+  uv run python scripts/evaluate_sales_model.py --output /tmp/evaluacion     # de prueba
+  uv run pytest tests/pipelines/test_sales_diagnosis.py tests/pipelines/test_sales_evaluation_report.py
+  ```
+
 ### `analyze.py` — Analizador de CSV de incidentes de Nexova
 
 Valida y calcula métricas sobre un CSV de incidentes de soporte de Nexova, según las reglas en [`CONTEXT-nexova.md`](./CONTEXT-nexova.md).

@@ -1,0 +1,3657 @@
+{
+  "months_used": "2016-01 to 2023-12",
+  "noise": {
+    "fits": {
+      "a level for each year": {
+        "parameters": 19,
+        "months": 96,
+        "std_percent": 3.004798748752504,
+        "in_sample_percent": 2.6910708739715634
+      },
+      "a growth rate for each year": {
+        "parameters": 20,
+        "months": 96,
+        "std_percent": 3.242298985017564,
+        "in_sample_percent": 2.8848566649595186
+      }
+    },
+    "lowest_percent": 3.004798748752504,
+    "highest_percent": 3.242298985017564,
+    "from_the_briefing_percent": 2.886751345948129
+  },
+  "error_against_noise": {
+    "current": {
+      "a level for each year": {
+        "11": {
+          "correlation": -0.17044339255098276,
+          "share_of_variance": 0.029050950064288403,
+          "slope": -0.289975831553775
+        },
+        "12": {
+          "correlation": 0.5003767053957494,
+          "share_of_variance": 0.2503768473027046,
+          "slope": 0.8534441377341255
+        },
+        "13": {
+          "correlation": -0.05269635060165341,
+          "share_of_variance": 0.0027769053667323776,
+          "slope": -0.08985409847882986
+        }
+      },
+      "a growth rate for each year": {
+        "11": {
+          "correlation": -0.0662000725500102,
+          "share_of_variance": 0.004382449605626614,
+          "slope": -0.1048872941681427
+        },
+        "12": {
+          "correlation": 0.5645991778579036,
+          "share_of_variance": 0.31877223163782065,
+          "slope": 0.894180104369731
+        },
+        "13": {
+          "correlation": 0.003744391674549242,
+          "share_of_variance": 1.4020469012433677e-05,
+          "slope": 0.005890578225434321
+        }
+      }
+    },
+    "shallower_trees": {
+      "a level for each year": {
+        "11": {
+          "correlation": -0.17071046614981475,
+          "share_of_variance": 0.029142063253087047,
+          "slope": -0.2806001170705878
+        },
+        "12": {
+          "correlation": 0.4726504663881107,
+          "share_of_variance": 0.22339846337689856,
+          "slope": 0.7788685613786982
+        },
+        "13": {
+          "correlation": -0.03787595212300233,
+          "share_of_variance": 0.0014345877492239645,
+          "slope": -0.062397469473225685
+        }
+      },
+      "a growth rate for each year": {
+        "11": {
+          "correlation": -0.0851837392560141,
+          "share_of_variance": 0.007256269433636596,
+          "slope": -0.1303968750211154
+        },
+        "12": {
+          "correlation": 0.515066735204961,
+          "share_of_variance": 0.26529374171469744,
+          "slope": 0.7881235968347521
+        },
+        "13": {
+          "correlation": 0.007903295408785345,
+          "share_of_variance": 6.246207831852751e-05,
+          "slope": 0.012012431912456573
+        }
+      }
+    },
+    "bigger_leaves": {
+      "a level for each year": {
+        "11": {
+          "correlation": -0.19941674427614728,
+          "share_of_variance": 0.03976703789769832,
+          "slope": -0.33836952328091546
+        },
+        "12": {
+          "correlation": 0.48994479549435827,
+          "share_of_variance": 0.24004590263200853,
+          "slope": 0.8334377167544459
+        },
+        "13": {
+          "correlation": -0.06816975412282562,
+          "share_of_variance": 0.004647115377166501,
+          "slope": -0.1159303278890409
+        }
+      },
+      "a growth rate for each year": {
+        "11": {
+          "correlation": -0.10129491830340401,
+          "share_of_variance": 0.010260660474093292,
+          "slope": -0.1600663568075609
+        },
+        "12": {
+          "correlation": 0.5399910522914613,
+          "share_of_variance": 0.2915903365548397,
+          "slope": 0.8529416265559551
+        },
+        "13": {
+          "correlation": -0.011958966837363678,
+          "share_of_variance": 0.0001430168878171642,
+          "slope": -0.018763692351178814
+        }
+      }
+    },
+    "anchor_two_years": {
+      "a level for each year": {
+        "11": {
+          "correlation": -0.06726614117459724,
+          "share_of_variance": 0.004524733748520846,
+          "slope": -0.12082304540173741
+        },
+        "12": {
+          "correlation": 0.4238879841546375,
+          "share_of_variance": 0.17968102311068224,
+          "slope": 0.7633096507380661
+        },
+        "13": {
+          "correlation": -0.08767342540782291,
+          "share_of_variance": 0.007686629522741089,
+          "slope": -0.1578326895578167
+        }
+      },
+      "a growth rate for each year": {
+        "11": {
+          "correlation": -0.06578199683382874,
+          "share_of_variance": 0.004327271107445854,
+          "slope": -0.11003810433790209
+        },
+        "12": {
+          "correlation": 0.31769996089730707,
+          "share_of_variance": 0.10093326515415044,
+          "slope": 0.5312189432933722
+        },
+        "13": {
+          "correlation": -0.21008158666395946,
+          "share_of_variance": 0.04413427305524671,
+          "slope": -0.34892836598469873
+        }
+      }
+    }
+  },
+  "anchor_profile": {
+    "revenue_lag_12": {
+      "mean_offset_by_year_percent": {
+        "2020": -1.2199359523445132,
+        "2021": -6.917624827844487,
+        "2022": -0.43099168841563934,
+        "2023": -6.490768677650678
+      },
+      "spread_within_the_year_percent": 4.319111978831477
+    },
+    "anchor_two_years": {
+      "mean_offset_by_year_percent": {
+        "2020": 0.4064788269197983,
+        "2021": -1.0358379343269006,
+        "2022": 2.1684748953725435,
+        "2023": -1.6107268489770306
+      },
+      "spread_within_the_year_percent": 4.9084849673961015
+    },
+    "real_growth_by_year_percent": {
+      "2017": 6.908504953190953,
+      "2018": 0.673325519745771,
+      "2019": 6.792629842661446,
+      "2020": 1.3387813987531416,
+      "2021": 7.345828104436269,
+      "2022": 0.4985749519883509,
+      "2023": 7.225694439622199
+    }
+  },
+  "candidates": {
+    "current": {
+      "description": "the model as it is",
+      "folds": [
+        {
+          "fold": 1,
+          "validated_months": "2020-01 to 2020-06",
+          "training_months": 24,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 21558.349633905833,
+            "mae_usd": 17643.2942871022,
+            "rmse_percent_of_mean_revenue": 2.8752165976642807,
+            "mae_percent_of_mean_revenue": 2.353069387647784,
+            "mape_percent": 2.343097565629483,
+            "bias_percent": 0.2384214927242697
+          },
+          "validation": {
+            "rmse_usd": 49851.065734486445,
+            "mae_usd": 39658.00425039488,
+            "rmse_percent_of_mean_revenue": 6.092365662490122,
+            "mae_percent_of_mean_revenue": 4.846657935556413,
+            "mape_percent": 5.139548470836896,
+            "bias_percent": 4.96400421716971
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 51323.765165868244,
+            "mae_usd": 40739.54129084417,
+            "rmse_percent_of_mean_revenue": 6.272346236921702,
+            "mae_percent_of_mean_revenue": 4.9788340291035205,
+            "mape_percent": 5.269655049154257,
+            "bias_percent": 5.208149187533758
+          },
+          "no_model": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "training_relative_rmse_percent": 2.8382784082959542,
+          "validation_relative_rmse_percent": 6.627031920303404,
+          "anchor_alone": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "monthly": [
+            {
+              "month": "2020-01",
+              "revenue_usd": 934179.0,
+              "forecast_usd": 958251.2910637959
+            },
+            {
+              "month": "2020-02",
+              "revenue_usd": 933204.06,
+              "forecast_usd": 945041.6405838897
+            },
+            {
+              "month": "2020-03",
+              "revenue_usd": 740571.83,
+              "forecast_usd": 833687.6595285238
+            },
+            {
+              "month": "2020-04",
+              "revenue_usd": 792756.45,
+              "forecast_usd": 788581.534819347
+            },
+            {
+              "month": "2020-05",
+              "revenue_usd": 760453.14,
+              "forecast_usd": 809896.6968678185
+            },
+            {
+              "month": "2020-06",
+              "revenue_usd": 748363.46,
+              "forecast_usd": 803667.3122776884
+            }
+          ]
+        },
+        {
+          "fold": 2,
+          "validated_months": "2020-07 to 2020-12",
+          "training_months": 30,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 21387.10395306226,
+            "mae_usd": 17535.738738118995,
+            "rmse_percent_of_mean_revenue": 2.8012281619886696,
+            "mae_percent_of_mean_revenue": 2.2967861989309326,
+            "mape_percent": 2.2761192805778103,
+            "bias_percent": 0.07681675763707656
+          },
+          "validation": {
+            "rmse_usd": 38403.25816179036,
+            "mae_usd": 31872.977248593776,
+            "rmse_percent_of_mean_revenue": 5.11131878207124,
+            "mae_percent_of_mean_revenue": 4.24216472896454,
+            "mape_percent": 4.129472588671104,
+            "bias_percent": -0.9676574978278242
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 35469.834185681495,
+            "mae_usd": 30714.707127704012,
+            "rmse_percent_of_mean_revenue": 4.720891881267771,
+            "mae_percent_of_mean_revenue": 4.088003647145024,
+            "mape_percent": 4.018559882190407,
+            "bias_percent": -0.43096806640909835
+          },
+          "no_model": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "training_relative_rmse_percent": 2.772503509233714,
+          "validation_relative_rmse_percent": 4.87527351415604,
+          "anchor_alone": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "monthly": [
+            {
+              "month": "2020-07",
+              "revenue_usd": 775005.22,
+              "forecast_usd": 798044.0869327246
+            },
+            {
+              "month": "2020-08",
+              "revenue_usd": 593622.44,
+              "forecast_usd": 606351.1571398942
+            },
+            {
+              "month": "2020-09",
+              "revenue_usd": 778653.96,
+              "forecast_usd": 774899.5625959296
+            },
+            {
+              "month": "2020-10",
+              "revenue_usd": 810735.87,
+              "forecast_usd": 748125.755367322
+            },
+            {
+              "month": "2020-11",
+              "revenue_usd": 762915.07,
+              "forecast_usd": 796242.7376462781
+            },
+            {
+              "month": "2020-12",
+              "revenue_usd": 787092.84,
+              "forecast_usd": 731314.7402640827
+            }
+          ]
+        },
+        {
+          "fold": 3,
+          "validated_months": "2021-01 to 2021-06",
+          "training_months": 36,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 2,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 15742.486847592269,
+            "mae_usd": 13310.961294329716,
+            "rmse_percent_of_mean_revenue": 2.0673952040472567,
+            "mae_percent_of_mean_revenue": 1.7480730844863186,
+            "mape_percent": 1.7310207056155955,
+            "bias_percent": 0.08622249672556367
+          },
+          "validation": {
+            "rmse_usd": 26210.406399856387,
+            "mae_usd": 19633.701939309405,
+            "rmse_percent_of_mean_revenue": 2.997376010084917,
+            "mae_percent_of_mean_revenue": 2.245275646789138,
+            "mape_percent": 2.3675023798498716,
+            "bias_percent": 0.3531521998736319
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 23762.0995498559,
+            "mae_usd": 17923.97781840968,
+            "rmse_percent_of_mean_revenue": 2.7173919417128123,
+            "mae_percent_of_mean_revenue": 2.0497546012292935,
+            "mape_percent": 2.166646611672005,
+            "bias_percent": 0.5099823639715299
+          },
+          "no_model": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "training_relative_rmse_percent": 2.033752504312249,
+          "validation_relative_rmse_percent": 3.1779648261174764,
+          "anchor_alone": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "monthly": [
+            {
+              "month": "2021-01",
+              "revenue_usd": 989840.35,
+              "forecast_usd": 985873.3765775221
+            },
+            {
+              "month": "2021-02",
+              "revenue_usd": 990511.66,
+              "forecast_usd": 993745.4835895278
+            },
+            {
+              "month": "2021-03",
+              "revenue_usd": 791503.01,
+              "forecast_usd": 811494.7386456174
+            },
+            {
+              "month": "2021-04",
+              "revenue_usd": 793077.99,
+              "forecast_usd": 835187.9766648182
+            },
+            {
+              "month": "2021-05",
+              "revenue_usd": 864662.64,
+              "forecast_usd": 821090.6874448764
+            },
+            {
+              "month": "2021-06",
+              "revenue_usd": 817074.7,
+              "forecast_usd": 812146.9532417083
+            }
+          ]
+        },
+        {
+          "fold": 4,
+          "validated_months": "2021-07 to 2021-12",
+          "training_months": 42,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 2,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 16575.87433374787,
+            "mae_usd": 13821.616354121117,
+            "rmse_percent_of_mean_revenue": 2.1316578120220733,
+            "mae_percent_of_mean_revenue": 1.7774601739136517,
+            "mape_percent": 1.7722586750483653,
+            "bias_percent": 0.0790510825523956
+          },
+          "validation": {
+            "rmse_usd": 46548.67495535438,
+            "mae_usd": 37651.041485150265,
+            "rmse_percent_of_mean_revenue": 5.743582432412862,
+            "mae_percent_of_mean_revenue": 4.645714634059246,
+            "mape_percent": 4.780160269007352,
+            "bias_percent": -4.315231447667558
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 46550.87456602011,
+            "mae_usd": 37616.19142770596,
+            "rmse_percent_of_mean_revenue": 5.743853839605224,
+            "mae_percent_of_mean_revenue": 4.6414145293216205,
+            "mape_percent": 4.776298484629752,
+            "bias_percent": -4.224706234649628
+          },
+          "no_model": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "training_relative_rmse_percent": 2.1194392295423286,
+          "validation_relative_rmse_percent": 6.08705455077871,
+          "anchor_alone": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "monthly": [
+            {
+              "month": "2021-07",
+              "revenue_usd": 864603.3,
+              "forecast_usd": 810306.1820495132
+            },
+            {
+              "month": "2021-08",
+              "revenue_usd": 701008.39,
+              "forecast_usd": 619670.5910388333
+            },
+            {
+              "month": "2021-09",
+              "revenue_usd": 797221.53,
+              "forecast_usd": 804099.1311065934
+            },
+            {
+              "month": "2021-10",
+              "revenue_usd": 855257.87,
+              "forecast_usd": 804557.3941180905
+            },
+            {
+              "month": "2021-11",
+              "revenue_usd": 831051.66,
+              "forecast_usd": 835473.6036565896
+            },
+            {
+              "month": "2021-12",
+              "revenue_usd": 813537.52,
+              "forecast_usd": 785266.2086458445
+            }
+          ]
+        },
+        {
+          "fold": 5,
+          "validated_months": "2022-01 to 2022-06",
+          "training_months": 48,
+          "params": {
+            "max_depth": 5,
+            "min_samples_leaf": 1,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 13789.637314915763,
+            "mae_usd": 11621.976709618095,
+            "rmse_percent_of_mean_revenue": 1.764034744245289,
+            "mae_percent_of_mean_revenue": 1.4867374858655664,
+            "mape_percent": 1.501135519151191,
+            "bias_percent": 0.12116058747693212
+          },
+          "validation": {
+            "rmse_usd": 32858.28362707689,
+            "mae_usd": 30568.44051590816,
+            "rmse_percent_of_mean_revenue": 3.7051284494607546,
+            "mae_percent_of_mean_revenue": 3.4469237619523176,
+            "mape_percent": 3.4310841575720703,
+            "bias_percent": 1.4667342485426347
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 31734.995803563444,
+            "mae_usd": 30257.616709399193,
+            "rmse_percent_of_mean_revenue": 3.5784655440251565,
+            "mae_percent_of_mean_revenue": 3.411875000996434,
+            "mape_percent": 3.405027087702196,
+            "bias_percent": 1.1114729255141218
+          },
+          "no_model": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "training_relative_rmse_percent": 1.7868938432781805,
+          "validation_relative_rmse_percent": 3.6899811351506844,
+          "anchor_alone": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "monthly": [
+            {
+              "month": "2022-01",
+              "revenue_usd": 985460.62,
+              "forecast_usd": 1024505.3560707518
+            },
+            {
+              "month": "2022-02",
+              "revenue_usd": 990347.64,
+              "forecast_usd": 1017134.855577065
+            },
+            {
+              "month": "2022-03",
+              "revenue_usd": 816295.61,
+              "forecast_usd": 805530.1327557724
+            },
+            {
+              "month": "2022-04",
+              "revenue_usd": 883105.97,
+              "forecast_usd": 842710.6822912353
+            },
+            {
+              "month": "2022-05",
+              "revenue_usd": 836233.5,
+              "forecast_usd": 881329.6251248289
+            },
+            {
+              "month": "2022-06",
+              "revenue_usd": 809551.72,
+              "forecast_usd": 830873.521369811
+            }
+          ]
+        },
+        {
+          "fold": 6,
+          "validated_months": "2022-07 to 2022-12",
+          "training_months": 54,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 1,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 17764.266779548478,
+            "mae_usd": 14919.658781051185,
+            "rmse_percent_of_mean_revenue": 2.239032386435472,
+            "mae_percent_of_mean_revenue": 1.8804941188903417,
+            "mape_percent": 1.9030293813546602,
+            "bias_percent": 0.06741156045418982
+          },
+          "validation": {
+            "rmse_usd": 45137.4037463618,
+            "mae_usd": 39103.2682374404,
+            "rmse_percent_of_mean_revenue": 5.596981880179089,
+            "mae_percent_of_mean_revenue": 4.848756588007727,
+            "mape_percent": 4.76617458134301,
+            "bias_percent": 3.6558211950693815
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 45895.1226309188,
+            "mae_usd": 39620.34523268661,
+            "rmse_percent_of_mean_revenue": 5.690938078700517,
+            "mae_percent_of_mean_revenue": 4.912873491791404,
+            "mape_percent": 4.825027213071653,
+            "bias_percent": 3.5870906546641463
+          },
+          "no_model": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "training_relative_rmse_percent": 2.2809345080006924,
+          "validation_relative_rmse_percent": 5.498348638416722,
+          "anchor_alone": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "monthly": [
+            {
+              "month": "2022-07",
+              "revenue_usd": 827817.86,
+              "forecast_usd": 857772.9613193506
+            },
+            {
+              "month": "2022-08",
+              "revenue_usd": 695862.9,
+              "forecast_usd": 701757.7342348241
+            },
+            {
+              "month": "2022-09",
+              "revenue_usd": 805343.57,
+              "forecast_usd": 841572.090972368
+            },
+            {
+              "month": "2022-10",
+              "revenue_usd": 818634.04,
+              "forecast_usd": 895990.8188881098
+            },
+            {
+              "month": "2022-11",
+              "revenue_usd": 871703.25,
+              "forecast_usd": 842666.2903361032
+            },
+            {
+              "month": "2022-12",
+              "revenue_usd": 819396.63,
+              "forecast_usd": 875544.0443460931
+            }
+          ]
+        },
+        {
+          "fold": 7,
+          "validated_months": "2023-01 to 2023-06",
+          "training_months": 60,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 22856.939108091254,
+            "mae_usd": 18801.66916878774,
+            "rmse_percent_of_mean_revenue": 2.876181867005827,
+            "mae_percent_of_mean_revenue": 2.3658907116555596,
+            "mape_percent": 2.386731624253295,
+            "bias_percent": 0.12999343728112725
+          },
+          "validation": {
+            "rmse_usd": 28091.330996564393,
+            "mae_usd": 26848.551193982305,
+            "rmse_percent_of_mean_revenue": 2.953886687201948,
+            "mae_percent_of_mean_revenue": 2.8232047086791194,
+            "mape_percent": 2.869455464452191,
+            "bias_percent": -1.1571880346964838
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 27444.918998033787,
+            "mae_usd": 26735.66970131257,
+            "rmse_percent_of_mean_revenue": 2.8859145502768344,
+            "mae_percent_of_mean_revenue": 2.8113348852638675,
+            "mape_percent": 2.841086945905025,
+            "bias_percent": -1.3764276748450683
+          },
+          "no_model": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "training_relative_rmse_percent": 2.919875411337792,
+          "validation_relative_rmse_percent": 3.0552866967005072,
+          "anchor_alone": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "monthly": [
+            {
+              "month": "2023-01",
+              "revenue_usd": 1045038.73,
+              "forecast_usd": 1021801.8663066874
+            },
+            {
+              "month": "2023-02",
+              "revenue_usd": 1077508.59,
+              "forecast_usd": 1052142.486482437
+            },
+            {
+              "month": "2023-03",
+              "revenue_usd": 897882.42,
+              "forecast_usd": 873232.060221756
+            },
+            {
+              "month": "2023-04",
+              "revenue_usd": 928028.24,
+              "forecast_usd": 902453.7980209937
+            },
+            {
+              "month": "2023-05",
+              "revenue_usd": 864052.91,
+              "forecast_usd": 908437.5996613592
+            },
+            {
+              "month": "2023-06",
+              "revenue_usd": 893462.42,
+              "forecast_usd": 875583.5714655914
+            }
+          ]
+        },
+        {
+          "fold": 8,
+          "validated_months": "2023-07 to 2023-12",
+          "training_months": 66,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 22762.482717746643,
+            "mae_usd": 18736.055529072317,
+            "rmse_percent_of_mean_revenue": 2.8139829180918126,
+            "mae_percent_of_mean_revenue": 2.316220988061377,
+            "mape_percent": 2.345461090190698,
+            "bias_percent": 0.09901801745451895
+          },
+          "validation": {
+            "rmse_usd": 46025.81235757644,
+            "mae_usd": 40762.605399216896,
+            "rmse_percent_of_mean_revenue": 5.323064460229474,
+            "mae_percent_of_mean_revenue": 4.714354076386258,
+            "mape_percent": 5.0313279192783975,
+            "bias_percent": 0.8541945718621236
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 48380.090110526966,
+            "mae_usd": 43584.78012053828,
+            "rmse_percent_of_mean_revenue": 5.595345851785987,
+            "mae_percent_of_mean_revenue": 5.040749574697348,
+            "mape_percent": 5.3206509248337,
+            "bias_percent": -0.23957165375596673
+          },
+          "no_model": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "training_relative_rmse_percent": 2.880265215362768,
+          "validation_relative_rmse_percent": 6.079693302506838,
+          "anchor_alone": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "monthly": [
+            {
+              "month": "2023-07",
+              "revenue_usd": 920967.64,
+              "forecast_usd": 897218.1442411899
+            },
+            {
+              "month": "2023-08",
+              "revenue_usd": 676682.89,
+              "forecast_usd": 759204.8130393359
+            },
+            {
+              "month": "2023-09",
+              "revenue_usd": 891575.54,
+              "forecast_usd": 860580.1321511829
+            },
+            {
+              "month": "2023-10",
+              "revenue_usd": 932905.89,
+              "forecast_usd": 890317.4335837532
+            },
+            {
+              "month": "2023-11",
+              "revenue_usd": 872451.14,
+              "forecast_usd": 920100.0744534542
+            },
+            {
+              "month": "2023-12",
+              "revenue_usd": 893309.63,
+              "forecast_usd": 876238.2151213628
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "training": {
+          "rmse_usd": {
+            "mean": 19054.642586076294,
+            "std": 3513.534650977357,
+            "min": 13789.637314915763,
+            "max": 22856.939108091254
+          },
+          "mae_usd": {
+            "mean": 15798.87135777517,
+            "std": 2735.511111271036,
+            "min": 11621.976709618095,
+            "max": 18801.66916878774
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 2.4460912114375852,
+            "std": 0.44415996808011093,
+            "min": 1.764034744245289,
+            "max": 2.876181867005827
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 2.0280915186814417,
+            "std": 0.344551449227152,
+            "min": 1.4867374858655664,
+            "max": 2.3658907116555596
+          },
+          "mape_percent": {
+            "mean": 2.0323567302276375,
+            "std": 0.3457852119832482,
+            "min": 1.501135519151191,
+            "max": 2.386731624253295
+          },
+          "bias_percent": {
+            "mean": 0.11226192903825921,
+            "std": 0.055464476800559576,
+            "min": 0.06741156045418982,
+            "max": 0.2384214927242697
+          }
+        },
+        "validation": {
+          "rmse_usd": {
+            "mean": 39140.77949738339,
+            "std": 9120.21991402036,
+            "min": 26210.406399856387,
+            "max": 49851.065734486445
+          },
+          "mae_usd": {
+            "mean": 33262.32378374951,
+            "std": 7431.588286150467,
+            "min": 19633.701939309405,
+            "max": 40762.605399216896
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 4.6904630455163,
+            "std": 1.2720398305201566,
+            "min": 2.953886687201948,
+            "max": 6.092365662490122
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 3.9766315100493452,
+            "std": 1.0133776368806184,
+            "min": 2.245275646789138,
+            "max": 4.848756588007727
+          },
+          "mape_percent": {
+            "mean": 4.0643407288763616,
+            "std": 1.0561636444767157,
+            "min": 2.3675023798498716,
+            "max": 5.139548470836896
+          },
+          "bias_percent": {
+            "mean": 0.606728681540702,
+            "std": 2.902308213444027,
+            "min": -4.315231447667558,
+            "max": 4.96400421716971
+          }
+        },
+        "validation_from_boundary": {
+          "rmse_usd": {
+            "mean": 38820.212626308596,
+            "std": 10522.879677131206,
+            "min": 23762.0995498559,
+            "max": 51323.765165868244
+          },
+          "mae_usd": {
+            "mean": 33399.10367857506,
+            "std": 8577.990960721843,
+            "min": 17923.97781840968,
+            "max": 43584.78012053828
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 4.650643490537,
+            "std": 1.404377554824443,
+            "min": 2.7173919417128123,
+            "max": 6.272346236921702
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 3.9918549699435637,
+            "std": 1.1247547757411602,
+            "min": 2.0497546012292935,
+            "max": 5.040749574697348
+          },
+          "mape_percent": {
+            "mean": 4.077869024894875,
+            "std": 1.1740981169385254,
+            "min": 2.166646611672005,
+            "max": 5.3206509248337
+          },
+          "bias_percent": {
+            "mean": 0.5181276877529744,
+            "std": 2.911201640910624,
+            "min": -4.224706234649628,
+            "max": 5.208149187533758
+          }
+        },
+        "no_model": {
+          "rmse_usd": {
+            "mean": 52353.09390214988,
+            "std": 18494.44082578685,
+            "min": 27306.281513247694,
+            "max": 76378.93858759322
+          },
+          "mae_usd": {
+            "mean": 44817.23520833335,
+            "std": 17949.101938300253,
+            "min": 22197.916666666646,
+            "max": 64582.416666666686
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 6.152932812836819,
+            "std": 2.022535774637824,
+            "min": 3.3859449183989745,
+            "max": 8.83352172791667
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 5.26447896442933,
+            "std": 1.9634146822745406,
+            "min": 2.752514036013266,
+            "max": 7.469208022734118
+          },
+          "mape_percent": {
+            "mean": 5.246830421417805,
+            "std": 1.92952255871481,
+            "min": 2.6739856425721165,
+            "max": 7.44430490717509
+          },
+          "bias_percent": {
+            "mean": -3.7648302865638295,
+            "std": 3.413702702650987,
+            "min": -7.44430490717509,
+            "max": 0.9112263727325179
+          }
+        },
+        "gap_rmse_usd": 20086.136911307094,
+        "gap_mae_usd": 17463.45242597434,
+        "gap_rmse_percent_of_mean_revenue": 2.244371834078715,
+        "gap_mae_percent_of_mean_revenue": 1.9485399913679036,
+        "gap_mape_percent": 2.031983998648724
+      },
+      "training_relative_rmse_percent": {
+        "mean": 2.4539928286704598,
+        "std": 0.44902711792128025
+      },
+      "validation_relative_rmse_percent": {
+        "mean": 4.886329323016298,
+        "std": 1.4128527072115258
+      },
+      "anchor_alone_rmse_usd": {
+        "mean": 52353.09390214988,
+        "std": 18494.44082578685
+      }
+    },
+    "shallower_trees": {
+      "description": "less complexity: trees of depth 2",
+      "folds": [
+        {
+          "fold": 1,
+          "validated_months": "2020-01 to 2020-06",
+          "training_months": 24,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 4,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 21632.376689621316,
+            "mae_usd": 17708.40661579167,
+            "rmse_percent_of_mean_revenue": 2.885089515716163,
+            "mae_percent_of_mean_revenue": 2.361753357030399,
+            "mape_percent": 2.352186333863375,
+            "bias_percent": 0.23804953929167297
+          },
+          "validation": {
+            "rmse_usd": 49857.26846889486,
+            "mae_usd": 39666.21445833067,
+            "rmse_percent_of_mean_revenue": 6.093123706988602,
+            "mae_percent_of_mean_revenue": 4.847661316089466,
+            "mape_percent": 5.140372336860736,
+            "bias_percent": 4.968993888912743
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 51351.598641792625,
+            "mae_usd": 40766.605700679145,
+            "rmse_percent_of_mean_revenue": 6.275747803377524,
+            "mae_percent_of_mean_revenue": 4.982141606960177,
+            "mape_percent": 5.272956085776844,
+            "bias_percent": 5.212808911022194
+          },
+          "no_model": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "training_relative_rmse_percent": 2.848368111421879,
+          "validation_relative_rmse_percent": 6.6277070583088165,
+          "anchor_alone": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "monthly": [
+            {
+              "month": "2020-01",
+              "revenue_usd": 934179.0,
+              "forecast_usd": 958211.259919273
+            },
+            {
+              "month": "2020-02",
+              "revenue_usd": 933204.06,
+              "forecast_usd": 945161.644147057
+            },
+            {
+              "month": "2020-03",
+              "revenue_usd": 740571.83,
+              "forecast_usd": 833650.9200795846
+            },
+            {
+              "month": "2020-04",
+              "revenue_usd": 792756.45,
+              "forecast_usd": 788680.6088999471
+            },
+            {
+              "month": "2020-05",
+              "revenue_usd": 760453.14,
+              "forecast_usd": 809998.7791037005
+            },
+            {
+              "month": "2020-06",
+              "revenue_usd": 748363.46,
+              "forecast_usd": 803670.3324003161
+            }
+          ]
+        },
+        {
+          "fold": 2,
+          "validated_months": "2020-07 to 2020-12",
+          "training_months": 30,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 4,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 21695.435250019345,
+            "mae_usd": 17874.28746646575,
+            "rmse_percent_of_mean_revenue": 2.8416126064723284,
+            "mae_percent_of_mean_revenue": 2.3411284452739487,
+            "mape_percent": 2.3213463720509,
+            "bias_percent": 0.07307710557993494
+          },
+          "validation": {
+            "rmse_usd": 38428.64737033537,
+            "mae_usd": 31761.341997415253,
+            "rmse_percent_of_mean_revenue": 5.114697983334614,
+            "mae_percent_of_mean_revenue": 4.227306527254516,
+            "mape_percent": 4.1131780977255605,
+            "bias_percent": -0.9863899568560857
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 35520.81551487327,
+            "mae_usd": 30696.563804738475,
+            "rmse_percent_of_mean_revenue": 4.727677290576925,
+            "mae_percent_of_mean_revenue": 4.085588844029823,
+            "mape_percent": 4.014782166971776,
+            "bias_percent": -0.45279741264533474
+          },
+          "no_model": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "training_relative_rmse_percent": 2.8133320424980557,
+          "validation_relative_rmse_percent": 4.875621234180564,
+          "anchor_alone": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "monthly": [
+            {
+              "month": "2020-07",
+              "revenue_usd": 775005.22,
+              "forecast_usd": 797733.433802373
+            },
+            {
+              "month": "2020-08",
+              "revenue_usd": 593622.44,
+              "forecast_usd": 606156.9371934613
+            },
+            {
+              "month": "2020-09",
+              "revenue_usd": 778653.96,
+              "forecast_usd": 775164.895794223
+            },
+            {
+              "month": "2020-10",
+              "revenue_usd": 810735.87,
+              "forecast_usd": 747409.7396971612
+            },
+            {
+              "month": "2020-11",
+              "revenue_usd": 762915.07,
+              "forecast_usd": 795996.4756180315
+            },
+            {
+              "month": "2020-12",
+              "revenue_usd": 787092.84,
+              "forecast_usd": 731684.0991379902
+            }
+          ]
+        },
+        {
+          "fold": 3,
+          "validated_months": "2021-01 to 2021-06",
+          "training_months": 36,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 2,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 19729.505931388656,
+            "mae_usd": 16885.426705807455,
+            "rmse_percent_of_mean_revenue": 2.5909938077549186,
+            "mae_percent_of_mean_revenue": 2.2174927333807446,
+            "mape_percent": 2.203589673806565,
+            "bias_percent": 0.1390500665268596
+          },
+          "validation": {
+            "rmse_usd": 25989.314535413396,
+            "mae_usd": 18222.88582045094,
+            "rmse_percent_of_mean_revenue": 2.9720923330447166,
+            "mae_percent_of_mean_revenue": 2.083937195000362,
+            "mape_percent": 2.2080079897214997,
+            "bias_percent": 0.303192035908401
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 24191.92061783417,
+            "mae_usd": 17130.053280342854,
+            "rmse_percent_of_mean_revenue": 2.7665455236196617,
+            "mae_percent_of_mean_revenue": 1.958962786409044,
+            "mape_percent": 2.0813413348615484,
+            "bias_percent": 0.42557086497308033
+          },
+          "no_model": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "training_relative_rmse_percent": 2.5564626597465936,
+          "validation_relative_rmse_percent": 3.1442760058410255,
+          "anchor_alone": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "monthly": [
+            {
+              "month": "2021-01",
+              "revenue_usd": 989840.35,
+              "forecast_usd": 988583.9366215153
+            },
+            {
+              "month": "2021-02",
+              "revenue_usd": 990511.66,
+              "forecast_usd": 991705.6919129948
+            },
+            {
+              "month": "2021-03",
+              "revenue_usd": 791503.01,
+              "forecast_usd": 808843.6161613927
+            },
+            {
+              "month": "2021-04",
+              "revenue_usd": 793077.99,
+              "forecast_usd": 834494.1709461415
+            },
+            {
+              "month": "2021-05",
+              "revenue_usd": 864662.64,
+              "forecast_usd": 819676.1570423691
+            },
+            {
+              "month": "2021-06",
+              "revenue_usd": 817074.7,
+              "forecast_usd": 813931.1004339388
+            }
+          ]
+        },
+        {
+          "fold": 4,
+          "validated_months": "2021-07 to 2021-12",
+          "training_months": 42,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 2,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 20610.952499630574,
+            "mae_usd": 17190.46848590929,
+            "rmse_percent_of_mean_revenue": 2.6505689548817544,
+            "mae_percent_of_mean_revenue": 2.2106946338089424,
+            "mape_percent": 2.214473518665176,
+            "bias_percent": 0.13070474505934124
+          },
+          "validation": {
+            "rmse_usd": 44232.61821157113,
+            "mae_usd": 35620.97427835306,
+            "rmse_percent_of_mean_revenue": 5.4578071049986345,
+            "mae_percent_of_mean_revenue": 4.395227195764577,
+            "mape_percent": 4.526868383937098,
+            "bias_percent": -4.102856426467931
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 44910.821591163585,
+            "mae_usd": 36338.83634313458,
+            "rmse_percent_of_mean_revenue": 5.541489766650472,
+            "mae_percent_of_mean_revenue": 4.483803292680962,
+            "mape_percent": 4.614371958506313,
+            "bias_percent": -4.07244996182186
+          },
+          "no_model": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "training_relative_rmse_percent": 2.641289544760307,
+          "validation_relative_rmse_percent": 5.794015138969036,
+          "anchor_alone": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "monthly": [
+            {
+              "month": "2021-07",
+              "revenue_usd": 864603.3,
+              "forecast_usd": 815680.1398498539
+            },
+            {
+              "month": "2021-08",
+              "revenue_usd": 701008.39,
+              "forecast_usd": 623111.0831865565
+            },
+            {
+              "month": "2021-09",
+              "revenue_usd": 797221.53,
+              "forecast_usd": 804216.342262019
+            },
+            {
+              "month": "2021-10",
+              "revenue_usd": 855257.87,
+              "forecast_usd": 805071.2633436887
+            },
+            {
+              "month": "2021-11",
+              "revenue_usd": 831051.66,
+              "forecast_usd": 834331.2978114792
+            },
+            {
+              "month": "2021-12",
+              "revenue_usd": 813537.52,
+              "forecast_usd": 787093.1980232808
+            }
+          ]
+        },
+        {
+          "fold": 5,
+          "validated_months": "2022-01 to 2022-06",
+          "training_months": 48,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 2,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 22576.015226693544,
+            "mae_usd": 18874.68485545582,
+            "rmse_percent_of_mean_revenue": 2.888029201712284,
+            "mae_percent_of_mean_revenue": 2.4145377511625896,
+            "mape_percent": 2.4412627118080064,
+            "bias_percent": 0.1615039327942552
+          },
+          "validation": {
+            "rmse_usd": 22722.993611376613,
+            "mae_usd": 20527.70673386673,
+            "rmse_percent_of_mean_revenue": 2.562264390981406,
+            "mae_percent_of_mean_revenue": 2.3147219460715003,
+            "mape_percent": 2.30603847970061,
+            "bias_percent": 0.37052220412325776
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 23650.539478495128,
+            "mae_usd": 21075.86131842407,
+            "rmse_percent_of_mean_revenue": 2.6668552643040937,
+            "mae_percent_of_mean_revenue": 2.3765323306002926,
+            "mape_percent": 2.3802103841177686,
+            "bias_percent": 0.15007901295867085
+          },
+          "no_model": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "training_relative_rmse_percent": 2.935800398438389,
+          "validation_relative_rmse_percent": 2.5530073163794644,
+          "anchor_alone": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "monthly": [
+            {
+              "month": "2022-01",
+              "revenue_usd": 985460.62,
+              "forecast_usd": 1010918.714906256
+            },
+            {
+              "month": "2022-02",
+              "revenue_usd": 990347.64,
+              "forecast_usd": 1004861.569567491
+            },
+            {
+              "month": "2022-03",
+              "revenue_usd": 816295.61,
+              "forecast_usd": 802207.0845220599
+            },
+            {
+              "month": "2022-04",
+              "revenue_usd": 883105.97,
+              "forecast_usd": 847069.6026517637
+            },
+            {
+              "month": "2022-05",
+              "revenue_usd": 836233.5,
+              "forecast_usd": 862651.0127894111
+            },
+            {
+              "month": "2022-06",
+              "revenue_usd": 809551.72,
+              "forecast_usd": 816203.530313866
+            }
+          ]
+        },
+        {
+          "fold": 6,
+          "validated_months": "2022-07 to 2022-12",
+          "training_months": 54,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 1,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 22359.10974895512,
+            "mae_usd": 18525.213840950182,
+            "rmse_percent_of_mean_revenue": 2.8181726541852843,
+            "mae_percent_of_mean_revenue": 2.3349431907475777,
+            "mape_percent": 2.374513041111684,
+            "bias_percent": 0.09795560224339127
+          },
+          "validation": {
+            "rmse_usd": 43745.442531650486,
+            "mae_usd": 38586.2452468082,
+            "rmse_percent_of_mean_revenue": 5.424380422185855,
+            "mae_percent_of_mean_revenue": 4.784646380728964,
+            "mape_percent": 4.69468258306702,
+            "bias_percent": 3.4256305997852343
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 44317.846075419504,
+            "mae_usd": 38894.33556257237,
+            "rmse_percent_of_mean_revenue": 5.4953577491191465,
+            "mae_percent_of_mean_revenue": 4.822849196391124,
+            "mape_percent": 4.730982771204188,
+            "bias_percent": 3.3985795105849768
+          },
+          "no_model": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "training_relative_rmse_percent": 2.8914639823752317,
+          "validation_relative_rmse_percent": 5.320074568438766,
+          "anchor_alone": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "monthly": [
+            {
+              "month": "2022-07",
+              "revenue_usd": 827817.86,
+              "forecast_usd": 859401.2657668327
+            },
+            {
+              "month": "2022-08",
+              "revenue_usd": 695862.9,
+              "forecast_usd": 700856.092962125
+            },
+            {
+              "month": "2022-09",
+              "revenue_usd": 805343.57,
+              "forecast_usd": 842563.4422718706
+            },
+            {
+              "month": "2022-10",
+              "revenue_usd": 818634.04,
+              "forecast_usd": 891353.032031535
+            },
+            {
+              "month": "2022-11",
+              "revenue_usd": 871703.25,
+              "forecast_usd": 838516.1478526297
+            },
+            {
+              "month": "2022-12",
+              "revenue_usd": 819396.63,
+              "forecast_usd": 871211.5363011155
+            }
+          ]
+        },
+        {
+          "fold": 7,
+          "validated_months": "2023-01 to 2023-06",
+          "training_months": 60,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 1,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 23791.862942084572,
+            "mae_usd": 19623.69456080404,
+            "rmse_percent_of_mean_revenue": 2.993827146001703,
+            "mae_percent_of_mean_revenue": 2.469329519255948,
+            "mape_percent": 2.4920423048611426,
+            "bias_percent": 0.10852951786131096
+          },
+          "validation": {
+            "rmse_usd": 30434.72034406824,
+            "mae_usd": 23373.407162706153,
+            "rmse_percent_of_mean_revenue": 3.2003010204127547,
+            "mae_percent_of_mean_revenue": 2.457783017149039,
+            "mape_percent": 2.5705012033001395,
+            "bias_percent": -0.37723840824009713
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 29632.79967373262,
+            "mae_usd": 22716.172184955893,
+            "rmse_percent_of_mean_revenue": 3.1159766858845632,
+            "mae_percent_of_mean_revenue": 2.388672811891147,
+            "mape_percent": 2.495455770915105,
+            "bias_percent": -0.39519337508070124
+          },
+          "no_model": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "training_relative_rmse_percent": 3.0401837350744665,
+          "validation_relative_rmse_percent": 3.419097699601607,
+          "anchor_alone": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "monthly": [
+            {
+              "month": "2023-01",
+              "revenue_usd": 1045038.73,
+              "forecast_usd": 1040455.1808397163
+            },
+            {
+              "month": "2023-02",
+              "revenue_usd": 1077508.59,
+              "forecast_usd": 1065443.4944343308
+            },
+            {
+              "month": "2023-03",
+              "revenue_usd": 897882.42,
+              "forecast_usd": 878108.8408044875
+            },
+            {
+              "month": "2023-04",
+              "revenue_usd": 928028.24,
+              "forecast_usd": 886311.747354185
+            },
+            {
+              "month": "2023-05",
+              "revenue_usd": 864052.91,
+              "forecast_usd": 920905.763013991
+            },
+            {
+              "month": "2023-06",
+              "revenue_usd": 893462.42,
+              "forecast_usd": 888213.5466050345
+            }
+          ]
+        },
+        {
+          "fold": 8,
+          "validated_months": "2023-07 to 2023-12",
+          "training_months": 66,
+          "params": {
+            "max_depth": 2,
+            "min_samples_leaf": 1,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 24657.749767724916,
+            "mae_usd": 20294.425056682645,
+            "rmse_percent_of_mean_revenue": 3.0482828918685345,
+            "mae_percent_of_mean_revenue": 2.5088724349684126,
+            "mape_percent": 2.547507753854413,
+            "bias_percent": 0.07125859184404104
+          },
+          "validation": {
+            "rmse_usd": 42768.783733565324,
+            "mae_usd": 35877.79688095903,
+            "rmse_percent_of_mean_revenue": 4.946376414405776,
+            "mae_percent_of_mean_revenue": 4.149406945924924,
+            "mape_percent": 4.48971319291066,
+            "bias_percent": 0.9658356919935589
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 46513.034553339196,
+            "mae_usd": 40829.648857039494,
+            "rmse_percent_of_mean_revenue": 5.379413604799711,
+            "mae_percent_of_mean_revenue": 4.722107913403925,
+            "mape_percent": 5.026175915256218,
+            "bias_percent": 0.1189656543931214
+          },
+          "no_model": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "training_relative_rmse_percent": 3.118463608032692,
+          "validation_relative_rmse_percent": 5.790864650260528,
+          "anchor_alone": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "monthly": [
+            {
+              "month": "2023-07",
+              "revenue_usd": 920967.64,
+              "forecast_usd": 902075.0303723224
+            },
+            {
+              "month": "2023-08",
+              "revenue_usd": 676682.89,
+              "forecast_usd": 760069.3523834285
+            },
+            {
+              "month": "2023-09",
+              "revenue_usd": 891575.54,
+              "forecast_usd": 863362.438507967
+            },
+            {
+              "month": "2023-10",
+              "revenue_usd": 932905.89,
+              "forecast_usd": 894029.759103591
+            },
+            {
+              "month": "2023-11",
+              "revenue_usd": 872451.14,
+              "forecast_usd": 907731.4900193735
+            },
+            {
+              "month": "2023-12",
+              "revenue_usd": 893309.63,
+              "forecast_usd": 882691.5031331674
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "training": {
+          "rmse_usd": {
+            "mean": 22131.626007014755,
+            "std": 1599.511514610475,
+            "min": 19729.505931388656,
+            "max": 24657.749767724916
+          },
+          "mae_usd": {
+            "mean": 18372.075948483354,
+            "std": 1185.1832103292102,
+            "min": 16885.426705807455,
+            "max": 20294.425056682645
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 2.839572097324121,
+            "std": 0.1557242048747543,
+            "min": 2.5909938077549186,
+            "max": 3.0482828918685345
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 2.35734400820357,
+            "std": 0.10731884708525335,
+            "min": 2.2106946338089424,
+            "max": 2.5088724349684126
+          },
+          "mape_percent": {
+            "mean": 2.3683652137526576,
+            "std": 0.12308305764459748,
+            "min": 2.203589673806565,
+            "max": 2.547507753854413
+          },
+          "bias_percent": {
+            "mean": 0.1275161376501009,
+            "std": 0.05461402029196134,
+            "min": 0.07125859184404104,
+            "max": 0.23804953929167297
+          }
+        },
+        "validation": {
+          "rmse_usd": {
+            "mean": 37272.47360085943,
+            "std": 9754.25241019762,
+            "min": 22722.993611376613,
+            "max": 49857.26846889486
+          },
+          "mae_usd": {
+            "mean": 30454.571572361256,
+            "std": 8511.243750560667,
+            "min": 18222.88582045094,
+            "max": 39666.21445833067
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 4.471380422044046,
+            "std": 1.3447786966066404,
+            "min": 2.562264390981406,
+            "max": 6.093123706988602
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 3.6575863154979187,
+            "std": 1.1659643367467087,
+            "min": 2.083937195000362,
+            "max": 4.847661316089466
+          },
+          "mape_percent": {
+            "mean": 3.7561702834029154,
+            "std": 1.1929456882834628,
+            "min": 2.2080079897214997,
+            "max": 5.140372336860736
+          },
+          "bias_percent": {
+            "mean": 0.570961203644885,
+            "std": 2.7497695286244,
+            "min": -4.102856426467931,
+            "max": 4.968993888912743
+          }
+        },
+        "validation_from_boundary": {
+          "rmse_usd": {
+            "mean": 37511.17201833126,
+            "std": 10751.919601526015,
+            "min": 23650.539478495128,
+            "max": 51351.598641792625
+          },
+          "mae_usd": {
+            "mean": 31056.00963148586,
+            "std": 9579.628845920352,
+            "min": 17130.053280342854,
+            "max": 40829.648857039494
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 4.496132961041512,
+            "std": 1.431014047385671,
+            "min": 2.6668552643040937,
+            "max": 6.275747803377524
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 3.7275823477958117,
+            "std": 1.2654010274039162,
+            "min": 1.958962786409044,
+            "max": 4.982141606960177
+          },
+          "mape_percent": {
+            "mean": 3.82703454845122,
+            "std": 1.304648166249786,
+            "min": 2.0813413348615484,
+            "max": 5.272956085776844
+          },
+          "bias_percent": {
+            "mean": 0.5481954005480183,
+            "std": 2.764143187976624,
+            "min": -4.07244996182186,
+            "max": 5.212808911022194
+          }
+        },
+        "no_model": {
+          "rmse_usd": {
+            "mean": 52353.09390214988,
+            "std": 18494.44082578685,
+            "min": 27306.281513247694,
+            "max": 76378.93858759322
+          },
+          "mae_usd": {
+            "mean": 44817.23520833335,
+            "std": 17949.101938300253,
+            "min": 22197.916666666646,
+            "max": 64582.416666666686
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 6.152932812836819,
+            "std": 2.022535774637824,
+            "min": 3.3859449183989745,
+            "max": 8.83352172791667
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 5.26447896442933,
+            "std": 1.9634146822745406,
+            "min": 2.752514036013266,
+            "max": 7.469208022734118
+          },
+          "mape_percent": {
+            "mean": 5.246830421417805,
+            "std": 1.92952255871481,
+            "min": 2.6739856425721165,
+            "max": 7.44430490717509
+          },
+          "bias_percent": {
+            "mean": -3.7648302865638295,
+            "std": 3.413702702650987,
+            "min": -7.44430490717509,
+            "max": 0.9112263727325179
+          }
+        },
+        "gap_rmse_usd": 15140.847593844672,
+        "gap_mae_usd": 12082.495623877901,
+        "gap_rmse_percent_of_mean_revenue": 1.6318083247199247,
+        "gap_mae_percent_of_mean_revenue": 1.3002423072943485,
+        "gap_mape_percent": 1.3878050696502577
+      },
+      "training_relative_rmse_percent": {
+        "mean": 2.855670510293452,
+        "std": 0.1882770455065013
+      },
+      "validation_relative_rmse_percent": {
+        "mean": 4.690582958997476,
+        "std": 1.4729998830303868
+      },
+      "anchor_alone_rmse_usd": {
+        "mean": 52353.09390214988,
+        "std": 18494.44082578685
+      },
+      "against_current": {
+        "lower_mean_validation_rmse": true,
+        "folds_improved": 5,
+        "improves_enough_folds": true,
+        "gap_not_wider": true,
+        "mean_change_usd": -1868.3058965239607,
+        "standard_error_of_change_usd": 1324.5654069766645,
+        "mean_change_without_best_fold_usd": -687.3081652130584,
+        "change_by_fold_usd": [
+          6.2027344084126526,
+          25.389208545006113,
+          -221.0918644429912,
+          -2316.0567437832506,
+          -10135.290015700277,
+          -1391.9612147113148,
+          2343.389347503846,
+          -3257.0286240111163
+        ],
+        "gap_before_usd": 20086.13691130709,
+        "gap_after_usd": 15140.84759384467,
+        "accepted": true
+      }
+    },
+    "bigger_leaves": {
+      "description": "more regularisation: at least 6 months in every leaf",
+      "folds": [
+        {
+          "fold": 1,
+          "validated_months": "2020-01 to 2020-06",
+          "training_months": 24,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 25406.600163148727,
+            "mae_usd": 21232.547581667448,
+            "rmse_percent_of_mean_revenue": 3.388454112666254,
+            "mae_percent_of_mean_revenue": 2.8317646876592764,
+            "mape_percent": 2.8159542882668145,
+            "bias_percent": 0.3038466009127518
+          },
+          "validation": {
+            "rmse_usd": 50527.80395853709,
+            "mae_usd": 40282.363573205505,
+            "rmse_percent_of_mean_revenue": 6.175070749291277,
+            "mae_percent_of_mean_revenue": 4.922961726524629,
+            "mape_percent": 5.212440611497945,
+            "bias_percent": 5.104852082102896
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 53131.04179952382,
+            "mae_usd": 42837.49213584854,
+            "rmse_percent_of_mean_revenue": 6.4932159403729335,
+            "mae_percent_of_mean_revenue": 5.235227418118966,
+            "mape_percent": 5.52802622854916,
+            "bias_percent": 5.52802622854916
+          },
+          "no_model": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "training_relative_rmse_percent": 3.3467513385706735,
+          "validation_relative_rmse_percent": 6.707512410274365,
+          "anchor_alone": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "monthly": [
+            {
+              "month": "2020-01",
+              "revenue_usd": 934179.0,
+              "forecast_usd": 960707.5194556136
+            },
+            {
+              "month": "2020-02",
+              "revenue_usd": 933204.06,
+              "forecast_usd": 945407.9789638126
+            },
+            {
+              "month": "2020-03",
+              "revenue_usd": 740571.83,
+              "forecast_usd": 833698.306578353
+            },
+            {
+              "month": "2020-04",
+              "revenue_usd": 792756.45,
+              "forecast_usd": 790197.7049812818
+            },
+            {
+              "month": "2020-05",
+              "revenue_usd": 760453.14,
+              "forecast_usd": 810063.8695568468
+            },
+            {
+              "month": "2020-06",
+              "revenue_usd": 748363.46,
+              "forecast_usd": 806029.2518658888
+            }
+          ]
+        },
+        {
+          "fold": 2,
+          "validated_months": "2020-07 to 2020-12",
+          "training_months": 30,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 25358.6763213768,
+            "mae_usd": 20461.350465883548,
+            "rmse_percent_of_mean_revenue": 3.3214145504737633,
+            "mae_percent_of_mean_revenue": 2.6799753385565888,
+            "mape_percent": 2.662667110313573,
+            "bias_percent": 0.1708252580772992
+          },
+          "validation": {
+            "rmse_usd": 39941.094644514014,
+            "mae_usd": 34007.503688812525,
+            "rmse_percent_of_mean_revenue": 5.315998615870356,
+            "mae_percent_of_mean_revenue": 4.52626158967239,
+            "mape_percent": 4.445886830586598,
+            "bias_percent": -0.5604936731079987
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 39219.24254024607,
+            "mae_usd": 34032.0985142526,
+            "rmse_percent_of_mean_revenue": 5.219923012001583,
+            "mae_percent_of_mean_revenue": 4.529535061748223,
+            "mape_percent": 4.4700465302790615,
+            "bias_percent": -0.38715219500981835
+          },
+          "no_model": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "training_relative_rmse_percent": 3.3120996947816477,
+          "validation_relative_rmse_percent": 5.105100738066374,
+          "anchor_alone": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "monthly": [
+            {
+              "month": "2020-07",
+              "revenue_usd": 775005.22,
+              "forecast_usd": 806533.7062778631
+            },
+            {
+              "month": "2020-08",
+              "revenue_usd": 593622.44,
+              "forecast_usd": 613439.2064814152
+            },
+            {
+              "month": "2020-09",
+              "revenue_usd": 778653.96,
+              "forecast_usd": 782533.2470103183
+            },
+            {
+              "month": "2020-10",
+              "revenue_usd": 810735.87,
+              "forecast_usd": 742672.8136107173
+            },
+            {
+              "month": "2020-11",
+              "revenue_usd": 762915.07,
+              "forecast_usd": 791536.080619443
+            },
+            {
+              "month": "2020-12",
+              "revenue_usd": 787092.84,
+              "forecast_usd": 734956.4246454473
+            }
+          ]
+        },
+        {
+          "fold": 3,
+          "validated_months": "2021-01 to 2021-06",
+          "training_months": 36,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 23675.024923571396,
+            "mae_usd": 19880.03856269647,
+            "rmse_percent_of_mean_revenue": 3.1091423773478812,
+            "mae_percent_of_mean_revenue": 2.6107626310057372,
+            "mape_percent": 2.595570114639138,
+            "bias_percent": 0.20943711229554082
+          },
+          "validation": {
+            "rmse_usd": 32986.195391153415,
+            "mae_usd": 23678.662341088795,
+            "rmse_percent_of_mean_revenue": 3.77224333041851,
+            "mae_percent_of_mean_revenue": 2.707850209162327,
+            "mape_percent": 2.8156536122061264,
+            "bias_percent": -0.3287806334864619
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 28919.963363443847,
+            "mae_usd": 21473.918181369296,
+            "rmse_percent_of_mean_revenue": 3.3072361822896514,
+            "mae_percent_of_mean_revenue": 2.455719541979911,
+            "mape_percent": 2.5609233803822606,
+            "bias_percent": -0.07405040166259645
+          },
+          "no_model": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "training_relative_rmse_percent": 3.080556277111556,
+          "validation_relative_rmse_percent": 3.938147219266,
+          "anchor_alone": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "monthly": [
+            {
+              "month": "2021-01",
+              "revenue_usd": 989840.35,
+              "forecast_usd": 996067.638283486
+            },
+            {
+              "month": "2021-02",
+              "revenue_usd": 990511.66,
+              "forecast_usd": 996126.9237725375
+            },
+            {
+              "month": "2021-03",
+              "revenue_usd": 791503.01,
+              "forecast_usd": 794737.5820421466
+            },
+            {
+              "month": "2021-04",
+              "revenue_usd": 793077.99,
+              "forecast_usd": 839520.0906194759
+            },
+            {
+              "month": "2021-05",
+              "revenue_usd": 864662.64,
+              "forecast_usd": 801511.3846448001
+            },
+            {
+              "month": "2021-06",
+              "revenue_usd": 817074.7,
+              "forecast_usd": 799673.2060263131
+            }
+          ]
+        },
+        {
+          "fold": 4,
+          "validated_months": "2021-07 to 2021-12",
+          "training_months": 42,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 23002.35785610734,
+            "mae_usd": 18931.22052347379,
+            "rmse_percent_of_mean_revenue": 2.958103737494487,
+            "mae_percent_of_mean_revenue": 2.4345553849798707,
+            "mape_percent": 2.441298943262424,
+            "bias_percent": 0.1470567655134763
+          },
+          "validation": {
+            "rmse_usd": 42238.16738013825,
+            "mae_usd": 35311.1385434762,
+            "rmse_percent_of_mean_revenue": 5.211714326445517,
+            "mae_percent_of_mean_revenue": 4.356996954291984,
+            "mape_percent": 4.479691339208303,
+            "bias_percent": -4.0422092886210175
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 42093.78544619365,
+            "mae_usd": 35453.454211279575,
+            "rmse_percent_of_mean_revenue": 5.193899221286082,
+            "mae_percent_of_mean_revenue": 4.374557105472153,
+            "mape_percent": 4.4981828451275945,
+            "bias_percent": -3.9830823294484423
+          },
+          "no_model": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "training_relative_rmse_percent": 2.953924882594421,
+          "validation_relative_rmse_percent": 5.530224651217251,
+          "anchor_alone": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "monthly": [
+            {
+              "month": "2021-07",
+              "revenue_usd": 864603.3,
+              "forecast_usd": 821644.4973865009
+            },
+            {
+              "month": "2021-08",
+              "revenue_usd": 701008.39,
+              "forecast_usd": 626796.5974570753
+            },
+            {
+              "month": "2021-09",
+              "revenue_usd": 797221.53,
+              "forecast_usd": 807684.633291502
+            },
+            {
+              "month": "2021-10",
+              "revenue_usd": 855257.87,
+              "forecast_usd": 803387.240790761
+            },
+            {
+              "month": "2021-11",
+              "revenue_usd": 831051.66,
+              "forecast_usd": 818600.2408066815
+            },
+            {
+              "month": "2021-12",
+              "revenue_usd": 813537.52,
+              "forecast_usd": 793626.4355896263
+            }
+          ]
+        },
+        {
+          "fold": 5,
+          "validated_months": "2022-01 to 2022-06",
+          "training_months": 48,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 25051.496630566526,
+            "mae_usd": 20465.52791451247,
+            "rmse_percent_of_mean_revenue": 3.2047043328588876,
+            "mae_percent_of_mean_revenue": 2.618045817744001,
+            "mape_percent": 2.6411578051440388,
+            "bias_percent": 0.17761086711661783
+          },
+          "validation": {
+            "rmse_usd": 30974.070935493386,
+            "mae_usd": 27897.272203213844,
+            "rmse_percent_of_mean_revenue": 3.492662998506154,
+            "mae_percent_of_mean_revenue": 3.145720515276763,
+            "mape_percent": 3.1426028729597135,
+            "bias_percent": 1.1275807119321664
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 31474.943260491786,
+            "mae_usd": 28327.7994862005,
+            "rmse_percent_of_mean_revenue": 3.549141794597922,
+            "mae_percent_of_mean_revenue": 3.1942671436572057,
+            "mape_percent": 3.188966113798935,
+            "bias_percent": 1.1319850111068626
+          },
+          "no_model": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "training_relative_rmse_percent": 3.253704915834401,
+          "validation_relative_rmse_percent": 3.5101749387930044,
+          "anchor_alone": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "monthly": [
+            {
+              "month": "2022-01",
+              "revenue_usd": 985460.62,
+              "forecast_usd": 1016112.5217465637
+            },
+            {
+              "month": "2022-02",
+              "revenue_usd": 990347.64,
+              "forecast_usd": 1012696.7539456959
+            },
+            {
+              "month": "2022-03",
+              "revenue_usd": 816295.61,
+              "forecast_usd": 807953.6641296877
+            },
+            {
+              "month": "2022-04",
+              "revenue_usd": 883105.97,
+              "forecast_usd": 838746.3260270966
+            },
+            {
+              "month": "2022-05",
+              "revenue_usd": 836233.5,
+              "forecast_usd": 880816.2077113679
+            },
+            {
+              "month": "2022-06",
+              "revenue_usd": 809551.72,
+              "forecast_usd": 826650.0399724399
+            }
+          ]
+        },
+        {
+          "fold": 6,
+          "validated_months": "2022-07 to 2022-12",
+          "training_months": 54,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 22751.47189946748,
+            "mae_usd": 18712.23572934105,
+            "rmse_percent_of_mean_revenue": 2.8676265141791037,
+            "mae_percent_of_mean_revenue": 2.3585156843537627,
+            "mape_percent": 2.393407906949905,
+            "bias_percent": 0.08145243386188279
+          },
+          "validation": {
+            "rmse_usd": 44437.39198394481,
+            "mae_usd": 38770.770337468304,
+            "rmse_percent_of_mean_revenue": 5.510181292972611,
+            "mae_percent_of_mean_revenue": 4.807527262284902,
+            "mape_percent": 4.7085842428867295,
+            "bias_percent": 3.2652335151070457
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 45284.9326049172,
+            "mae_usd": 39208.076040346816,
+            "rmse_percent_of_mean_revenue": 5.615275275004763,
+            "mae_percent_of_mean_revenue": 4.86175262510957,
+            "mape_percent": 4.7591988202073265,
+            "bias_percent": 3.2218884758031265
+          },
+          "no_model": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "training_relative_rmse_percent": 2.934257153005525,
+          "validation_relative_rmse_percent": 5.3956905122912024,
+          "anchor_alone": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "monthly": [
+            {
+              "month": "2022-07",
+              "revenue_usd": 827817.86,
+              "forecast_usd": 854735.8057164879
+            },
+            {
+              "month": "2022-08",
+              "revenue_usd": 695862.9,
+              "forecast_usd": 699911.4851054241
+            },
+            {
+              "month": "2022-09",
+              "revenue_usd": 805343.57,
+              "forecast_usd": 840801.2377554963
+            },
+            {
+              "month": "2022-10",
+              "revenue_usd": 818634.04,
+              "forecast_usd": 892210.5994210424
+            },
+            {
+              "month": "2022-11",
+              "revenue_usd": 871703.25,
+              "forecast_usd": 833958.0443911375
+            },
+            {
+              "month": "2022-12",
+              "revenue_usd": 819396.63,
+              "forecast_usd": 874275.2884174967
+            }
+          ]
+        },
+        {
+          "fold": 7,
+          "validated_months": "2023-01 to 2023-06",
+          "training_months": 60,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 23447.860968733516,
+            "mae_usd": 19160.905971217024,
+            "rmse_percent_of_mean_revenue": 2.950539974727913,
+            "mae_percent_of_mean_revenue": 2.4110949436055193,
+            "mape_percent": 2.433397164984206,
+            "bias_percent": 0.1251876386604992
+          },
+          "validation": {
+            "rmse_usd": 29547.606877688926,
+            "mae_usd": 22251.84660485183,
+            "rmse_percent_of_mean_revenue": 3.1070184109594714,
+            "mae_percent_of_mean_revenue": 2.3398476013746192,
+            "mape_percent": 2.45748385017381,
+            "bias_percent": -0.35649264856848806
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 28019.471117314475,
+            "mae_usd": 21029.657348501456,
+            "rmse_percent_of_mean_revenue": 2.946330407982347,
+            "mae_percent_of_mean_revenue": 2.2113307797965973,
+            "mape_percent": 2.3181143809871103,
+            "bias_percent": -0.39974796329903795
+          },
+          "no_model": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "training_relative_rmse_percent": 3.0000750403357186,
+          "validation_relative_rmse_percent": 3.3211533582352173,
+          "anchor_alone": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "monthly": [
+            {
+              "month": "2023-01",
+              "revenue_usd": 1045038.73,
+              "forecast_usd": 1040703.754067932
+            },
+            {
+              "month": "2023-02",
+              "revenue_usd": 1077508.59,
+              "forecast_usd": 1069823.1643268757
+            },
+            {
+              "month": "2023-03",
+              "revenue_usd": 897882.42,
+              "forecast_usd": 879941.1395230967
+            },
+            {
+              "month": "2023-04",
+              "revenue_usd": 928028.24,
+              "forecast_usd": 885211.3757341497
+            },
+            {
+              "month": "2023-05",
+              "revenue_usd": 864052.91,
+              "forecast_usd": 918513.9368489443
+            },
+            {
+              "month": "2023-06",
+              "revenue_usd": 893462.42,
+              "forecast_usd": 887190.9135677792
+            }
+          ]
+        },
+        {
+          "fold": 8,
+          "validated_months": "2023-07 to 2023-12",
+          "training_months": 66,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 6,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 23714.496313001488,
+            "mae_usd": 19352.52780000471,
+            "rmse_percent_of_mean_revenue": 2.931674385584929,
+            "mae_percent_of_mean_revenue": 2.3924315869398796,
+            "mape_percent": 2.4282874436632107,
+            "bias_percent": 0.08297336372160541
+          },
+          "validation": {
+            "rmse_usd": 43494.805798112284,
+            "mae_usd": 35849.027123654996,
+            "rmse_percent_of_mean_revenue": 5.030343693877295,
+            "mae_percent_of_mean_revenue": 4.146079611440423,
+            "mape_percent": 4.506702961985946,
+            "bias_percent": 1.2195754469639728
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 46960.197760395335,
+            "mae_usd": 40664.18746832506,
+            "rmse_percent_of_mean_revenue": 5.431129771304503,
+            "mae_percent_of_mean_revenue": 4.702971659361012,
+            "mape_percent": 5.026938960728686,
+            "bias_percent": 0.2876249926722876
+          },
+          "no_model": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "training_relative_rmse_percent": 2.9969960135108114,
+          "validation_relative_rmse_percent": 5.919746228969871,
+          "anchor_alone": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "monthly": [
+            {
+              "month": "2023-07",
+              "revenue_usd": 920967.64,
+              "forecast_usd": 904966.643517824
+            },
+            {
+              "month": "2023-08",
+              "revenue_usd": 676682.89,
+              "forecast_usd": 762537.0421068834
+            },
+            {
+              "month": "2023-09",
+              "revenue_usd": 891575.54,
+              "forecast_usd": 863660.6672475565
+            },
+            {
+              "month": "2023-10",
+              "revenue_usd": 932905.89,
+              "forecast_usd": 896707.6302183382
+            },
+            {
+              "month": "2023-11",
+              "revenue_usd": 872451.14,
+              "forecast_usd": 911635.831929927
+            },
+            {
+              "month": "2023-12",
+              "revenue_usd": 893309.63,
+              "forecast_usd": 883368.4403111617
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "training": {
+          "rmse_usd": {
+            "mean": 24050.998134496658,
+            "std": 1066.064523783163,
+            "min": 22751.47189946748,
+            "max": 25406.600163148727
+          },
+          "mae_usd": {
+            "mean": 19774.544318599565,
+            "std": 884.8250908678446,
+            "min": 18712.23572934105,
+            "max": 21232.547581667448
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 3.0914574981666525,
+            "std": 0.19548356226332692,
+            "min": 2.8676265141791037,
+            "max": 3.388454112666254
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 2.5421432593555795,
+            "std": 0.1682810375775686,
+            "min": 2.3585156843537627,
+            "max": 2.8317646876592764
+          },
+          "mape_percent": {
+            "mean": 2.5514675971529135,
+            "std": 0.15049531653606243,
+            "min": 2.393407906949905,
+            "max": 2.8159542882668145
+          },
+          "bias_percent": {
+            "mean": 0.16229875501995916,
+            "std": 0.07270604021456195,
+            "min": 0.08145243386188279,
+            "max": 0.3038466009127518
+          }
+        },
+        "validation": {
+          "rmse_usd": {
+            "mean": 39268.39212119777,
+            "std": 7400.608143763986,
+            "min": 29547.606877688926,
+            "max": 50527.80395853709
+          },
+          "mae_usd": {
+            "mean": 32256.0730519715,
+            "std": 6812.053810234682,
+            "min": 22251.84660485183,
+            "max": 40282.363573205505
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 4.701904177292649,
+            "std": 1.0979602292203785,
+            "min": 3.1070184109594714,
+            "max": 6.175070749291277
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 3.8691556837535046,
+            "std": 0.9962991943666796,
+            "min": 2.3398476013746192,
+            "max": 4.922961726524629
+          },
+          "mape_percent": {
+            "mean": 3.9711307901881465,
+            "std": 1.0119475865855954,
+            "min": 2.45748385017381,
+            "max": 5.212440611497945
+          },
+          "bias_percent": {
+            "mean": 0.6786581890402644,
+            "std": 2.743414049389748,
+            "min": -4.0422092886210175,
+            "max": 5.104852082102896
+          }
+        },
+        "validation_from_boundary": {
+          "rmse_usd": {
+            "mean": 39387.94723656577,
+            "std": 9178.956148675294,
+            "min": 28019.471117314475,
+            "max": 53131.04179952382
+          },
+          "mae_usd": {
+            "mean": 32878.33542326548,
+            "std": 8443.015700875028,
+            "min": 21029.657348501456,
+            "max": 42837.49213584854
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 4.719518950604973,
+            "std": 1.2783211167608086,
+            "min": 2.946330407982347,
+            "max": 6.4932159403729335
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 3.9456701669054546,
+            "std": 1.1583858982039672,
+            "min": 2.2113307797965973,
+            "max": 5.235227418118966
+          },
+          "mape_percent": {
+            "mean": 4.043799657507517,
+            "std": 1.193858687364193,
+            "min": 2.3181143809871103,
+            "max": 5.52802622854916
+          },
+          "bias_percent": {
+            "mean": 0.6656864773389426,
+            "std": 2.801498660368839,
+            "min": -3.9830823294484423,
+            "max": 5.52802622854916
+          }
+        },
+        "no_model": {
+          "rmse_usd": {
+            "mean": 52353.09390214988,
+            "std": 18494.44082578685,
+            "min": 27306.281513247694,
+            "max": 76378.93858759322
+          },
+          "mae_usd": {
+            "mean": 44817.23520833335,
+            "std": 17949.101938300253,
+            "min": 22197.916666666646,
+            "max": 64582.416666666686
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 6.152932812836819,
+            "std": 2.022535774637824,
+            "min": 3.3859449183989745,
+            "max": 8.83352172791667
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 5.26447896442933,
+            "std": 1.9634146822745406,
+            "min": 2.752514036013266,
+            "max": 7.469208022734118
+          },
+          "mape_percent": {
+            "mean": 5.246830421417805,
+            "std": 1.92952255871481,
+            "min": 2.6739856425721165,
+            "max": 7.44430490717509
+          },
+          "bias_percent": {
+            "mean": -3.7648302865638295,
+            "std": 3.413702702650987,
+            "min": -7.44430490717509,
+            "max": 0.9112263727325179
+          }
+        },
+        "gap_rmse_usd": 15217.393986701114,
+        "gap_mae_usd": 12481.528733371935,
+        "gap_rmse_percent_of_mean_revenue": 1.6104466791259964,
+        "gap_mae_percent_of_mean_revenue": 1.327012424397925,
+        "gap_mape_percent": 1.419663193035233
+      },
+      "training_relative_rmse_percent": {
+        "mean": 3.109795664468094,
+        "std": 0.1684007010660667
+      },
+      "validation_relative_rmse_percent": {
+        "mean": 4.928468757139161,
+        "std": 1.2150831495498104
+      },
+      "anchor_alone_rmse_usd": {
+        "mean": 52353.09390214988,
+        "std": 18494.44082578685
+      },
+      "against_current": {
+        "lower_mean_validation_rmse": false,
+        "folds_improved": 4,
+        "improves_enough_folds": false,
+        "gap_not_wider": true,
+        "mean_change_usd": 127.61262381438564,
+        "standard_error_of_change_usd": 1193.3703428334843,
+        "mean_change_without_best_fold_usd": 761.629795104459,
+        "change_by_fold_usd": [
+          676.7382240506486,
+          1537.836482723651,
+          6775.788991297028,
+          -4310.507575216128,
+          -1884.2126915835033,
+          -700.011762416987,
+          1456.275881124533,
+          -2531.0065594641565
+        ],
+        "gap_before_usd": 20086.13691130709,
+        "gap_after_usd": 15217.393986701114,
+        "accepted": false
+      }
+    },
+    "anchor_two_years": {
+      "description": "the cause: multiply by two years of the same month instead of one",
+      "folds": [
+        {
+          "fold": 1,
+          "validated_months": "2020-01 to 2020-06",
+          "training_months": 24,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 27318.906144048047,
+            "mae_usd": 23373.120979289404,
+            "rmse_percent_of_mean_revenue": 3.6434965435324353,
+            "mae_percent_of_mean_revenue": 3.1172509269065345,
+            "mape_percent": 3.057034421329528,
+            "bias_percent": 0.3313703211690515
+          },
+          "validation": {
+            "rmse_usd": 30227.776710660884,
+            "mae_usd": 22059.615403675067,
+            "rmse_percent_of_mean_revenue": 3.694177168975747,
+            "mae_percent_of_mean_revenue": 2.69593521087183,
+            "mape_percent": 2.759456014158468,
+            "bias_percent": 1.4968732958697095
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 32808.101535548136,
+            "mae_usd": 25898.11041832785,
+            "rmse_percent_of_mean_revenue": 4.009522129601911,
+            "mae_percent_of_mean_revenue": 3.165042839331863,
+            "mape_percent": 3.234964989980976,
+            "bias_percent": 2.5572312777195445
+          },
+          "no_model": {
+            "rmse_usd": 34648.48062299225,
+            "mae_usd": 30295.380000000023,
+            "rmse_percent_of_mean_revenue": 4.234437328366717,
+            "mae_percent_of_mean_revenue": 3.7024390577151935,
+            "mape_percent": 3.8517280408973558,
+            "bias_percent": 0.9112263727325179
+          },
+          "training_relative_rmse_percent": 3.525168722936911,
+          "validation_relative_rmse_percent": 3.887481570385237,
+          "anchor_alone": {
+            "rmse_usd": 38262.05043018479,
+            "mae_usd": 31437.946036631107,
+            "rmse_percent_of_mean_revenue": 4.676056545287912,
+            "mae_percent_of_mean_revenue": 3.842073586809787,
+            "mape_percent": 3.9021088801414363,
+            "bias_percent": 3.485060222194453
+          },
+          "monthly": [
+            {
+              "month": "2020-01",
+              "revenue_usd": 934179.0,
+              "forecast_usd": 966361.477933131
+            },
+            {
+              "month": "2020-02",
+              "revenue_usd": 933204.06,
+              "forecast_usd": 937678.8868486654
+            },
+            {
+              "month": "2020-03",
+              "revenue_usd": 740571.83,
+              "forecast_usd": 799576.089179927
+            },
+            {
+              "month": "2020-04",
+              "revenue_usd": 792756.45,
+              "forecast_usd": 762728.8321925416
+            },
+            {
+              "month": "2020-05",
+              "revenue_usd": 760453.14,
+              "forecast_usd": 767041.6232109657
+            },
+            {
+              "month": "2020-06",
+              "revenue_usd": 748363.46,
+              "forecast_usd": 748443.4874419029
+            }
+          ]
+        },
+        {
+          "fold": 2,
+          "validated_months": "2020-07 to 2020-12",
+          "training_months": 30,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 23904.970898777356,
+            "mae_usd": 20167.366712688967,
+            "rmse_percent_of_mean_revenue": 3.1310119331788613,
+            "mae_percent_of_mean_revenue": 2.6414700986501884,
+            "mape_percent": 2.634835593683142,
+            "bias_percent": 0.14311002672128928
+          },
+          "validation": {
+            "rmse_usd": 50603.40062014095,
+            "mae_usd": 37255.18385325545,
+            "rmse_percent_of_mean_revenue": 6.73510854044535,
+            "mae_percent_of_mean_revenue": 4.958514721756728,
+            "mape_percent": 4.750297774423415,
+            "bias_percent": -4.6384547520489186
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 54265.08745725249,
+            "mae_usd": 39952.393680514746,
+            "rmse_percent_of_mean_revenue": 7.222464290984583,
+            "mae_percent_of_mean_revenue": 5.3175024719933575,
+            "mape_percent": 5.0958227424379245,
+            "bias_percent": -5.0958227424379245
+          },
+          "no_model": {
+            "rmse_usd": 41274.99992246377,
+            "mae_usd": 36113.505000000005,
+            "rmse_percent_of_mean_revenue": 5.493536028762894,
+            "mae_percent_of_mean_revenue": 4.806561870747223,
+            "mape_percent": 4.683734163090967,
+            "bias_percent": -3.351098277421543
+          },
+          "training_relative_rmse_percent": 3.0874841535479667,
+          "validation_relative_rmse_percent": 6.356079167742831,
+          "anchor_alone": {
+            "rmse_usd": 36654.638434362,
+            "mae_usd": 26877.521506602294,
+            "rmse_percent_of_mean_revenue": 4.878584548484842,
+            "mae_percent_of_mean_revenue": 3.577289716238372,
+            "mape_percent": 3.4203267626652636,
+            "bias_percent": -2.672102568354855
+          },
+          "monthly": [
+            {
+              "month": "2020-07",
+              "revenue_usd": 775005.22,
+              "forecast_usd": 762697.7607521891
+            },
+            {
+              "month": "2020-08",
+              "revenue_usd": 593622.44,
+              "forecast_usd": 585363.9569597476
+            },
+            {
+              "month": "2020-09",
+              "revenue_usd": 778653.96,
+              "forecast_usd": 745899.3849971758
+            },
+            {
+              "month": "2020-10",
+              "revenue_usd": 810735.87,
+              "forecast_usd": 724487.528149013
+            },
+            {
+              "month": "2020-11",
+              "revenue_usd": 762915.07,
+              "forecast_usd": 765474.8718173155
+            },
+            {
+              "month": "2020-12",
+              "revenue_usd": 787092.84,
+              "forecast_usd": 705690.3978396573
+            }
+          ]
+        },
+        {
+          "fold": 3,
+          "validated_months": "2021-01 to 2021-06",
+          "training_months": 36,
+          "params": {
+            "max_depth": 5,
+            "min_samples_leaf": 2,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 18873.36936023464,
+            "mae_usd": 15216.919992320873,
+            "rmse_percent_of_mean_revenue": 2.4785609590983553,
+            "mae_percent_of_mean_revenue": 1.9983746988047537,
+            "mape_percent": 1.9748495153307455,
+            "bias_percent": 0.1020872354648508
+          },
+          "validation": {
+            "rmse_usd": 33733.27903160838,
+            "mae_usd": 28237.115262165607,
+            "rmse_percent_of_mean_revenue": 3.8576785025125564,
+            "mae_percent_of_mean_revenue": 3.2291468735594124,
+            "mape_percent": 3.123787113213418,
+            "bias_percent": -1.7739060441818642
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 39027.27431226957,
+            "mae_usd": 30744.799781572056,
+            "rmse_percent_of_mean_revenue": 4.463090498407574,
+            "mae_percent_of_mean_revenue": 3.5159212678462324,
+            "mape_percent": 3.366761663701132,
+            "bias_percent": -3.2969222629441153
+          },
+          "no_model": {
+            "rmse_usd": 63975.633093564225,
+            "mae_usd": 56190.40166666667,
+            "rmse_percent_of_mean_revenue": 7.316140960931258,
+            "mae_percent_of_mean_revenue": 6.425835577796499,
+            "mape_percent": 6.390944748513884,
+            "bias_percent": -6.390944748513884
+          },
+          "training_relative_rmse_percent": 2.4175287574980735,
+          "validation_relative_rmse_percent": 3.6972834526761216,
+          "anchor_alone": {
+            "rmse_usd": 36683.471745420255,
+            "mae_usd": 29797.934038129908,
+            "rmse_percent_of_mean_revenue": 4.19505735618632,
+            "mae_percent_of_mean_revenue": 3.4076393655793424,
+            "mape_percent": 3.2820601460935053,
+            "bias_percent": -2.2288605281798866
+          },
+          "monthly": [
+            {
+              "month": "2021-01",
+              "revenue_usd": 989840.35,
+              "forecast_usd": 950532.6020161532
+            },
+            {
+              "month": "2021-02",
+              "revenue_usd": 990511.66,
+              "forecast_usd": 948088.9250416488
+            },
+            {
+              "month": "2021-03",
+              "revenue_usd": 791503.01,
+              "forecast_usd": 808357.9696476777
+            },
+            {
+              "month": "2021-04",
+              "revenue_usd": 793077.99,
+              "forecast_usd": 808306.3202951376
+            },
+            {
+              "month": "2021-05",
+              "revenue_usd": 864662.64,
+              "forecast_usd": 810206.2617259205
+            },
+            {
+              "month": "2021-06",
+              "revenue_usd": 817074.7,
+              "forecast_usd": 815922.1595860992
+            }
+          ]
+        },
+        {
+          "fold": 4,
+          "validated_months": "2021-07 to 2021-12",
+          "training_months": 42,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 1,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 21629.00492324865,
+            "mae_usd": 17701.285376400214,
+            "rmse_percent_of_mean_revenue": 2.781490519449552,
+            "mae_percent_of_mean_revenue": 2.2763856974115946,
+            "mape_percent": 2.272819763468388,
+            "bias_percent": 0.1378423540254046
+          },
+          "validation": {
+            "rmse_usd": 41466.02299420234,
+            "mae_usd": 37825.12718191749,
+            "rmse_percent_of_mean_revenue": 5.116440402223157,
+            "mae_percent_of_mean_revenue": 4.667194849138312,
+            "mape_percent": 4.803120952083596,
+            "bias_percent": 1.0155690903623564
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 34137.14831609095,
+            "mae_usd": 30516.379096508626,
+            "rmse_percent_of_mean_revenue": 4.212139777319674,
+            "mae_percent_of_mean_revenue": 3.7653776191839112,
+            "mape_percent": 3.901812220936522,
+            "bias_percent": -0.09287261509607186
+          },
+          "no_model": {
+            "rmse_usd": 67365.2201732273,
+            "mae_usd": 59109.145000000055,
+            "rmse_percent_of_mean_revenue": 8.31210975422334,
+            "mae_percent_of_mean_revenue": 7.29340302688666,
+            "mape_percent": 7.44430490717509,
+            "bias_percent": -7.44430490717509
+          },
+          "training_relative_rmse_percent": 2.7831781762026977,
+          "validation_relative_rmse_percent": 5.36598076517893,
+          "anchor_alone": {
+            "rmse_usd": 38112.12815096596,
+            "mae_usd": 33608.06442642728,
+            "rmse_percent_of_mean_revenue": 4.70260753758741,
+            "mae_percent_of_mean_revenue": 4.146856781899084,
+            "mape_percent": 4.294670430903749,
+            "bias_percent": 0.15718465952608077
+          },
+          "monthly": [
+            {
+              "month": "2021-07",
+              "revenue_usd": 864603.3,
+              "forecast_usd": 838451.6952638826
+            },
+            {
+              "month": "2021-08",
+              "revenue_usd": 701008.39,
+              "forecast_usd": 642558.5802172393
+            },
+            {
+              "month": "2021-09",
+              "revenue_usd": 797221.53,
+              "forecast_usd": 849018.3328748366
+            },
+            {
+              "month": "2021-10",
+              "revenue_usd": 855257.87,
+              "forecast_usd": 863465.8276155483
+            },
+            {
+              "month": "2021-11",
+              "revenue_usd": 831051.66,
+              "forecast_usd": 878376.3817866907
+            },
+            {
+              "month": "2021-12",
+              "revenue_usd": 813537.52,
+              "forecast_usd": 848557.3862955513
+            }
+          ]
+        },
+        {
+          "fold": 5,
+          "validated_months": "2022-01 to 2022-06",
+          "training_months": 48,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 1,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 23282.74637768012,
+            "mae_usd": 19282.32144020058,
+            "rmse_percent_of_mean_revenue": 2.978437547973304,
+            "mae_percent_of_mean_revenue": 2.4666845250111984,
+            "mape_percent": 2.4752688720449045,
+            "bias_percent": 0.17162624639221918
+          },
+          "validation": {
+            "rmse_usd": 36753.41252559253,
+            "mae_usd": 30770.565085565846,
+            "rmse_percent_of_mean_revenue": 4.144346549225235,
+            "mae_percent_of_mean_revenue": 3.4697155030509483,
+            "mape_percent": 3.35001443078228,
+            "bias_percent": 2.55913349157123
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 54536.204023558916,
+            "mae_usd": 50607.62291333438,
+            "rmse_percent_of_mean_revenue": 6.149549481847359,
+            "mae_percent_of_mean_revenue": 5.706559281789792,
+            "mape_percent": 5.67096239473583,
+            "bias_percent": 5.67096239473583
+          },
+          "no_model": {
+            "rmse_usd": 40007.770837454605,
+            "mae_usd": 25886.074999999993,
+            "rmse_percent_of_mean_revenue": 4.51131080404964,
+            "mae_percent_of_mean_revenue": 2.9189361810833927,
+            "mape_percent": 3.003603087033108,
+            "bias_percent": -1.4069566846055872
+          },
+          "training_relative_rmse_percent": 3.00854564264673,
+          "validation_relative_rmse_percent": 3.9190211346119352,
+          "anchor_alone": {
+            "rmse_usd": 53400.85278413532,
+            "mae_usd": 47541.337947472035,
+            "rmse_percent_of_mean_revenue": 6.021526295211633,
+            "mae_percent_of_mean_revenue": 5.360802339944894,
+            "mape_percent": 5.228120293524638,
+            "bias_percent": 4.4410131081416555
+          },
+          "monthly": [
+            {
+              "month": "2022-01",
+              "revenue_usd": 985460.62,
+              "forecast_usd": 1048135.8319218497
+            },
+            {
+              "month": "2022-02",
+              "revenue_usd": 990347.64,
+              "forecast_usd": 1034218.6568939622
+            },
+            {
+              "month": "2022-03",
+              "revenue_usd": 816295.61,
+              "forecast_usd": 811916.1532147469
+            },
+            {
+              "month": "2022-04",
+              "revenue_usd": 883105.97,
+              "forecast_usd": 866890.9165212866
+            },
+            {
+              "month": "2022-05",
+              "revenue_usd": 836233.5,
+              "forecast_usd": 877580.3100773641
+            },
+            {
+              "month": "2022-06",
+              "revenue_usd": 809551.72,
+              "forecast_usd": 825687.5613562525
+            }
+          ]
+        },
+        {
+          "fold": 6,
+          "validated_months": "2022-07 to 2022-12",
+          "training_months": 54,
+          "params": {
+            "max_depth": 5,
+            "min_samples_leaf": 1,
+            "max_features": 0.5
+          },
+          "training": {
+            "rmse_usd": 15993.733074502043,
+            "mae_usd": 13080.149239535423,
+            "rmse_percent_of_mean_revenue": 2.0158719061257226,
+            "mae_percent_of_mean_revenue": 1.6486398301812442,
+            "mape_percent": 1.6617334556116037,
+            "bias_percent": 0.0846444128817302
+          },
+          "validation": {
+            "rmse_usd": 39550.24261541336,
+            "mae_usd": 28895.17624114869,
+            "rmse_percent_of_mean_revenue": 4.904180854509112,
+            "mae_percent_of_mean_revenue": 3.5829658868965426,
+            "mape_percent": 3.501873997538236,
+            "bias_percent": -1.7795493537435259
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 40543.7492761202,
+            "mae_usd": 30131.37859749633,
+            "rmse_percent_of_mean_revenue": 5.027374443778446,
+            "mae_percent_of_mean_revenue": 3.7362534403320926,
+            "mape_percent": 3.6525699122740494,
+            "bias_percent": -1.845984170138951
+          },
+          "no_model": {
+            "rmse_usd": 27306.281513247694,
+            "mae_usd": 22197.916666666646,
+            "rmse_percent_of_mean_revenue": 3.3859449183989745,
+            "mae_percent_of_mean_revenue": 2.752514036013266,
+            "mape_percent": 2.6739856425721165,
+            "bias_percent": 0.5449733077743089
+          },
+          "training_relative_rmse_percent": 2.053782805314438,
+          "validation_relative_rmse_percent": 4.648394867394386,
+          "anchor_alone": {
+            "rmse_usd": 36394.041675258515,
+            "mae_usd": 30142.06097661283,
+            "rmse_percent_of_mean_revenue": 4.512815866582115,
+            "mae_percent_of_mean_revenue": 3.737578042045745,
+            "mape_percent": 3.6641227565130765,
+            "bias_percent": -0.10406331739656893
+          },
+          "monthly": [
+            {
+              "month": "2022-07",
+              "revenue_usd": 827817.86,
+              "forecast_usd": 841921.0481979189
+            },
+            {
+              "month": "2022-08",
+              "revenue_usd": 695862.9,
+              "forecast_usd": 673034.4663606593
+            },
+            {
+              "month": "2022-09",
+              "revenue_usd": 805343.57,
+              "forecast_usd": 800921.1230655581
+            },
+            {
+              "month": "2022-10",
+              "revenue_usd": 818634.04,
+              "forecast_usd": 846985.9201597421
+            },
+            {
+              "month": "2022-11",
+              "revenue_usd": 871703.25,
+              "forecast_usd": 784737.5323591098
+            },
+            {
+              "month": "2022-12",
+              "revenue_usd": 819396.63,
+              "forecast_usd": 802697.2391254415
+            }
+          ]
+        },
+        {
+          "fold": 7,
+          "validated_months": "2023-01 to 2023-06",
+          "training_months": 60,
+          "params": {
+            "max_depth": 3,
+            "min_samples_leaf": 4,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 24686.710010205526,
+            "mae_usd": 20258.743446190532,
+            "rmse_percent_of_mean_revenue": 3.1064294021000154,
+            "mae_percent_of_mean_revenue": 2.5492403104678965,
+            "mape_percent": 2.561675066297498,
+            "bias_percent": 0.2094661115367208
+          },
+          "validation": {
+            "rmse_usd": 54818.275247253354,
+            "mae_usd": 50941.58026399667,
+            "rmse_percent_of_mean_revenue": 5.764304065479761,
+            "mae_percent_of_mean_revenue": 5.356658101577766,
+            "mape_percent": 5.382532906844914,
+            "bias_percent": -4.178831555041421
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 71773.90791495932,
+            "mae_usd": 63727.693475924454,
+            "rmse_percent_of_mean_revenue": 7.547239079002209,
+            "mae_percent_of_mean_revenue": 6.701155790291397,
+            "mape_percent": 6.738957423686763,
+            "bias_percent": -6.738957423686763
+          },
+          "no_model": {
+            "rmse_usd": 67867.42646665598,
+            "mae_usd": 64163.04166666671,
+            "rmse_percent_of_mean_revenue": 7.136460980045064,
+            "mae_percent_of_mean_revenue": 6.746933942458281,
+            "mape_percent": 6.721438483540538,
+            "bias_percent": -6.721438483540538
+          },
+          "training_relative_rmse_percent": 3.138830385771819,
+          "validation_relative_rmse_percent": 5.82246468311967,
+          "anchor_alone": {
+            "rmse_usd": 54973.81350574012,
+            "mae_usd": 51524.12166532304,
+            "rmse_percent_of_mean_revenue": 5.780659374210089,
+            "mae_percent_of_mean_revenue": 5.41791405596214,
+            "mape_percent": 5.369524064945198,
+            "bias_percent": -4.853869903478021
+          },
+          "monthly": [
+            {
+              "month": "2023-01",
+              "revenue_usd": 1045038.73,
+              "forecast_usd": 1003329.8770560026
+            },
+            {
+              "month": "2023-02",
+              "revenue_usd": 1077508.59,
+              "forecast_usd": 1027851.2590253855
+            },
+            {
+              "month": "2023-03",
+              "revenue_usd": 897882.42,
+              "forecast_usd": 835609.2361044126
+            },
+            {
+              "month": "2023-04",
+              "revenue_usd": 928028.24,
+              "forecast_usd": 838676.2437771413
+            },
+            {
+              "month": "2023-05",
+              "revenue_usd": 864052.91,
+              "forecast_usd": 895254.7596739023
+            },
+            {
+              "month": "2023-06",
+              "revenue_usd": 893462.42,
+              "forecast_usd": 862006.1521269804
+            }
+          ]
+        },
+        {
+          "fold": 8,
+          "validated_months": "2023-07 to 2023-12",
+          "training_months": 66,
+          "params": {
+            "max_depth": null,
+            "min_samples_leaf": 2,
+            "max_features": 1.0
+          },
+          "training": {
+            "rmse_usd": 17007.66000304925,
+            "mae_usd": 13929.723641985187,
+            "rmse_percent_of_mean_revenue": 2.102550293777081,
+            "mae_percent_of_mean_revenue": 1.7220443335790203,
+            "mape_percent": 1.7372493807368594,
+            "bias_percent": 0.07956102524952179
+          },
+          "validation": {
+            "rmse_usd": 56753.829513370525,
+            "mae_usd": 39795.959287094614,
+            "rmse_percent_of_mean_revenue": 6.563801427718093,
+            "mae_percent_of_mean_revenue": 4.602557688631462,
+            "mape_percent": 5.103536370552678,
+            "bias_percent": 4.5595879143060545
+          },
+          "validation_from_boundary": {
+            "rmse_usd": 56577.699298939384,
+            "mae_usd": 40642.5011529659,
+            "rmse_percent_of_mean_revenue": 6.54343128242816,
+            "mae_percent_of_mean_revenue": 4.700463552525987,
+            "mape_percent": 5.195369662971538,
+            "bias_percent": 4.685382631617497
+          },
+          "no_model": {
+            "rmse_usd": 76378.93858759322,
+            "mae_usd": 64582.416666666686,
+            "rmse_percent_of_mean_revenue": 8.83352172791667,
+            "mae_percent_of_mean_revenue": 7.469208022734118,
+            "mape_percent": 7.2049042985193825,
+            "bias_percent": -6.26009887176082
+          },
+          "training_relative_rmse_percent": 2.1381628188642248,
+          "validation_relative_rmse_percent": 7.569595502234269,
+          "anchor_alone": {
+            "rmse_usd": 46173.84171952958,
+            "mae_usd": 39209.51380573215,
+            "rmse_percent_of_mean_revenue": 5.3401846324832825,
+            "mae_percent_of_mean_revenue": 4.534732984627323,
+            "mape_percent": 4.822972314410992,
+            "bias_percent": 1.632416205523961
+          },
+          "monthly": [
+            {
+              "month": "2023-07",
+              "revenue_usd": 920967.64,
+              "forecast_usd": 921632.684966437
+            },
+            {
+              "month": "2023-08",
+              "revenue_usd": 676682.89,
+              "forecast_usd": 778814.2459032696
+            },
+            {
+              "month": "2023-09",
+              "revenue_usd": 891575.54,
+              "forecast_usd": 877043.8739869117
+            },
+            {
+              "month": "2023-10",
+              "revenue_usd": 932905.89,
+              "forecast_usd": 932887.612092149
+            },
+            {
+              "month": "2023-11",
+              "revenue_usd": 872451.14,
+              "forecast_usd": 958768.6409413972
+            },
+            {
+              "month": "2023-12",
+              "revenue_usd": 893309.63,
+              "forecast_usd": 928421.5399905245
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "training": {
+          "rmse_usd": {
+            "mean": 21587.137598968206,
+            "std": 3970.103278168376,
+            "min": 15993.733074502043,
+            "max": 27318.906144048047
+          },
+          "mae_usd": {
+            "mean": 17876.2038535764,
+            "std": 3561.66934699884,
+            "min": 13080.149239535423,
+            "max": 23373.120979289404
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 2.779731138154416,
+            "std": 0.5540069958262915,
+            "min": 2.0158719061257226,
+            "max": 3.6434965435324353
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 2.302511302626554,
+            "std": 0.4962996210092306,
+            "min": 1.6486398301812442,
+            "max": 3.1172509269065345
+          },
+          "mape_percent": {
+            "mean": 2.2969332585628335,
+            "std": 0.4803076116385277,
+            "min": 1.6617334556116037,
+            "max": 3.057034421329528
+          },
+          "bias_percent": {
+            "mean": 0.1574634666800985,
+            "std": 0.08296074347071625,
+            "min": 0.07956102524952179,
+            "max": 0.3313703211690515
+          }
+        },
+        "validation": {
+          "rmse_usd": {
+            "mean": 42988.27990728029,
+            "std": 9920.581996244635,
+            "min": 30227.776710660884,
+            "max": 56753.829513370525
+          },
+          "mae_usd": {
+            "mean": 34472.54032235243,
+            "std": 8914.866005007469,
+            "min": 22059.615403675067,
+            "max": 50941.58026399667
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 5.097504688886127,
+            "std": 1.1789301515424662,
+            "min": 3.694177168975747,
+            "max": 6.73510854044535
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 4.070336104435375,
+            "std": 0.9470131758423445,
+            "min": 2.69593521087183,
+            "max": 5.356658101577766
+          },
+          "mape_percent": {
+            "mean": 4.096827444949626,
+            "std": 1.0169593684225349,
+            "min": 2.759456014158468,
+            "max": 5.382532906844914
+          },
+          "bias_percent": {
+            "mean": -0.34244723911329733,
+            "std": 3.272488998841121,
+            "min": -4.6384547520489186,
+            "max": 4.5595879143060545
+          }
+        },
+        "validation_from_boundary": {
+          "rmse_usd": {
+            "mean": 47958.646516842375,
+            "std": 13521.48101937346,
+            "min": 32808.101535548136,
+            "max": 71773.90791495932
+          },
+          "mae_usd": {
+            "mean": 39027.60988958055,
+            "std": 12762.81770345496,
+            "min": 25898.11041832785,
+            "max": 63727.693475924454
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 5.6468513729212395,
+            "std": 1.3976958749105044,
+            "min": 4.009522129601911,
+            "max": 7.547239079002209
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 4.576034532911829,
+            "std": 1.2442219864723862,
+            "min": 3.165042839331863,
+            "max": 6.701155790291397
+          },
+          "mape_percent": {
+            "mean": 4.607152626340591,
+            "std": 1.2587569024884835,
+            "min": 3.234964989980976,
+            "max": 6.738957423686763
+          },
+          "bias_percent": {
+            "mean": -0.5196228637788693,
+            "std": 4.538075885501152,
+            "min": -6.738957423686763,
+            "max": 5.67096239473583
+          }
+        },
+        "no_model": {
+          "rmse_usd": {
+            "mean": 52353.09390214988,
+            "std": 18494.44082578685,
+            "min": 27306.281513247694,
+            "max": 76378.93858759322
+          },
+          "mae_usd": {
+            "mean": 44817.23520833335,
+            "std": 17949.101938300253,
+            "min": 22197.916666666646,
+            "max": 64582.416666666686
+          },
+          "rmse_percent_of_mean_revenue": {
+            "mean": 6.152932812836819,
+            "std": 2.022535774637824,
+            "min": 3.3859449183989745,
+            "max": 8.83352172791667
+          },
+          "mae_percent_of_mean_revenue": {
+            "mean": 5.26447896442933,
+            "std": 1.9634146822745406,
+            "min": 2.752514036013266,
+            "max": 7.469208022734118
+          },
+          "mape_percent": {
+            "mean": 5.246830421417805,
+            "std": 1.92952255871481,
+            "min": 2.6739856425721165,
+            "max": 7.44430490717509
+          },
+          "bias_percent": {
+            "mean": -3.7648302865638295,
+            "std": 3.413702702650987,
+            "min": -7.44430490717509,
+            "max": 0.9112263727325179
+          }
+        },
+        "gap_rmse_usd": 21401.142308312083,
+        "gap_mae_usd": 16596.336468776033,
+        "gap_rmse_percent_of_mean_revenue": 2.3177735507317108,
+        "gap_mae_percent_of_mean_revenue": 1.7678248018088212,
+        "gap_mape_percent": 1.7998941863867923
+      },
+      "training_relative_rmse_percent": {
+        "mean": 2.7690851828478573,
+        "std": 0.5210708896623965
+      },
+      "validation_relative_rmse_percent": {
+        "mean": 5.158287642917922,
+        "std": 1.3772971015797002
+      },
+      "anchor_alone_rmse_usd": {
+        "mean": 42581.854805699564,
+        "std": 7840.961510431587
+      },
+      "against_current": {
+        "lower_mean_validation_rmse": false,
+        "folds_improved": 3,
+        "improves_enough_folds": false,
+        "gap_not_wider": false,
+        "mean_change_usd": 3847.5004098969034,
+        "standard_error_of_change_usd": 4952.860169691335,
+        "mean_change_without_best_fold_usd": 7200.4703290001125,
+        "change_by_fold_usd": [
+          -19623.28902382556,
+          12200.142458350587,
+          7522.87263175199,
+          -5082.651961152034,
+          3895.1288985156425,
+          -5587.161130948443,
+          26726.94425068896,
+          10728.017155794085
+        ],
+        "gap_before_usd": 20086.13691130709,
+        "gap_after_usd": 21401.142308312086,
+        "accepted": false
+      }
+    }
+  }
+}
