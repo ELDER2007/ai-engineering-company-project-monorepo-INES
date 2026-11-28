@@ -2,6 +2,34 @@
 
 # Progress — Nexova
 
+## Evaluación formal del modelo de ventas (2026-11-27, rama `feature/regression-model-eval`)
+
+Reporte: [`data/eval/evaluation_report.es.md`](../data/eval/evaluation_report.es.md). La rama parte de `feature/sales-forecast-model`: fusionar primero ese PR.
+
+- [x] Validación cruzada temporal anidada (8 bloques) con comprobación de orden y de fugas: `data/process/sales_diagnosis.py`.
+- [x] Curva de aprendizaje en `data/eval/learning_curve.png`; MAE y RMSE; métrica elegida RMSE: `data/eval/regression_eval/README.es.md`.
+- [x] Causa del error y correcciones declaradas de antemano: `data/process/sales_root_cause.py`.
+- [x] Reporte: **overfitting moderado**; acción propuesta: profundidad de los árboles 2 (mejora modesta). **No aplicada** al modelo entregado.
+- [x] Prueba del orden cronológico en cada fold: `tests/pipelines/test_sales_cv_chronological_order.py`.
+- [x] Pruebas (`uv run pytest tests/pipelines`: 255 pasan).
+- [x] CI en cada Pull Request para la prueba del orden cronológico: `.github/workflows/sales-cv-chronological-order.yml`.
+- [x] Commits, push y Pull Request a `main`.
+- [ ] Revisión y merge (fusionar antes el PR del pronóstico de ventas).
+- [ ] Decidir si se aplica la acción correctiva.
+
+## Pronóstico de ventas (2026-11-26, rama `feature/sales-forecast-model`)
+
+Briefing: [`BRIEFING_NEXOVA_SALES.md`](../BRIEFING_NEXOVA_SALES.md). Resultados y explicación: [`data/eval/sales_forecast/README.es.md`](../data/eval/sales_forecast/README.es.md).
+
+- [x] Preparación de datos (columnas, vacíos tratados sin usar el futuro, split 8/2 años, escalado dentro del modelo): `data/process/sales_forecast.py`.
+- [x] Random Forest elegido con validación temporal solo en 2016-2023 (empata en precisión con XGBoost; la elección se apoya en tamaño de datos, explicabilidad y ajuste): `data/process/sales_model.py`.
+- [x] MSE, PSI, Gini y K² Score sobre 2024-2025, y gráfica con rango del 90 %: `sales_metrics.py`, `sales_evaluation.py`, `sales_range.py`, `sales_plot.py`.
+- [x] Script `scripts/train_sales_forecast.py` y pruebas en `tests/pipelines/test_sales_forecast_*.py` (`uv run pytest tests/pipelines`: 132 pasan).
+- [x] Entrega: commits, push y Pull Request a `main`.
+- [ ] Revisión del tech lead y merge (no fusionar antes).
+- [ ] Confirmar con el profesor qué métrica es el "K2 Score" (implementada la K² de D'Agostino-Pearson).
+- Limitación conocida: el PSI del reparto por líneas de negocio no se puede medir (el dataset solo trae `consolidated`).
+
 _Última actualización: 2026-09-11 (scaffolding + landing page de `uis/website/`; dashboard shell de `uis/backoffice/`; esqueleto de `services/api/`; fix de `validate-context-alignment` para apps multi-componente; entrega en `feature/agent-memory-bank`)._
 
 ## Qué existe hoy

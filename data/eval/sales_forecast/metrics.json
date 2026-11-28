@@ -1,0 +1,306 @@
+{
+  "test_months": "2024-01 to 2025-12",
+  "mean_monthly_revenue_usd": 959363.2474999999,
+  "model": {
+    "months": 24,
+    "mse_usd2": 1072373287.8461565,
+    "rmse_usd": 32747.11113741419,
+    "rmse_percent_of_mean_revenue": 3.413421477500804,
+    "mape_percent": 2.854473599489199,
+    "bias_percent": -0.5639677749208161,
+    "gini": 0.8981045522164559,
+    "k2_statistic": 1.0630984454215633,
+    "k2_p_value": 0.5876937954797734,
+    "r_squared": 0.8562377315889411
+  },
+  "same month a year before (no model)": {
+    "months": 24,
+    "mse_usd2": 3190168976.2504,
+    "rmse_usd": 56481.580858279805,
+    "rmse_percent_of_mean_revenue": 5.88740302544056,
+    "mape_percent": 4.975332299240182,
+    "bias_percent": -4.146567882067126,
+    "gini": 0.7967636978365921,
+    "k2_statistic": 0.5281351645091698,
+    "k2_p_value": 0.7679216400272013,
+    "r_squared": 0.5723262283402402
+  },
+  "model_24_months_ahead": {
+    "months": 24,
+    "mse_usd2": 1299390608.6199527,
+    "rmse_usd": 36047.06102610798,
+    "rmse_percent_of_mean_revenue": 3.757394409264983,
+    "mape_percent": 3.0868825205069577,
+    "bias_percent": -0.42630159863961925,
+    "gini": 0.8919210897324351,
+    "k2_statistic": 0.33499798587668633,
+    "k2_p_value": 0.8457774690384745,
+    "r_squared": 0.8258038095834873
+  },
+  "model_by_kind_of_month": {
+    "August": {
+      "months": 2,
+      "mape_percent": 5.087048132742359,
+      "bias_percent": -5.087048132742359
+    },
+    "January and February": {
+      "months": 4,
+      "mape_percent": 1.7232232830583134,
+      "bias_percent": 0.767241165929042
+    },
+    "the other months": {
+      "months": 18,
+      "mape_percent": 2.8577987216679337,
+      "bias_percent": -0.3572274997961688
+    }
+  },
+  "model_by_year": {
+    "2024": {
+      "months": 12,
+      "mape_percent": 2.3545103851386964,
+      "bias_percent": -0.315699841502607
+    },
+    "2025": {
+      "months": 12,
+      "mape_percent": 3.3544368138397016,
+      "bias_percent": -0.8122357083390251
+    }
+  },
+  "psi": {
+    "bins": 5,
+    "reference_months": 72,
+    "current_months": 24,
+    "noise_level_95": 0.527096057598953,
+    "values": {
+      "revenue_usd": {
+        "psi": 1.7692145676091342,
+        "reading": "large change"
+      },
+      "ratio_to_a_year_before": {
+        "psi": 0.055455746420889795,
+        "reading": "stable"
+      },
+      "forecast_usd": {
+        "psi": 1.769214567609134,
+        "reading": "large change"
+      }
+    },
+    "business_line_mix": "The change of the mix of business lines (headhunting, outsourcing, training) between training and test CANNOT be measured: the given dataset only has the 'consolidated' row. The shares in the briefing (about 35 %, 45 % and 20 %) are one fixed figure, not a series: an index computed from them would be zero by construction, and splitting the revenue by line would mean inventing data."
+  },
+  "range": {
+    "level": 0.9,
+    "half_width_percent": 8.604310687574046,
+    "calibrated_on_validation_months": 48,
+    "calibration_years": [
+      2020,
+      2021,
+      2022,
+      2023
+    ],
+    "test_months": 24,
+    "inside": 23,
+    "outside": [
+      {
+        "month": "2025-08",
+        "side": "above",
+        "beyond_percent": 0.498293700653934
+      }
+    ],
+    "tree_spread_inside": 20,
+    "tree_spread_mean_width_percent": 10.926525186676283,
+    "monthly": [
+      {
+        "month": "2024-01",
+        "actual_usd": 1057106.38,
+        "forecast_usd": 1060285.2475135378,
+        "low_usd": 969055.0106429595,
+        "high_usd": 1151515.4843841158,
+        "inside": true
+      },
+      {
+        "month": "2024-02",
+        "actual_usd": 1065896.32,
+        "forecast_usd": 1092312.6711908102,
+        "low_usd": 998326.6952818137,
+        "high_usd": 1186298.6470998065,
+        "inside": true
+      },
+      {
+        "month": "2024-03",
+        "actual_usd": 913922.7,
+        "forecast_usd": 908373.6827929255,
+        "low_usd": 830214.3889212639,
+        "high_usd": 986532.976664587,
+        "inside": true
+      },
+      {
+        "month": "2024-04",
+        "actual_usd": 954748.46,
+        "forecast_usd": 952764.6260689315,
+        "low_usd": 870785.7975206575,
+        "high_usd": 1034743.4546172054,
+        "inside": true
+      },
+      {
+        "month": "2024-05",
+        "actual_usd": 951994.39,
+        "forecast_usd": 911884.4554052737,
+        "low_usd": 833423.0837505114,
+        "high_usd": 990345.827060036,
+        "inside": true
+      },
+      {
+        "month": "2024-06",
+        "actual_usd": 941054.91,
+        "forecast_usd": 907547.6746851506,
+        "low_usd": 829459.4531173864,
+        "high_usd": 985635.8962529147,
+        "inside": true
+      },
+      {
+        "month": "2024-07",
+        "actual_usd": 908040.67,
+        "forecast_usd": 932538.4877274638,
+        "low_usd": 852299.9789621882,
+        "high_usd": 1012776.9964927393,
+        "inside": true
+      },
+      {
+        "month": "2024-08",
+        "actual_usd": 736475.98,
+        "forecast_usd": 722991.571090125,
+        "low_usd": 660783.1300685579,
+        "high_usd": 785200.0121116921,
+        "inside": true
+      },
+      {
+        "month": "2024-09",
+        "actual_usd": 898340.85,
+        "forecast_usd": 890811.1310255188,
+        "low_usd": 814162.9736725908,
+        "high_usd": 967459.2883784466,
+        "inside": true
+      },
+      {
+        "month": "2024-10",
+        "actual_usd": 887995.21,
+        "forecast_usd": 922862.0367560434,
+        "low_usd": 843456.1198958796,
+        "high_usd": 1002267.9536162071,
+        "inside": true
+      },
+      {
+        "month": "2024-11",
+        "actual_usd": 905255.09,
+        "forecast_usd": 930869.1387582335,
+        "low_usd": 850774.2659647304,
+        "high_usd": 1010964.0115517366,
+        "inside": true
+      },
+      {
+        "month": "2024-12",
+        "actual_usd": 950932.4,
+        "forecast_usd": 905636.2918102178,
+        "low_usd": 827712.531563442,
+        "high_usd": 983560.0520569935,
+        "inside": true
+      },
+      {
+        "month": "2025-01",
+        "actual_usd": 1145988.88,
+        "forecast_usd": 1124077.9824858198,
+        "low_usd": 1027358.8205021258,
+        "high_usd": 1220797.1444695138,
+        "inside": true
+      },
+      {
+        "month": "2025-02",
+        "actual_usd": 1126481.6,
+        "forecast_usd": 1151285.5090109357,
+        "low_usd": 1052225.3269146164,
+        "high_usd": 1250345.6911072547,
+        "inside": true
+      },
+      {
+        "month": "2025-03",
+        "actual_usd": 1018606.09,
+        "forecast_usd": 983478.8462103606,
+        "low_usd": 898857.2707358527,
+        "high_usd": 1068100.4216848684,
+        "inside": true
+      },
+      {
+        "month": "2025-04",
+        "actual_usd": 977106.23,
+        "forecast_usd": 1022994.3771770495,
+        "low_usd": 934972.7626483231,
+        "high_usd": 1111015.9917057757,
+        "inside": true
+      },
+      {
+        "month": "2025-05",
+        "actual_usd": 929912.79,
+        "forecast_usd": 965539.7852565019,
+        "low_usd": 882461.7423208972,
+        "high_usd": 1048617.8281921064,
+        "inside": true
+      },
+      {
+        "month": "2025-06",
+        "actual_usd": 973277.98,
+        "forecast_usd": 967561.2220119783,
+        "low_usd": 884309.2483775796,
+        "high_usd": 1050813.1956463768,
+        "inside": true
+      },
+      {
+        "month": "2025-07",
+        "actual_usd": 939668.82,
+        "forecast_usd": 980157.4953984546,
+        "low_usd": 895821.6992668273,
+        "high_usd": 1064493.2915300818,
+        "inside": true
+      },
+      {
+        "month": "2025-08",
+        "actual_usd": 819255.69,
+        "forecast_usd": 750903.8804287211,
+        "low_usd": 686293.7775915844,
+        "high_usd": 815513.9832658577,
+        "inside": false
+      },
+      {
+        "month": "2025-09",
+        "actual_usd": 982247.56,
+        "forecast_usd": 956946.1734224559,
+        "low_usd": 874607.5515483366,
+        "high_usd": 1039284.7952965751,
+        "inside": true
+      },
+      {
+        "month": "2025-10",
+        "actual_usd": 947235.96,
+        "forecast_usd": 949271.9505350546,
+        "low_usd": 867593.6426410242,
+        "high_usd": 1030950.2584290848,
+        "inside": true
+      },
+      {
+        "month": "2025-11",
+        "actual_usd": 1010975.62,
+        "forecast_usd": 943039.1016911918,
+        "low_usd": 861897.0874763743,
+        "high_usd": 1024181.1159060092,
+        "inside": true
+      },
+      {
+        "month": "2025-12",
+        "actual_usd": 982197.36,
+        "forecast_usd": 968316.78742679,
+        "low_usd": 884999.802596653,
+        "high_usd": 1051633.7722569269,
+        "inside": true
+      }
+    ]
+  }
+}

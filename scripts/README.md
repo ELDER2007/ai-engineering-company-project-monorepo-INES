@@ -9,6 +9,34 @@ This folder contains **helper scripts** for the monorepo: development automation
 
 ## Scripts
 
+### `train_sales_forecast.py` — Nexova's sales forecast
+
+Trains and evaluates the monthly revenue forecast of [`BRIEFING_NEXOVA_SALES.md`](../BRIEFING_NEXOVA_SALES.md).
+
+- **What it does**: loads `data/raw/nexova_sales.csv` and checks its columns; treats empty values (never with later months); splits by time (8 years to train, the 2 most recent to test); builds causal features; trains a Random Forest whose settings are chosen by time validation inside the training years (why Random Forest: [`data/process/sales_model.py`](../data/process/sales_model.py)); evaluates MSE, PSI, Gini and K² Score on the test years; writes `metrics.json` and the picture of the forecast with its range to [`data/eval/sales_forecast/`](../data/eval/sales_forecast/README.md). The seed is fixed (42).
+- **Requirements**: [`uv`](https://docs.astral.sh/uv/); the libraries are those of the root `pyproject.toml` / `uv.lock` (Python 3.12).
+- **Usage**, from the root of the repository (about a minute):
+  ```bash
+  uv run python scripts/train_sales_forecast.py
+  uv run python scripts/train_sales_forecast.py --compare          # also compares Random Forest with XGBoost (training years only)
+  uv run python scripts/train_sales_forecast.py --data other.csv --output /tmp/results
+  uv run pytest tests/pipelines                                    # its tests
+  ```
+
+### `evaluate_sales_model.py` — Formal evaluation of the sales forecast
+
+Evaluates the model of `train_sales_forecast.py` before it moves to staging. The report that reads its results is [`data/eval/evaluation_report.md`](../data/eval/evaluation_report.md).
+
+- **What it does**: uses **the training years only (2016-2023)**. Nested time-series cross-validation (8 folds) with order and leakage checks; MAE and RMSE; learning and complexity curves; analysis of where the error comes from and a comparison of corrections declared in advance. It does not change the delivered model.
+- **It writes**: `diagnosis.json`, `root_cause.json` and the charts in [`data/eval/regression_eval/`](../data/eval/regression_eval/README.md); the learning curve in `data/eval/learning_curve.png` (and `.es.png`). With `--output` set to another folder, everything stays there and the files of the repository are not touched.
+- **Requirements**: the same as the one above (`pyproject.toml` / `uv.lock` at the root).
+- **Usage**, from the root of the repository (about 10 minutes):
+  ```bash
+  uv run python scripts/evaluate_sales_model.py
+  uv run python scripts/evaluate_sales_model.py --output /tmp/evaluation     # a trial
+  uv run pytest tests/pipelines/test_sales_diagnosis.py tests/pipelines/test_sales_evaluation_report.py
+  ```
+
 ### `analyze.py` — Nexova incident CSV analyzer
 
 Validates and computes metrics on a Nexova support-incident CSV export, per the rules in [`CONTEXT-nexova.md`](./CONTEXT-nexova.md).

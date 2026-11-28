@@ -2,6 +2,14 @@
 
 # Tech Context — Nexova
 
+## Añadido el 2026-11-27: primera comprobación en CI (GitHub Actions)
+
+`.github/workflows/sales-cv-chronological-order.yml` (añadido con autorización explícita del desarrollador): en cada Pull Request hacia `main` instala las versiones de `uv.lock` y ejecuta `tests/pipelines/test_sales_cv_chronological_order.py`. Solo tiene permiso de lectura del código; no usa secretos ni despliega. No ejecuta el resto de las pruebas.
+
+## Añadido el 2026-11-26: proyecto `uv` en la raíz (pronóstico de ventas)
+
+`pyproject.toml`, `uv.lock` y `.python-version` (3.12) en la raíz: son las dependencias del pronóstico de ventas (`scikit-learn`, `xgboost`, `pandas`, `matplotlib`, `scipy`; `pytest` en desarrollo). Se gestionan solo con `uv` (`uv add`, `uv run`). `services/api` conserva su propio entorno. En el entorno de la raíz no están las librerías del pipeline semanal: `tests/pipelines/conftest.py` no carga allí sus pruebas y lo avisa.
+
 ## Estructura del monorepo (por capa, no por hito)
 
 Plantilla de 4Geeks Academy organizada por responsabilidad de equipo, no por número de hito — el trabajo de un hito puede tocar varias carpetas a la vez. Ver [`AGENTS.md`](../AGENTS.md) para el mapa completo y el árbol de decisión "¿dónde pongo esto?".
