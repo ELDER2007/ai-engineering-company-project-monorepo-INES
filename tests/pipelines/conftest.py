@@ -6,6 +6,7 @@ or from services/api (its pytest setup): python -m pytest ../../tests/pipelines
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -16,6 +17,20 @@ os.environ.setdefault("PIPELINE_ENV_FILE", "/nonexistent/.env")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # the repository root, so `data.` can be imported
 
 import pytest  # noqa: E402
+
+# This folder holds the tests of two projects. Those of the weekly performance pipeline need its libraries; the sales forecast has an environment of its own
+# (the ``uv`` project of the root of the repository) without them. There, and ONLY where they are missing, those files are not collected, and pytest says so
+# at the end: otherwise ``uv run pytest tests/pipelines`` would stop with import errors before running anything.
+WEEKLY_PIPELINE_TESTS = ["test_cli.py", "test_operations.py", "test_pipeline.py", "test_subflows.py", "test_verify_roles.py"]
+MISSING_FOR_THE_WEEKLY_PIPELINE = [name for name in ("prefect", "sqlalchemy") if importlib.util.find_spec(name) is None]
+collect_ignore = WEEKLY_PIPELINE_TESTS if MISSING_FOR_THE_WEEKLY_PIPELINE else []
+
+
+def pytest_terminal_summary(terminalreporter):
+    if MISSING_FOR_THE_WEEKLY_PIPELINE:
+        terminalreporter.write_line(
+            f"NOT RUN here ({', '.join(MISSING_FOR_THE_WEEKLY_PIPELINE)} not installed): the {len(WEEKLY_PIPELINE_TESTS)} test files of the weekly performance "
+            f"pipeline ({', '.join(WEEKLY_PIPELINE_TESTS)}). Run them with the environment of services/api.", yellow=True)
 
 
 @pytest.fixture(scope="session")

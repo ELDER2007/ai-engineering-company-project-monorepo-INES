@@ -9,6 +9,20 @@ This folder contains **helper scripts** for the monorepo: development automation
 
 ## Scripts
 
+### `train_sales_forecast.py` — Nexova's sales forecast
+
+Trains and evaluates the monthly revenue forecast of [`BRIEFING_NEXOVA_SALES.md`](../BRIEFING_NEXOVA_SALES.md).
+
+- **What it does**: loads `data/raw/nexova_sales.csv` and checks its columns; treats empty values (never with later months); splits by time (8 years to train, the 2 most recent to test); builds causal features; trains a Random Forest whose settings are chosen by time validation inside the training years (why Random Forest: [`data/process/sales_model.py`](../data/process/sales_model.py)); evaluates MSE, PSI, Gini and K² Score on the test years; writes `metrics.json` and the picture of the forecast with its range to [`data/eval/sales_forecast/`](../data/eval/sales_forecast/README.md). The seed is fixed (42).
+- **Requirements**: [`uv`](https://docs.astral.sh/uv/); the libraries are those of the root `pyproject.toml` / `uv.lock` (Python 3.12).
+- **Usage**, from the root of the repository (about a minute):
+  ```bash
+  uv run python scripts/train_sales_forecast.py
+  uv run python scripts/train_sales_forecast.py --compare          # also compares Random Forest with XGBoost (training years only)
+  uv run python scripts/train_sales_forecast.py --data other.csv --output /tmp/results
+  uv run pytest tests/pipelines                                    # its tests
+  ```
+
 ### `analyze.py` — Nexova incident CSV analyzer
 
 Validates and computes metrics on a Nexova support-incident CSV export, per the rules in [`CONTEXT-nexova.md`](./CONTEXT-nexova.md).
